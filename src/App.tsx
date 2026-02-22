@@ -2,9 +2,11 @@ import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import HospitalRegistration from './pages/HospitalRegistration';
 import AdminDashboard from './pages/AdminDashboard';
 import HospitalDashboard from './pages/HospitalDashboard';
 import DonorApp from './pages/DonorApp';
+import DonorRegistration from './pages/DonorRegistration';
 import Analytics from './pages/Analytics';
 import LiveTracking from './pages/LiveTracking';
 
@@ -13,8 +15,9 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Layout />}>
         <Route index element={<Login />} />
-        <Route path="register-donor" element={<Login />} /> {/* Using Login for now as placeholder */}
-        
+        <Route path="register-donor" element={<DonorRegistration />} />
+        <Route path="register-hospital" element={<HospitalRegistration />} />
+
         {/* Admin Routes */}
         <Route path="admin" element={<AdminDashboard />} />
         <Route path="admin/hospitals" element={<AdminDashboard />} />
@@ -25,7 +28,7 @@ export default function App() {
         <Route path="hospital" element={<HospitalDashboard />} />
         <Route path="hospital/requests" element={<HospitalDashboard />} />
         <Route path="hospital/inventory" element={<HospitalDashboard />} />
-        
+
         {/* Donor Routes */}
         <Route path="donor" element={<DonorApp />} />
         <Route path="donor/centers" element={<DonorApp />} />

@@ -25,8 +25,12 @@ export default function Login() {
   };
 
   const toggleMode = () => {
-    setIsRegistering(!isRegistering);
-    navigate(isRegistering ? '/' : '/register-donor');
+    if (role === 'hospital' && !isRegistering) {
+      navigate('/register-hospital');
+    } else {
+      setIsRegistering(!isRegistering);
+      navigate(isRegistering ? '/' : '/register-donor');
+    }
   };
 
   return (
@@ -91,7 +95,10 @@ export default function Login() {
             )}
           </div>
           <button
-            onClick={() => navigate('/register-donor')}
+            onClick={() => {
+              if (role === 'hospital') navigate('/register-hospital');
+              else navigate('/register-donor');
+            }}
             className="bg-[#ee2b2b] text-white px-5 py-2 rounded-lg text-sm font-bold shadow-lg shadow-[#ee2b2b]/20 hover:bg-[#ee2b2b]/90 transition-all active:scale-95"
           >
             Join Network
