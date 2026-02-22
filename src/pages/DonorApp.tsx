@@ -9,6 +9,14 @@ export default function DonorApp() {
   const [isAvailable, setIsAvailable] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [requestAccepted, setRequestAccepted] = useState(false);
+  const [userPoints, setUserPoints] = useState(location.state?.initialPoints || 450);
+  const [requestExpired, setRequestExpired] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(3 * 60 * 60); // 3 hours in seconds
+  const [pendingAppointments, setPendingAppointments] = useState<{ date: string, time: string, hospital: string, id: number }[]>([]);
+  const [hospitalRated, setHospitalRated] = useState(false);
+  const [feedPosts, setFeedPosts] = useState([
+    { id: 1, user: "Alex Johnson", time: "2h ago", content: "Just completed my 5th donation at City General! The staff was amazing and the process was super smooth. Feeling great about helping out! 🩸💪", likes: 24, replies: [], showReplyInput: false, isLiked: false }
+  ]);
 
   // Determine active tab based on URL
   const getActiveTab = () => {
@@ -27,71 +35,87 @@ export default function DonorApp() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-8 relative">
+    <div className={`max-w-7xl mx-auto px-6 ${activeTab === 'centers' ? 'py-4' : 'py-8'} relative`}>
       {/* Hero: Availability Toggle */}
-      <div className="mb-10 bg-white rounded-xl p-6 border border-[#ee2b2b]/10 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="flex items-center gap-4">
-          <div className="p-3 bg-[#ee2b2b]/10 rounded-xl">
-            <span className="material-symbols-outlined text-[#ee2b2b] text-3xl">sensors</span>
+      {activeTab !== 'centers' && (
+        <div className="mb-10 bg-white rounded-xl p-6 border border-[#ee2b2b]/10 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-[#ee2b2b]/10 rounded-xl">
+              <span className="material-symbols-outlined text-[#ee2b2b] text-3xl">sensors</span>
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Real-time Availability</h2>
+              <p className="text-sm text-slate-500">Toggle active status to receive urgent blood requests via AI matching.</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Real-time Availability</h2>
-            <p className="text-sm text-slate-500">Toggle active status to receive urgent blood requests via AI matching.</p>
+          <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <span className={`text-sm font-bold uppercase tracking-wider ${!isAvailable ? 'text-slate-400' : 'text-slate-300'}`}>Unavailable</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={isAvailable}
+                onChange={() => setIsAvailable(!isAvailable)}
+              />
+              <div className="w-14 h-7 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-[#ee2b2b]"></div>
+            </label>
+            <span className={`text-sm font-bold uppercase tracking-wider ${isAvailable ? 'text-[#ee2b2b]' : 'text-slate-300'}`}>Available</span>
           </div>
         </div>
-        <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-          <span className={`text-sm font-bold uppercase tracking-wider ${!isAvailable ? 'text-slate-400' : 'text-slate-300'}`}>Unavailable</span>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input 
-              type="checkbox" 
-              className="sr-only peer" 
-              checked={isAvailable}
-              onChange={() => setIsAvailable(!isAvailable)}
-            />
-            <div className="w-14 h-7 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-[#ee2b2b]"></div>
-          </label>
-          <span className={`text-sm font-bold uppercase tracking-wider ${isAvailable ? 'text-[#ee2b2b]' : 'text-slate-300'}`}>Available</span>
-        </div>
-      </div>
+      )}
 
       {/* Tabs */}
-      <div className="flex gap-6 mb-8 border-b border-slate-200 overflow-x-auto">
-        <Link 
-          to="/donor"
-          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-        >
-          Dashboard
-        </Link>
-        <Link 
-          to="/donor/centers"
-          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'centers' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-        >
-          Donation Centers
-        </Link>
-        <Link 
-          to="/donor/impact"
-          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'impact' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-        >
-          Impact Report
-        </Link>
-        <Link 
-          to="/donor/community"
-          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'community' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-        >
-          Community
-        </Link>
-      </div>
+      {activeTab !== 'centers' && (
+        <div className="flex gap-6 mb-8 border-b border-slate-200 overflow-x-auto">
+          <Link
+            to="/donor"
+            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          >
+            Dashboard
+          </Link>
+          <Link
+            to="/donor/centers"
+            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${(activeTab as string) === 'centers' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          >
+            Donation Centers
+          </Link>
+          <Link
+            to="/donor/pending"
+            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'pending' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          >
+            Pending Donations
+          </Link>
+          <Link
+            to="/donor/impact"
+            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'impact' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          >
+            Impact Report
+          </Link>
+          <Link
+            to="/donor/community"
+            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'community' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          >
+            Community
+          </Link>
+        </div>
+      )}
 
       {activeTab === 'dashboard' && (
         <DashboardView 
           requestAccepted={requestAccepted} 
           onAccept={handleAcceptRequest} 
           onRate={() => setShowFeedback(true)}
+          requestExpired={requestExpired}
+          timeLeft={formatTime(timeLeft)}
+          isAvailable={isAvailable}
+          openNavigation={openNavigation}
+          hospitalRated={hospitalRated}
         />
       )}
-      {activeTab === 'centers' && <DonationCentersView />}
+      {activeTab === 'centers' && <DonationCentersView onBook={(appt) => setPendingAppointments([...pendingAppointments, appt])} />}
+      {activeTab === 'pending' && <PendingDonationsView userPoints={userPoints} appointments={pendingAppointments} onCancel={(id) => setPendingAppointments(pendingAppointments.filter(a => a.id !== id))} />}
       {activeTab === 'impact' && <RewardsView />}
-      {activeTab === 'community' && <CommunityView />}
+      {activeTab === 'community' && <CommunityView feedPosts={feedPosts} setFeedPosts={setFeedPosts} />}
 
       <ChatBot />
 
@@ -99,13 +123,32 @@ export default function DonorApp() {
         isOpen={showFeedback}
         onClose={() => setShowFeedback(false)}
         targetType="hospital"
-        targetName="City General Hospital"
+        targetName="Red Cross Center #4"
+        onSubmit={(comment) => {
+          setHospitalRated(true);
+          setFeedPosts(prev => [{
+            id: Date.now(),
+            user: "Alex Johnson",
+            time: "Just now",
+            content: comment,
+            likes: 0,
+            replies: [],
+            showReplyInput: false,
+            isLiked: false
+          }, ...prev]);
+        }}
       />
     </div>
   );
 }
 
-function DashboardView({ requestAccepted, onAccept, onRate }: { requestAccepted: boolean; onAccept: () => void; onRate: () => void }) {
+function DashboardView({
+  requestAccepted, onAccept, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated
+}: {
+  requestAccepted: boolean; onAccept: () => void; onRate: () => void;
+  requestExpired: boolean; timeLeft: string; isAvailable: boolean; openNavigation: () => void;
+  hospitalRated: boolean;
+}) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Left Column: Pending Requests */}
@@ -192,9 +235,13 @@ function DashboardView({ requestAccepted, onAccept, onRate }: { requestAccepted:
                     <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
                   </td>
                   <td className="py-4 text-right">
-                    <button onClick={onRate} className="text-xs font-bold text-[#ee2b2b] hover:bg-[#ee2b2b]/5 px-3 py-1.5 rounded-lg transition-colors">
-                      Rate Hospital
-                    </button>
+                    {hospitalRated ? (
+                      <span className="text-xs font-bold text-slate-400">Rated</span>
+                    ) : (
+                      <button onClick={onRate} className="text-xs font-bold text-[#ee2b2b] hover:bg-[#ee2b2b]/5 px-3 py-1.5 rounded-lg transition-colors">
+                        Rate Hospital
+                      </button>
+                    )}
                   </td>
                 </tr>
                 <tr className="group">
@@ -301,46 +348,326 @@ function DashboardView({ requestAccepted, onAccept, onRate }: { requestAccepted:
   );
 }
 
-function DonationCentersView() {
+function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
+  const navigate = useNavigate();
+  const [selectedDate, setSelectedDate] = useState<number | null>(5);
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [selectedHospital, setSelectedHospital] = useState("City Central Medical Center");
+
+  const handleSchedule = () => {
+    if (!selectedDate || !selectedTime) {
+      alert("Please select a date and time slot first.");
+      return;
+    }
+    alert(`Appointment successfully scheduled at ${selectedHospital}!`);
+    onBook({ date: `Nov ${selectedDate}`, time: selectedTime, hospital: selectedHospital, id: Date.now() });
+    navigate('/donor/pending');
+  };
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {[1, 2, 3, 4, 5, 6].map((i) => (
-        <div key={i} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-          <div className="h-40 bg-slate-200 relative">
-            <img 
-              src={`https://picsum.photos/seed/center${i}/400/200`} 
-              alt="Donation Center" 
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-            <div className="absolute top-3 right-3 bg-white/90 backdrop-blur px-2 py-1 rounded text-xs font-bold text-slate-700">
-              {i * 1.2} miles away
-            </div>
+    <div className="flex flex-col gap-8 -mt-2 pb-24">
+      {/* Breadcrumbs & Title */}
+      <div className="flex flex-col gap-2">
+        <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
+          <Link className="hover:text-[#ee2b2b]" to="/donor">Dashboard</Link>
+          <span className="material-symbols-outlined text-sm">chevron_right</span>
+          <span className="text-slate-900">Book Appointment</span>
+        </nav>
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <h2 className="text-3xl md:text-4xl font-black text-slate-900 leading-tight">Schedule Your Donation</h2>
+            <p className="text-slate-500 max-w-2xl mt-1">Our AI predicts high demand for O- and A+ types this week. Your donation could save up to three lives.</p>
           </div>
-          <div className="p-5">
-            <h3 className="font-bold text-lg text-slate-900 mb-1">Red Cross Center #{i}</h3>
-            <p className="text-sm text-slate-500 mb-4">123 Medical Drive, Suite {100 + i}</p>
-            <div className="flex items-center gap-4 text-xs font-medium text-slate-600 mb-4">
-              <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-sm">schedule</span>
-                Open until 6pm
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="material-symbols-outlined text-sm">local_parking</span>
-                Free Parking
-              </span>
-            </div>
-            <button className="w-full py-2.5 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800 transition-colors">
-              Schedule Appointment
-            </button>
+          <div className="flex items-center gap-2 bg-[#ee2b2b]/10 text-[#ee2b2b] px-4 py-2 rounded-lg border border-[#ee2b2b]/20">
+            <span className="material-symbols-outlined animate-pulse">priority_high</span>
+            <span className="text-sm font-bold uppercase">Critical Shortage: O Negative</span>
           </div>
         </div>
-      ))}
+      </div>
+
+      {/* Booking Interface Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left: Calendar View */}
+        <div className="lg:col-span-7 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Date</span>
+              <h3 className="text-xl font-bold text-slate-900">November 2023</h3>
+            </div>
+            <div className="flex gap-2">
+              <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><span className="material-symbols-outlined">chevron_left</span></button>
+              <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><span className="material-symbols-outlined">chevron_right</span></button>
+            </div>
+          </div>
+          <div className="p-6">
+            <div className="grid grid-cols-7 mb-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
+                <div key={d} className="text-center text-[10px] font-black text-slate-400 uppercase py-2">{d}</div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              <div className="aspect-square"></div>
+              <div className="aspect-square"></div>
+              <div className="aspect-square"></div>
+              {Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
+                const isSelected = selectedDate === day;
+                const hasSpots = [6, 11].includes(day);
+                return (
+                  <button
+                    key={day}
+                    onClick={() => setSelectedDate(day)}
+                    className={`aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-semibold transition-all relative ${isSelected
+                      ? "bg-[#ee2b2b] text-white font-bold shadow-lg shadow-[#ee2b2b]/20 scale-110 z-10"
+                      : "hover:bg-slate-100 text-slate-900"
+                      }`}
+                  >
+                    {day}
+                    {isSelected && <span className="w-1 h-1 bg-white rounded-full mt-1"></span>}
+                    {!isSelected && hasSpots && <span className="absolute bottom-2 w-1 h-1 bg-[#ee2b2b]/40 rounded-full"></span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="px-6 py-4 bg-slate-50 flex flex-wrap gap-4 text-xs font-bold uppercase tracking-widest text-slate-500">
+            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[#ee2b2b]"></span> Selected</div>
+            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[#ee2b2b]/40"></span> Available</div>
+            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-slate-300"></span> Fully Booked</div>
+          </div>
+        </div>
+
+        {/* Right: Hospital & Time Panel */}
+        <div className="lg:col-span-5 flex flex-col gap-6">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xl font-bold text-slate-900">Select Hospital & Time</h3>
+              <span className="text-sm font-bold text-[#ee2b2b]">3 centers nearby</span>
+            </div>
+            <div className="flex flex-col gap-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar">
+              {[
+                { name: "City Central Medical Center", distance: "1.2 miles away", address: "450 Main St.", demand: "Urgent: O-", style: "text-[#ee2b2b] bg-[#ee2b2b]/10" },
+                { name: "St. Jude Community Clinic", distance: "2.8 miles away", address: "89 Hope Blvd.", demand: "Demand: A+", style: "text-slate-500 bg-slate-100" },
+                { name: "North Valley Blood Bank", distance: "5.1 miles away", address: "12 Oak Ridge Rd.", demand: "Limited Slots", style: "text-slate-500 bg-slate-100" }
+              ].map(hosp => {
+                const isSelected = selectedHospital === hosp.name;
+                return (
+                  <div
+                    key={hosp.name}
+                    onClick={() => { setSelectedHospital(hosp.name); setSelectedTime(null); }}
+                    className={`bg-white p-5 rounded-xl border ${isSelected ? 'border-2 border-[#ee2b2b]' : 'border-slate-200 hover:border-[#ee2b2b]/30'} shadow-sm relative group cursor-pointer transition-all`}
+                  >
+                    {isSelected && (
+                      <div className="absolute -right-1 -top-1">
+                        <span className="bg-[#ee2b2b] text-white text-[10px] font-black px-2 py-1 rounded shadow-lg uppercase tracking-widest">Selected</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-start mb-4">
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-lg leading-tight">{hosp.name}</h4>
+                        <p className="text-slate-500 text-sm flex items-center gap-1 mt-1">
+                          <span className="material-symbols-outlined text-sm">location_on</span> {hosp.distance} · {hosp.address}
+                        </p>
+                      </div>
+                      <div className={`${hosp.style} text-[10px] font-black px-2 py-1 rounded uppercase tracking-tighter`}>{hosp.demand}</div>
+                    </div>
+                    {isSelected ? (
+                      <div className="space-y-3">
+                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Available Slots (Nov {selectedDate})</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {["09:00 AM", "10:30 AM", "11:00 AM", "01:30 PM", "03:30 PM"].map(time => (
+                            <button
+                              key={time}
+                              onClick={(e) => { e.stopPropagation(); setSelectedTime(time); }}
+                              className={`py-2 px-1 text-xs font-bold rounded-lg transition-colors ${selectedTime === time ? "border-2 border-[#ee2b2b] bg-[#ee2b2b] text-white shadow-md" : "border border-slate-200 hover:border-[#ee2b2b]/50 hover:bg-[#ee2b2b]/5"}`}
+                            >
+                              {time}
+                            </button>
+                          ))}
+                          <button className="py-2 px-1 text-xs font-bold border border-slate-200 rounded-lg opacity-40 cursor-not-allowed line-through">02:00 PM</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2 text-xs font-bold text-slate-400">
+                        <span>Click to view slots</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sticky Booking Summary Footer */}
+      {(selectedDate || selectedTime) && (
+        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] p-4 sm:p-6 z-40 animate-in slide-in-from-bottom flex justify-center">
+          <div className="max-w-7xl w-full flex flex-col sm:flex-row items-center justify-between gap-6 pl-0">
+            <div className="flex items-center gap-6 divide-x divide-slate-200 w-full sm:w-auto overflow-x-auto">
+              <div className="flex flex-col min-w-max">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date & Time</span>
+                <p className="font-bold text-slate-900">Sunday, Nov {selectedDate} {selectedTime ? `@ ${selectedTime}` : ''}</p>
+              </div>
+              <div className="flex flex-col pl-6 min-w-max">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location</span>
+                <p className="font-bold text-slate-900">{selectedHospital}</p>
+              </div>
+              <div className="hidden lg:flex flex-col pl-6 min-w-max">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estimated Duration</span>
+                <p className="font-bold text-slate-900">45-60 mins</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 w-full sm:w-auto shrink-0">
+              <button className="px-6 py-3 text-slate-600 font-bold hover:text-slate-900 transition-colors hidden sm:block">
+                Save to Drafts
+              </button>
+              <button
+                onClick={handleSchedule}
+                className="flex-1 sm:flex-none bg-[#ee2b2b] hover:bg-red-700 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-[#ee2b2b]/20 transition-all transform active:scale-95 flex items-center justify-center gap-2"
+              >
+                Schedule Appointment
+                <span className="material-symbols-outlined">calendar_add_on</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Location Modal Helper */}
+      <div className="fixed bottom-32 md:bottom-28 right-8 z-30">
+        <div className="bg-white p-3 rounded-full shadow-2xl border border-slate-200 flex items-center gap-3 pr-6 animate-pulse">
+          <div className="w-10 h-10 rounded-full bg-[#ee2b2b]/10 text-[#ee2b2b] flex items-center justify-center">
+            <span className="material-symbols-outlined">map</span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black text-slate-400 uppercase">Current Area</span>
+            <span className="text-xs font-bold">Manhattan, NY</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
 
-function CommunityView() {
+function PendingDonationsView({ userPoints, appointments, onCancel }: { userPoints: number, appointments: any[], onCancel: (id: number) => void }) {
+  const navigate = useNavigate();
+  return (
+    <div className="max-w-4xl mx-auto space-y-8">
+      {/* Registration Status */}
+      <div className="bg-white rounded-xl p-6 border border-slate-200">
+        <h3 className="font-bold text-lg mb-4 text-slate-900 flex items-center gap-2">
+          <span className="material-symbols-outlined text-green-500">how_to_reg</span>
+          Registration Status
+        </h3>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-bold text-slate-700">Profile Complete</span>
+          <span className="text-sm font-bold text-green-600">100%</span>
+        </div>
+        <div className="w-full bg-slate-100 rounded-full h-2">
+          <div className="bg-green-500 rounded-full h-2 w-full"></div>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-8">
+        {/* Upcoming scheduled donations */}
+        <div className="bg-white rounded-xl p-6 border border-slate-200">
+          <h3 className="font-bold text-lg mb-4 text-slate-900 flex items-center gap-2">
+            <span className="material-symbols-outlined text-blue-500">event_upcoming</span>
+            Upcoming Donations
+          </h3>
+          <div className="space-y-4">
+            {appointments.length === 0 ? (
+              <p className="text-sm text-slate-500 italic">No upcoming appointments. <Link to="/donor/centers" className="text-[#ee2b2b] hover:underline font-bold">Schedule one now!</Link></p>
+            ) : (
+              appointments.map(appt => (
+                <div key={appt.id} className="border border-blue-100 bg-blue-50 rounded-lg p-4 flex gap-4 items-start">
+                  <div className="bg-white p-3 rounded-lg text-center min-w-[60px] border border-blue-100 flex flex-col justify-center items-center">
+                    <p className="text-xs font-bold text-slate-500 uppercase">{appt.date}</p>
+                    <p className="text-lg font-black text-blue-600 leading-tight mt-1">{appt.time.split(' ')[0]}</p>
+                    <p className="text-[10px] font-black text-slate-400 leading-tight">{appt.time.split(' ')[1]}</p>
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-slate-900">Whole Blood Donation</h4>
+                    <p className="text-sm text-slate-600 mt-1">{appt.hospital}</p>
+                    <div className="mt-3 flex gap-2">
+                      <button onClick={() => { onCancel(appt.id); navigate('/donor/centers'); }} className="text-xs font-bold bg-white border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 transition-colors shadow-sm">Reschedule</button>
+                      <button onClick={() => onCancel(appt.id)} className="text-xs font-bold text-red-600 hover:text-red-700 bg-white border border-red-100 px-3 py-1.5 rounded transition-colors shadow-sm">Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* History Summary and Points */}
+        <div className="bg-white rounded-xl p-6 border border-slate-200">
+          <h3 className="font-bold text-lg mb-4 text-slate-900 flex items-center gap-2">
+            <span className="material-symbols-outlined text-amber-500">stars</span>
+            Impact Summary
+          </h3>
+          <div className="bg-gradient-to-br from-red-50 to-orange-50 p-6 rounded-xl border border-red-100 text-center mb-6">
+            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-1">Total Points Earned</p>
+            <p className="text-4xl font-black text-red-600">{userPoints} <span className="text-lg text-red-400">XP</span></p>
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider">Recent Activity</h4>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Profile Completion Bonus</span>
+                <span className="font-bold text-green-600">+100 XP</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Verified Blood Group Docs</span>
+                <span className="font-bold text-green-600">+30 XP</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedPosts: any }) {
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [replyText, setReplyText] = useState("");
+
+  const handleToggleLike = (postId: number) => {
+    setFeedPosts(posts => posts.map(post => {
+      if (post.id === postId) {
+        return {
+          ...post,
+          isLiked: !post.isLiked,
+          likes: post.isLiked ? post.likes - 1 : post.likes + 1
+        };
+      }
+      return post;
+    }));
+  };
+
+  const handleRegisterDrive = () => {
+    setIsRegistered(true);
+    alert("Successfully registered for the upcoming blood drive! We've sent details to your email.");
+  };
+
+  const handleToggleReply = (postId: number) => {
+    setFeedPosts(posts => posts.map(post =>
+      post.id === postId ? { ...post, showReplyInput: !post.showReplyInput } : post
+    ));
+  };
+
+  const submitReply = (postId: number) => {
+    if (!replyText.trim()) return;
+    setFeedPosts(posts => posts.map(post => {
+      if (post.id === postId) {
+        return { ...post, showReplyInput: false, replies: [...post.replies, replyText] };
+      }
+      return post;
+    }));
+    setReplyText("");
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       <div className="lg:col-span-2 space-y-6">
@@ -360,10 +687,30 @@ function CommunityView() {
                   <p className="text-sm text-slate-600 mb-3">
                     Just completed my 5th donation at City General! The staff was amazing and the process was super smooth. Feeling great about helping out! 🩸💪
                   </p>
-                  <div className="flex items-center gap-4">
-                    <button className="flex items-center gap-1 text-slate-400 hover:text-[#ee2b2b] text-xs font-bold transition-colors">
-                      <span className="material-symbols-outlined text-sm">favorite</span>
-                      24 Likes
+
+                  {/* Render Replies */}
+                  {post.replies.map((reply, idx) => (
+                    <div key={idx} className="bg-slate-50 p-3 rounded-lg mt-2 mb-3 ml-4 border border-slate-100 text-sm text-slate-700">
+                      <span className="font-bold text-slate-900 mr-2">You:</span>{reply}
+                    </div>
+                  ))}
+
+                  <div className="flex items-center gap-4 text-xs font-bold">
+                    <button onClick={() => handleToggleLike(post.id)} className={`flex items-center gap-1 transition-colors ${post.isLiked ? 'text-[#ee2b2b]' : 'text-slate-400 hover:text-[#ee2b2b]'}`}>
+                      <svg
+                        className={`w-5 h-5 transition-colors duration-200 ${post.isLiked
+                            ? 'text-[#ee2b2b] fill-[#ee2b2b]'
+                            : 'text-slate-400 fill-transparent stroke-2'
+                          }`}
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={post.isLiked ? '0' : '2'}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
+                      </svg>
+                      {post.likes} Likes
                     </button>
                     <button className="flex items-center gap-1 text-slate-400 hover:text-slate-600 text-xs font-bold transition-colors">
                       <span className="material-symbols-outlined text-sm">chat_bubble</span>

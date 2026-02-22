@@ -7,7 +7,8 @@ export default function Login() {
   const location = useLocation();
   const [role, setRole] = useState<'donor' | 'hospital' | 'admin'>('donor');
   const [isLoading, setIsLoading] = useState(false);
-  const [isRegistering, setIsRegistering] = useState(location.pathname === '/register-donor');
+  const [isEmergencyAvailable, setIsEmergencyAvailable] = useState(false);
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,8 +44,57 @@ export default function Login() {
           <a className="text-sm font-semibold hover:text-[#ee2b2b] transition-colors" href="#">Impact Reports</a>
         </nav>
         <div className="flex items-center gap-4">
-          <button className="text-sm font-bold text-slate-600 hover:text-[#ee2b2b]">Support</button>
-          <button className="bg-[#ee2b2b] text-white px-5 py-2 rounded-lg text-sm font-bold shadow-lg shadow-[#ee2b2b]/20 hover:bg-[#ee2b2b]/90 transition-all">Join Network</button>
+          <div className="relative">
+            <button
+              onClick={() => setIsSupportOpen(!isSupportOpen)}
+              className="text-sm font-bold text-slate-600 hover:text-[#ee2b2b] transition-colors"
+            >
+              Support
+            </button>
+            {isSupportOpen && (
+              <div className="absolute top-full right-0 mt-4 bg-white rounded-xl shadow-[0_10px_25px_-5px_rgba(242,13,13,0.1),0_8px_10px_-6px_rgba(0,0,0,0.01)] border border-slate-100 p-5 w-72 z-50">
+                <h4 className="text-sm font-black text-slate-900 mb-3 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[#ee2b2b]">support_agent</span>
+                  Support Contacts
+                </h4>
+                <div className="space-y-1.5">
+                  <a href="mailto:support@lifelink.ai" className="group flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg transition-colors">
+                    <div className="bg-slate-100 p-2 rounded-lg group-hover:bg-[#ee2b2b]/10 transition-colors">
+                      <span className="material-symbols-outlined text-slate-500 group-hover:text-[#ee2b2b] text-sm transition-colors">mail</span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-tight">General</p>
+                      <p className="text-sm font-bold text-slate-800">support@lifelink.ai</p>
+                    </div>
+                  </a>
+                  <a href="mailto:emergency@lifelink.ai" className="group flex items-center gap-3 p-2 hover:bg-red-50 rounded-lg transition-colors">
+                    <div className="bg-red-100/50 p-2 rounded-lg group-hover:bg-red-200/50 transition-colors">
+                      <span className="material-symbols-outlined text-red-500 text-sm">emergency</span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-red-500 uppercase tracking-tight">Emergency</p>
+                      <p className="text-sm font-bold text-red-900">emergency@lifelink.ai</p>
+                    </div>
+                  </a>
+                  <a href="tel:+18005550199" className="group flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg transition-colors">
+                    <div className="bg-slate-100 p-2 rounded-lg group-hover:bg-[#ee2b2b]/10 transition-colors">
+                      <span className="material-symbols-outlined text-slate-500 group-hover:text-[#ee2b2b] text-sm transition-colors">phone</span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-slate-500 uppercase tracking-tight">Helpline (24/7)</p>
+                      <p className="text-sm font-bold text-slate-800">+1 (800) 555-0199</p>
+                    </div>
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => navigate('/register-donor')}
+            className="bg-[#ee2b2b] text-white px-5 py-2 rounded-lg text-sm font-bold shadow-lg shadow-[#ee2b2b]/20 hover:bg-[#ee2b2b]/90 transition-all active:scale-95"
+          >
+            Join Network
+          </button>
         </div>
       </header>
 

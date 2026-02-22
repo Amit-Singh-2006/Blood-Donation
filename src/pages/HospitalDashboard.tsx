@@ -8,7 +8,7 @@ export default function HospitalDashboard() {
   const [showChat, setShowChat] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
-  
+
   const [notifications, setNotifications] = useState([
     { id: 1, title: 'Blood Request Fulfilled', message: 'Donor John D. is en route for Request #882', time: '2m ago', read: false },
     { id: 2, title: 'Low Stock Alert', message: 'O- blood type is below critical threshold', time: '1h ago', read: false },
@@ -50,7 +50,7 @@ export default function HospitalDashboard() {
         </div>
         <div className="flex items-center gap-4">
           <div className="relative group" ref={notificationRef}>
-            <button 
+            <button
               onClick={() => setShowNotifications(!showNotifications)}
               className="w-11 h-11 rounded-xl border border-slate-200 flex items-center justify-center bg-white hover:shadow-sm transition-all relative"
             >
@@ -82,7 +82,7 @@ export default function HospitalDashboard() {
                       <div className="p-4 text-center text-slate-500 text-sm">No notifications</div>
                     ) : (
                       notifications.map(notification => (
-                        <div 
+                        <div
                           key={notification.id}
                           onClick={() => markAsRead(notification.id)}
                           className={cn(
@@ -108,7 +108,7 @@ export default function HospitalDashboard() {
               )}
             </AnimatePresence>
           </div>
-          <button 
+          <button
             onClick={() => setActiveTab('requests')}
             className="bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg shadow-[#ee2b2b]/20 transition-all transform active:scale-95"
           >
@@ -120,19 +120,19 @@ export default function HospitalDashboard() {
 
       {/* Tabs */}
       <div className="flex gap-4 mb-8 border-b border-slate-200 pb-1">
-        <button 
+        <button
           onClick={() => setActiveTab('dashboard')}
           className={`px-4 py-2 font-bold text-sm transition-colors border-b-2 ${activeTab === 'dashboard' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Dashboard
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('inventory')}
           className={`px-4 py-2 font-bold text-sm transition-colors border-b-2 ${activeTab === 'inventory' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Inventory
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('requests')}
           className={`px-4 py-2 font-bold text-sm transition-colors border-b-2 ${activeTab === 'requests' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
@@ -146,7 +146,7 @@ export default function HospitalDashboard() {
       {activeTab === 'requests' && <RequestWizardView />}
 
       {/* Chat Toggle */}
-      <button 
+      <button
         onClick={() => setShowChat(!showChat)}
         className="fixed bottom-8 right-8 bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 hover:scale-105 transition-transform z-50"
       >
@@ -164,6 +164,19 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'in
   const [quickRequestUrgency, setQuickRequestUrgency] = useState('Critical (Immediate)');
   const [quickRequestUnits, setQuickRequestUnits] = useState(2);
   const [isMatching, setIsMatching] = useState(false);
+
+  const [donorAppointments, setDonorAppointments] = useState([
+    { id: 101, name: "Alex Johnson", bloodType: "O-", eligibility: "Verified (100%)", type: "Whole Blood", time: "Tomorrow, 10:30 AM", status: "pending" },
+    { id: 102, name: "Maria Garcia", bloodType: "A+", eligibility: "Pending Review", type: "Power Red", time: "Tomorrow, 2:00 PM", status: "pending" }
+  ]);
+
+  const handleApproveAppointment = (id: number) => {
+    setDonorAppointments(prev => prev.map(a => a.id === id ? { ...a, status: 'approved' } : a));
+  };
+
+  const handleRejectAppointment = (id: number) => {
+    setDonorAppointments(prev => prev.map(a => a.id === id ? { ...a, status: 'rejected' } : a));
+  };
 
   const handleQuickMatch = () => {
     setIsMatching(true);
@@ -277,13 +290,13 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'in
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Blood Type Needed</label>
               <div className="grid grid-cols-4 gap-2">
                 {['O-', 'O+', 'A-', 'A+'].map(type => (
-                  <button 
+                  <button
                     key={type}
                     onClick={() => setQuickRequestType(type)}
                     className={cn(
                       "py-2 border rounded-lg text-sm font-bold transition-colors",
-                      quickRequestType === type 
-                        ? "border-[#ee2b2b] bg-[#ee2b2b]/5 text-[#ee2b2b] border-2" 
+                      quickRequestType === type
+                        ? "border-[#ee2b2b] bg-[#ee2b2b]/5 text-[#ee2b2b] border-2"
                         : "border-slate-200 hover:border-[#ee2b2b]"
                     )}
                   >
@@ -294,7 +307,7 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'in
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Urgency Level</label>
-              <select 
+              <select
                 value={quickRequestUrgency}
                 onChange={(e) => setQuickRequestUrgency(e.target.value)}
                 className="w-full rounded-lg border-slate-200 bg-slate-50 text-sm focus:ring-[#ee2b2b] focus:border-[#ee2b2b]"
@@ -306,15 +319,15 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'in
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Quantity (Units)</label>
-              <input 
-                className="w-full rounded-lg border-slate-200 bg-slate-50 text-sm focus:ring-[#ee2b2b] focus:border-[#ee2b2b]" 
-                type="number" 
+              <input
+                className="w-full rounded-lg border-slate-200 bg-slate-50 text-sm focus:ring-[#ee2b2b] focus:border-[#ee2b2b]"
+                type="number"
                 value={quickRequestUnits}
                 onChange={(e) => setQuickRequestUnits(parseInt(e.target.value))}
                 min={1}
               />
             </div>
-            <button 
+            <button
               onClick={handleQuickMatch}
               disabled={isMatching}
               className="w-full bg-[#ee2b2b] text-white py-3 rounded-xl font-bold hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
@@ -332,6 +345,86 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'in
               )}
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* Donor Appointments Approvals */}
+      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+        <div className="flex items-center justify-between mb-6">
+          <h4 className="text-lg font-bold flex items-center gap-2">
+            <span className="material-symbols-outlined text-[#ee2b2b]">event_available</span>
+            Pending Donor Appointments
+          </h4>
+          <span className="bg-slate-100 text-slate-600 text-xs font-bold px-3 py-1 rounded-full">
+            {donorAppointments.filter(a => a.status === 'pending').length} Needs Review
+          </span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="text-xs uppercase tracking-widest text-slate-400 border-b border-slate-100">
+                <th className="pb-4 font-semibold px-4">Donor Name</th>
+                <th className="pb-4 font-semibold px-4">Blood Type</th>
+                <th className="pb-4 font-semibold px-4">Donation Type</th>
+                <th className="pb-4 font-semibold px-4">Eligibility</th>
+                <th className="pb-4 font-semibold px-4">Time</th>
+                <th className="pb-4 font-semibold px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {donorAppointments.map(appt => (
+                <tr key={appt.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="py-4 px-4 font-bold text-slate-900">{appt.name}</td>
+                  <td className="py-4 px-4">
+                    <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-100 text-[#ee2b2b] font-black text-sm">
+                      {appt.bloodType}
+                    </span>
+                  </td>
+                  <td className="py-4 px-4 text-sm font-medium text-slate-700">{appt.type}</td>
+                  <td className="py-4 px-4">
+                    {appt.eligibility.includes('Verified') ? (
+                      <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-1.5 rounded uppercase flex items-center gap-1 w-max">
+                        <span className="material-symbols-outlined text-sm">verified</span>
+                        {appt.eligibility}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold bg-orange-100 text-orange-700 px-2 py-1.5 rounded uppercase flex items-center gap-1 w-max">
+                        <span className="material-symbols-outlined text-sm">pending</span>
+                        {appt.eligibility}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-4 px-4 text-sm text-slate-600 font-medium">{appt.time}</td>
+                  <td className="py-4 px-4 text-right flex justify-end">
+                    {appt.status === 'pending' ? (
+                      <div className="flex gap-2">
+                        <button onClick={() => handleApproveAppointment(appt.id)} className="bg-green-500 hover:bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded transition-colors shadow-sm">
+                          Approve
+                        </button>
+                        <button onClick={() => handleRejectAppointment(appt.id)} className="bg-white border border-slate-200 text-slate-600 hover:text-[#ee2b2b] hover:border-red-100 text-xs font-bold px-3 py-1.5 rounded transition-colors shadow-sm">
+                          Reject
+                        </button>
+                      </div>
+                    ) : (
+                      <span className={cn(
+                        "text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded inline-block",
+                        appt.status === 'approved' ? "bg-green-100 text-green-700" : "bg-red-50 text-[#ee2b2b]"
+                      )}>
+                        {appt.status}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {donorAppointments.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-500 text-sm">
+                    No pending appointments at this time.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -395,8 +488,8 @@ function InventoryView() {
               <div className="absolute left-0 top-0 h-full bg-green-500 w-[75%] rounded-full"></div>
             </div>
             <div className="flex gap-2">
-                <button onClick={() => updateStock('A+', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
-                <button onClick={() => updateStock('A+', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
+              <button onClick={() => updateStock('A+', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
+              <button onClick={() => updateStock('A+', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
             </div>
           </div>
         </div>
@@ -415,8 +508,8 @@ function InventoryView() {
               <div className="absolute left-0 top-0 h-full bg-[#ee2b2b] w-[15%] rounded-full"></div>
             </div>
             <div className="flex gap-2">
-                <button onClick={() => updateStock('O-', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
-                <button onClick={() => updateStock('O-', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
+              <button onClick={() => updateStock('O-', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
+              <button onClick={() => updateStock('O-', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
             </div>
           </div>
         </div>
@@ -435,8 +528,8 @@ function InventoryView() {
               <div className="absolute left-0 top-0 h-full bg-orange-400 w-[42%] rounded-full"></div>
             </div>
             <div className="flex gap-2">
-                <button onClick={() => updateStock('B+', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
-                <button onClick={() => updateStock('B+', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
+              <button onClick={() => updateStock('B+', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
+              <button onClick={() => updateStock('B+', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
             </div>
           </div>
         </div>
@@ -514,12 +607,12 @@ function RequestWizardView() {
       <div className="p-8">
         <h1 className="text-2xl font-extrabold text-slate-900 mb-2">Blood Requirement Details</h1>
         <p className="text-slate-500 mb-8">Specify the blood components needed and the urgency of the request.</p>
-        
+
         <div className="space-y-8">
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-4">Urgency Level</label>
             <div className="grid grid-cols-3 gap-4">
-              <button 
+              <button
                 onClick={() => setUrgency('Normal')}
                 className={cn(
                   "flex flex-col items-center justify-center p-4 border-2 rounded-xl transition-all",
@@ -529,7 +622,7 @@ function RequestWizardView() {
                 <span className="material-symbols-outlined text-slate-400 mb-1">check_circle</span>
                 <span className="text-sm font-bold text-slate-600">Normal</span>
               </button>
-              <button 
+              <button
                 onClick={() => setUrgency('Urgent')}
                 className={cn(
                   "flex flex-col items-center justify-center p-4 border-2 rounded-xl transition-all",
@@ -539,7 +632,7 @@ function RequestWizardView() {
                 <span className="material-symbols-outlined text-orange-500 mb-1">priority_high</span>
                 <span className="text-sm font-bold text-orange-700">Urgent</span>
               </button>
-              <button 
+              <button
                 onClick={() => setUrgency('Critical')}
                 className={cn(
                   "flex flex-col items-center justify-center p-4 border-2 rounded-xl transition-all",
@@ -558,13 +651,13 @@ function RequestWizardView() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(type => (
-                <button 
-                  key={type} 
+                <button
+                  key={type}
                   onClick={() => setBloodType(type)}
                   className={cn(
                     "aspect-square flex items-center justify-center rounded-xl border text-xl font-bold transition-colors",
-                    bloodType === type 
-                      ? "border-2 border-[#ee2b2b] bg-[#ee2b2b]/5 text-[#ee2b2b]" 
+                    bloodType === type
+                      ? "border-2 border-[#ee2b2b] bg-[#ee2b2b]/5 text-[#ee2b2b]"
                       : "border-slate-200 bg-white hover:border-[#ee2b2b]"
                   )}
                 >
@@ -578,7 +671,7 @@ function RequestWizardView() {
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-4">Units Required</label>
               <div className="flex items-center gap-4">
-                <button 
+                <button
                   onClick={() => setUnits(Math.max(1, units - 1))}
                   className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors"
                 >
@@ -587,7 +680,7 @@ function RequestWizardView() {
                 <div className="flex-1 text-center">
                   <span className="text-4xl font-extrabold text-slate-900">{units.toString().padStart(2, '0')}</span>
                 </div>
-                <button 
+                <button
                   onClick={() => setUnits(units + 1)}
                   className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors"
                 >
@@ -597,7 +690,7 @@ function RequestWizardView() {
             </div>
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-4">Reason</label>
-              <select 
+              <select
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 className="w-full bg-slate-50 border-slate-200 rounded-lg text-sm p-3 focus:ring-[#ee2b2b] focus:border-[#ee2b2b]"
@@ -612,7 +705,7 @@ function RequestWizardView() {
         </div>
       </div>
       <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
-        <button 
+        <button
           onClick={handleSubmit}
           disabled={!bloodType || isSubmitting}
           className="flex items-center gap-2 bg-[#ee2b2b] text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-[#ee2b2b]/20 hover:bg-red-700 transition-all disabled:opacity-70 disabled:cursor-not-allowed"
