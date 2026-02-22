@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import DonorRegistration from './pages/DonorRegistration';
 import HospitalRegistration from './pages/HospitalRegistration';
 import AdminRegistration from './pages/AdminRegistration';
+import About from './pages/About';
 import AdminDashboard from './pages/AdminDashboard';
 import HospitalDashboard from './pages/HospitalDashboard';
 import DonorApp from './pages/DonorApp';
@@ -19,6 +20,7 @@ export default function App() {
         <Route path="register-donor" element={<DonorRegistration />} />
         <Route path="register-hospital" element={<HospitalRegistration />} />
         <Route path="register-admin" element={<AdminRegistration />} />
+        <Route path="about" element={<About />} />
 
         {/* Admin Routes */}
         <Route path="admin" element={<AdminDashboard />} />

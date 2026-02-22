@@ -11,7 +11,7 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const hideNav = location.pathname === '/' || location.pathname === '/register-donor';
+  const hideNav = location.pathname === '/' || location.pathname === '/register-donor' || location.pathname === '/register-hospital' || location.pathname === '/register-admin' || location.pathname === '/about';
 
   // Determine layout type based on path
   const isSidebarLayout = location.pathname.startsWith('/admin') || location.pathname.startsWith('/hospital') || location.pathname.startsWith('/analytics') || location.pathname.startsWith('/tracking');
