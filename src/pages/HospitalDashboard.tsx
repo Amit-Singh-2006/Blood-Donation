@@ -1,19 +1,55 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import Chat from '../components/Chat';
 import { cn } from '@/lib/utils';
+import { apiFetch } from '../lib/api';
 
 export default function HospitalDashboard() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'requests'>('dashboard');
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/');
+  };
   const [showChat, setShowChat] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
-  
+
+  const [user, setUser] = useState<any>(null);
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
+  const [donations, setDonations] = useState<any[]>([]);
   const [notifications, setNotifications] = useState([
     { id: 1, title: 'Blood Request Fulfilled', message: 'Donor John D. is en route for Request #882', time: '2m ago', read: false },
     { id: 2, title: 'Low Stock Alert', message: 'O- blood type is below critical threshold', time: '1h ago', read: false },
     { id: 3, title: 'New Donor Match', message: '3 new donors found for Request #879', time: '2h ago', read: true },
   ]);
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [invData, reqData, donData] = await Promise.all([
+        apiFetch('/hospital/inventory'),
+        apiFetch('/hospital/requests'),
+        apiFetch('/hospital/donations')
+      ]);
+      setInventory(invData);
+      setRequests(reqData);
+      setDonations(donData);
+    } catch (err) {
+      console.error('Failed to fetch hospital data:', err);
+    }
+  };
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -42,15 +78,22 @@ export default function HospitalDashboard() {
       {/* Header */}
       <header className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-3xl font-black text-slate-900">Hospital Emergency Dashboard</h2>
+          <h2 className="text-3xl font-black text-slate-900">{user?.name || 'Hospital Emergency Dashboard'}</h2>
           <p className="text-slate-500 mt-1 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-500 inline-block animate-pulse"></span>
             AI Engine Status: <span className="font-semibold text-green-600">Optimal (14% Load)</span>
           </p>
         </div>
         <div className="flex items-center gap-4">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-slate-500 hover:text-[#ee2b2b] transition-colors font-bold text-sm bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm mr-2"
+          >
+            <span className="material-symbols-outlined text-lg">logout</span>
+            Logout
+          </button>
           <div className="relative group" ref={notificationRef}>
-            <button 
+            <button
               onClick={() => setShowNotifications(!showNotifications)}
               className="w-11 h-11 rounded-xl border border-slate-200 flex items-center justify-center bg-white hover:shadow-sm transition-all relative"
             >
@@ -82,7 +125,7 @@ export default function HospitalDashboard() {
                       <div className="p-4 text-center text-slate-500 text-sm">No notifications</div>
                     ) : (
                       notifications.map(notification => (
-                        <div 
+                        <div
                           key={notification.id}
                           onClick={() => markAsRead(notification.id)}
                           className={cn(
@@ -108,7 +151,7 @@ export default function HospitalDashboard() {
               )}
             </AnimatePresence>
           </div>
-          <button 
+          <button
             onClick={() => setActiveTab('requests')}
             className="bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold px-6 py-3 rounded-xl flex items-center gap-2 shadow-lg shadow-[#ee2b2b]/20 transition-all transform active:scale-95"
           >
@@ -120,19 +163,19 @@ export default function HospitalDashboard() {
 
       {/* Tabs */}
       <div className="flex gap-4 mb-8 border-b border-slate-200 pb-1">
-        <button 
+        <button
           onClick={() => setActiveTab('dashboard')}
           className={`px-4 py-2 font-bold text-sm transition-colors border-b-2 ${activeTab === 'dashboard' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Dashboard
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('inventory')}
           className={`px-4 py-2 font-bold text-sm transition-colors border-b-2 ${activeTab === 'inventory' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Inventory
         </button>
-        <button 
+        <button
           onClick={() => setActiveTab('requests')}
           className={`px-4 py-2 font-bold text-sm transition-colors border-b-2 ${activeTab === 'requests' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
@@ -141,12 +184,21 @@ export default function HospitalDashboard() {
       </div>
 
       {/* Content */}
-      {activeTab === 'dashboard' && <DashboardView setActiveTab={setActiveTab} />}
-      {activeTab === 'inventory' && <InventoryView />}
-      {activeTab === 'requests' && <RequestWizardView />}
+      {activeTab === 'dashboard' && (
+        <DashboardView
+          setActiveTab={setActiveTab}
+          stats={{
+            requests: requests.length,
+            matches: 48,
+            inventory: inventory.reduce((acc, curr) => acc + curr.units, 0)
+          }}
+        />
+      )}
+      {activeTab === 'inventory' && <InventoryView inventory={inventory} />}
+      {activeTab === 'requests' && <RequestWizardView requests={requests} />}
 
       {/* Chat Toggle */}
-      <button 
+      <button
         onClick={() => setShowChat(!showChat)}
         className="fixed bottom-8 right-8 bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 hover:scale-105 transition-transform z-50"
       >
@@ -159,7 +211,7 @@ export default function HospitalDashboard() {
   );
 }
 
-function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'inventory' | 'requests') => void }) {
+function DashboardView({ setActiveTab, stats }: { setActiveTab: (tab: 'dashboard' | 'inventory' | 'requests') => void; stats: { requests: number; matches: number; inventory: number } }) {
   const [quickRequestType, setQuickRequestType] = useState('O-');
   const [quickRequestUrgency, setQuickRequestUrgency] = useState('Critical (Immediate)');
   const [quickRequestUnits, setQuickRequestUnits] = useState(2);
@@ -277,13 +329,13 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'in
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Blood Type Needed</label>
               <div className="grid grid-cols-4 gap-2">
                 {['O-', 'O+', 'A-', 'A+'].map(type => (
-                  <button 
+                  <button
                     key={type}
                     onClick={() => setQuickRequestType(type)}
                     className={cn(
                       "py-2 border rounded-lg text-sm font-bold transition-colors",
-                      quickRequestType === type 
-                        ? "border-[#ee2b2b] bg-[#ee2b2b]/5 text-[#ee2b2b] border-2" 
+                      quickRequestType === type
+                        ? "border-[#ee2b2b] bg-[#ee2b2b]/5 text-[#ee2b2b] border-2"
                         : "border-slate-200 hover:border-[#ee2b2b]"
                     )}
                   >
@@ -294,7 +346,7 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'in
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Urgency Level</label>
-              <select 
+              <select
                 value={quickRequestUrgency}
                 onChange={(e) => setQuickRequestUrgency(e.target.value)}
                 className="w-full rounded-lg border-slate-200 bg-slate-50 text-sm focus:ring-[#ee2b2b] focus:border-[#ee2b2b]"
@@ -306,15 +358,15 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'in
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Quantity (Units)</label>
-              <input 
-                className="w-full rounded-lg border-slate-200 bg-slate-50 text-sm focus:ring-[#ee2b2b] focus:border-[#ee2b2b]" 
-                type="number" 
+              <input
+                className="w-full rounded-lg border-slate-200 bg-slate-50 text-sm focus:ring-[#ee2b2b] focus:border-[#ee2b2b]"
+                type="number"
                 value={quickRequestUnits}
                 onChange={(e) => setQuickRequestUnits(parseInt(e.target.value))}
                 min={1}
               />
             </div>
-            <button 
+            <button
               onClick={handleQuickMatch}
               disabled={isMatching}
               className="w-full bg-[#ee2b2b] text-white py-3 rounded-xl font-bold hover:brightness-110 transition-all flex items-center justify-center gap-2 disabled:opacity-70"
@@ -338,16 +390,17 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'in
   );
 }
 
-function InventoryView() {
-  const [stock, setStock] = useState({
-    'A+': 428,
-    'A-': 45,
-    'B+': 115,
-    'B-': 28,
-    'AB+': 62,
-    'AB-': 12,
-    'O+': 340,
-    'O-': 34
+function InventoryView({ inventory }: { inventory: any[] }) {
+  const [stock, setStock] = useState<Record<string, number>>(() => {
+    const initialStock: Record<string, number> = {
+      'A+': 0, 'A-': 0, 'B+': 0, 'B-': 0, 'AB+': 0, 'AB-': 0, 'O+': 0, 'O-': 0
+    };
+    inventory.forEach(item => {
+      if (initialStock[item.blood_group] !== undefined) {
+        initialStock[item.blood_group] = item.units;
+      }
+    });
+    return initialStock;
   });
 
   const updateStock = (type: keyof typeof stock, change: number) => {
@@ -395,8 +448,8 @@ function InventoryView() {
               <div className="absolute left-0 top-0 h-full bg-green-500 w-[75%] rounded-full"></div>
             </div>
             <div className="flex gap-2">
-                <button onClick={() => updateStock('A+', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
-                <button onClick={() => updateStock('A+', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
+              <button onClick={() => updateStock('A+', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
+              <button onClick={() => updateStock('A+', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
             </div>
           </div>
         </div>
@@ -415,8 +468,8 @@ function InventoryView() {
               <div className="absolute left-0 top-0 h-full bg-[#ee2b2b] w-[15%] rounded-full"></div>
             </div>
             <div className="flex gap-2">
-                <button onClick={() => updateStock('O-', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
-                <button onClick={() => updateStock('O-', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
+              <button onClick={() => updateStock('O-', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
+              <button onClick={() => updateStock('O-', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
             </div>
           </div>
         </div>
@@ -435,8 +488,8 @@ function InventoryView() {
               <div className="absolute left-0 top-0 h-full bg-orange-400 w-[42%] rounded-full"></div>
             </div>
             <div className="flex gap-2">
-                <button onClick={() => updateStock('B+', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
-                <button onClick={() => updateStock('B+', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
+              <button onClick={() => updateStock('B+', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
+              <button onClick={() => updateStock('B+', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
             </div>
           </div>
         </div>
@@ -492,7 +545,7 @@ function InventoryView() {
   );
 }
 
-function RequestWizardView() {
+function RequestWizardView({ requests }: { requests: any[] }) {
   const [urgency, setUrgency] = useState('Normal');
   const [bloodType, setBloodType] = useState<string | null>(null);
   const [units, setUnits] = useState(4);
@@ -514,12 +567,12 @@ function RequestWizardView() {
       <div className="p-8">
         <h1 className="text-2xl font-extrabold text-slate-900 mb-2">Blood Requirement Details</h1>
         <p className="text-slate-500 mb-8">Specify the blood components needed and the urgency of the request.</p>
-        
+
         <div className="space-y-8">
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-4">Urgency Level</label>
             <div className="grid grid-cols-3 gap-4">
-              <button 
+              <button
                 onClick={() => setUrgency('Normal')}
                 className={cn(
                   "flex flex-col items-center justify-center p-4 border-2 rounded-xl transition-all",
@@ -529,7 +582,7 @@ function RequestWizardView() {
                 <span className="material-symbols-outlined text-slate-400 mb-1">check_circle</span>
                 <span className="text-sm font-bold text-slate-600">Normal</span>
               </button>
-              <button 
+              <button
                 onClick={() => setUrgency('Urgent')}
                 className={cn(
                   "flex flex-col items-center justify-center p-4 border-2 rounded-xl transition-all",
@@ -539,7 +592,7 @@ function RequestWizardView() {
                 <span className="material-symbols-outlined text-orange-500 mb-1">priority_high</span>
                 <span className="text-sm font-bold text-orange-700">Urgent</span>
               </button>
-              <button 
+              <button
                 onClick={() => setUrgency('Critical')}
                 className={cn(
                   "flex flex-col items-center justify-center p-4 border-2 rounded-xl transition-all",
@@ -558,13 +611,13 @@ function RequestWizardView() {
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(type => (
-                <button 
-                  key={type} 
+                <button
+                  key={type}
                   onClick={() => setBloodType(type)}
                   className={cn(
                     "aspect-square flex items-center justify-center rounded-xl border text-xl font-bold transition-colors",
-                    bloodType === type 
-                      ? "border-2 border-[#ee2b2b] bg-[#ee2b2b]/5 text-[#ee2b2b]" 
+                    bloodType === type
+                      ? "border-2 border-[#ee2b2b] bg-[#ee2b2b]/5 text-[#ee2b2b]"
                       : "border-slate-200 bg-white hover:border-[#ee2b2b]"
                   )}
                 >
@@ -578,7 +631,7 @@ function RequestWizardView() {
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-4">Units Required</label>
               <div className="flex items-center gap-4">
-                <button 
+                <button
                   onClick={() => setUnits(Math.max(1, units - 1))}
                   className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors"
                 >
@@ -587,7 +640,7 @@ function RequestWizardView() {
                 <div className="flex-1 text-center">
                   <span className="text-4xl font-extrabold text-slate-900">{units.toString().padStart(2, '0')}</span>
                 </div>
-                <button 
+                <button
                   onClick={() => setUnits(units + 1)}
                   className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors"
                 >
@@ -597,7 +650,7 @@ function RequestWizardView() {
             </div>
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-4">Reason</label>
-              <select 
+              <select
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 className="w-full bg-slate-50 border-slate-200 rounded-lg text-sm p-3 focus:ring-[#ee2b2b] focus:border-[#ee2b2b]"
@@ -612,7 +665,7 @@ function RequestWizardView() {
         </div>
       </div>
       <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end">
-        <button 
+        <button
           onClick={handleSubmit}
           disabled={!bloodType || isSubmitting}
           className="flex items-center gap-2 bg-[#ee2b2b] text-white px-8 py-3 rounded-lg font-bold shadow-lg shadow-[#ee2b2b]/20 hover:bg-red-700 transition-all disabled:opacity-70 disabled:cursor-not-allowed"

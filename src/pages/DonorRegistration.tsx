@@ -1,34 +1,64 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { User, Phone, Mail, MapPin, Droplets, Calendar, CheckCircle2, ArrowRight } from 'lucide-react';
+import { User, Phone, Mail, MapPin, Droplets, Calendar, CheckCircle2, ArrowRight, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { apiFetch } from '../lib/api';
 
 export default function DonorRegistration() {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Form State
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    password: '',
+    dob: '',
+    blood_group: '',
+    gender: '',
+    phone: '',
+    city: '',
+  });
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setError('');
+
+    try {
+      const response = await apiFetch('/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...formData,
+          role: 'donor'
+        }),
+      });
+
+      localStorage.setItem('token', response.token);
+      localStorage.setItem('user', JSON.stringify(response.user));
+
       setIsSuccess(true);
-      
-      // Redirect to donor app after success
       setTimeout(() => {
         navigate('/donor');
       }, 2000);
-    }, 1500);
+    } catch (err: any) {
+      setError(err.message || 'Registration failed');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (isSuccess) {
     return (
       <div className="min-h-[600px] flex items-center justify-center">
-        <motion.div 
+        <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           className="text-center p-8 bg-white rounded-2xl shadow-xl border border-green-100 max-w-md"
@@ -51,20 +81,29 @@ export default function DonorRegistration() {
         <p className="text-slate-600 mt-2">Join our AI-enhanced network and become a hero today.</p>
       </div>
 
-      <motion.form 
+      <motion.form
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         onSubmit={handleSubmit}
         className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-6"
       >
+        {error && (
+          <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm font-bold border border-red-100 italic">
+            {error}
+          </div>
+        )}
+
         <div className="grid md:grid-cols-2 gap-6">
           <div className="space-y-2">
             <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
               <User className="w-4 h-4" /> Full Name
             </label>
-            <input 
-              required 
-              type="text" 
+            <input
+              required
+              type="text"
+              name="name"
+              value={formData.name}
+              onChange={handleChange}
               placeholder="John Doe"
               className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
             />
@@ -74,9 +113,12 @@ export default function DonorRegistration() {
             <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
               <Calendar className="w-4 h-4" /> Date of Birth
             </label>
-            <input 
-              required 
-              type="date" 
+            <input
+              required
+              type="date"
+              name="dob"
+              value={formData.dob}
+              onChange={handleChange}
               className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
             />
           </div>
@@ -85,9 +127,11 @@ export default function DonorRegistration() {
             <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
               <Droplets className="w-4 h-4" /> Blood Group
             </label>
-            <select 
+            <select
               required
-              defaultValue=""
+              name="blood_group"
+              value={formData.blood_group}
+              onChange={handleChange}
               className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all bg-white"
             >
               <option value="">Select Blood Type</option>
@@ -106,9 +150,11 @@ export default function DonorRegistration() {
             <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
               <User className="w-4 h-4" /> Gender
             </label>
-            <select 
+            <select
               required
-              defaultValue=""
+              name="gender"
+              value={formData.gender}
+              onChange={handleChange}
               className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all bg-white"
             >
               <option value="">Select Gender</option>
@@ -122,9 +168,12 @@ export default function DonorRegistration() {
             <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
               <Phone className="w-4 h-4" /> Phone Number
             </label>
-            <input 
-              required 
-              type="tel" 
+            <input
+              required
+              type="tel"
+              name="phone"
+              value={formData.phone}
+              onChange={handleChange}
               placeholder="+91 98765 43210"
               className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
             />
@@ -134,10 +183,28 @@ export default function DonorRegistration() {
             <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
               <Mail className="w-4 h-4" /> Email Address
             </label>
-            <input 
-              required 
-              type="email" 
+            <input
+              required
+              type="email"
+              name="email"
+              value={formData.email}
+              onChange={handleChange}
               placeholder="john@example.com"
+              className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
+            />
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+              <Lock className="w-4 h-4" /> Password
+            </label>
+            <input
+              required
+              type="password"
+              name="password"
+              value={formData.password}
+              onChange={handleChange}
+              placeholder="••••••••"
               className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
             />
           </div>
@@ -145,13 +212,16 @@ export default function DonorRegistration() {
 
         <div className="space-y-2">
           <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-            <MapPin className="w-4 h-4" /> Current Location / Address
+            <MapPin className="w-4 h-4" /> City
           </label>
-          <textarea 
-            required 
-            rows={3}
-            placeholder="Enter your full address..."
-            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all resize-none"
+          <input
+            required
+            type="text"
+            name="city"
+            value={formData.city}
+            onChange={handleChange}
+            placeholder="e.g. Seattle"
+            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
           />
         </div>
 
@@ -164,8 +234,8 @@ export default function DonorRegistration() {
           </label>
         </div>
 
-        <button 
-          type="submit" 
+        <button
+          type="submit"
           disabled={isSubmitting}
           className="w-full py-4 bg-red-600 text-white rounded-xl font-bold text-lg hover:bg-red-700 transition-all shadow-lg shadow-red-600/20 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
         >

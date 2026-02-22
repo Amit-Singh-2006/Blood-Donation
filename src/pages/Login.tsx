@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { apiFetch } from '../lib/api';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -8,22 +9,57 @@ export default function Login() {
   const [role, setRole] = useState<'donor' | 'hospital' | 'admin'>('donor');
   const [isLoading, setIsLoading] = useState(false);
   const [isRegistering, setIsRegistering] = useState(location.pathname === '/register-donor');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [bloodGroup, setBloodGroup] = useState('');
+  const [error, setError] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // Simulate auth
-    setTimeout(() => {
-      setIsLoading(false);
+    setError('');
+
+    try {
+      if (isRegistering) {
+        // Register
+        const registerData = {
+          name,
+          email,
+          password,
+          role,
+          ...(role === 'donor' && { blood_group: bloodGroup }),
+        };
+        const response = await apiFetch('/auth/register', {
+          method: 'POST',
+          body: JSON.stringify(registerData),
+        });
+        localStorage.setItem('token', response.token);
+        localStorage.setItem('user', JSON.stringify(response.user));
+      } else {
+        // Login
+        const response = await apiFetch('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+        });
+        localStorage.setItem('token', response.token);
+        localStorage.setItem('user', JSON.stringify(response.user));
+      }
+
+      // Navigate based on role
       if (role === 'donor') navigate('/donor');
       else if (role === 'hospital') navigate('/hospital');
       else if (role === 'admin') navigate('/admin');
-    }, 1000);
+    } catch (err: any) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const toggleMode = () => {
     setIsRegistering(!isRegistering);
+    setError('');
     navigate(isRegistering ? '/' : '/register-donor');
   };
 
@@ -53,7 +89,7 @@ export default function Login() {
         <div className="absolute top-20 left-10 w-64 h-64 bg-[#ee2b2b]/5 rounded-full blur-3xl -z-10"></div>
         <div className="absolute bottom-20 right-10 w-96 h-96 bg-[#ee2b2b]/10 rounded-full blur-3xl -z-10"></div>
 
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="w-full max-w-[480px] space-y-8"
@@ -65,23 +101,29 @@ export default function Login() {
 
           {/* Login Card */}
           <div className="bg-white rounded-xl border border-slate-200 p-8 space-y-6 shadow-[0_10px_25px_-5px_rgba(242,13,13,0.05),0_8px_10px_-6px_rgba(0,0,0,0.01)]">
+            {error && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold border border-red-100 italic">
+                {error}
+              </div>
+            )}
+
             {/* Role Selector */}
             <div className="bg-slate-100 p-1.5 rounded-xl flex">
-              <button 
+              <button
                 onClick={() => setRole('donor')}
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${role === 'donor' ? 'bg-white shadow-sm text-slate-900 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 <span className="material-symbols-outlined text-lg">person</span>
                 Donor
               </button>
-              <button 
+              <button
                 onClick={() => setRole('hospital')}
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${role === 'hospital' ? 'bg-white shadow-sm text-slate-900 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 <span className="material-symbols-outlined text-lg">local_hospital</span>
                 Hospital
               </button>
-              <button 
+              <button
                 onClick={() => setRole('admin')}
                 className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-bold transition-all ${role === 'admin' ? 'bg-white shadow-sm text-slate-900 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
               >
@@ -97,11 +139,13 @@ export default function Login() {
                   <label className="text-sm font-bold text-slate-700 ml-1">Full Name</label>
                   <div className="relative group">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">badge</span>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       required
-                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400" 
-                      placeholder="John Doe" 
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
+                      placeholder="John Doe"
                     />
                   </div>
                 </div>
@@ -111,21 +155,28 @@ export default function Login() {
                 <label className="text-sm font-bold text-slate-700 ml-1">Email address</label>
                 <div className="relative group">
                   <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">mail</span>
-                  <input 
-                    type="email" 
+                  <input
+                    type="email"
                     required
-                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400" 
-                    placeholder="name@example.com" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
+                    placeholder="name@example.com"
                   />
                 </div>
               </div>
 
               {isRegistering && role === 'donor' && (
-                 <div className="space-y-1.5">
+                <div className="space-y-1.5">
                   <label className="text-sm font-bold text-slate-700 ml-1">Blood Type</label>
                   <div className="relative group">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">bloodtype</span>
-                    <select defaultValue="" className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400 appearance-none">
+                    <select
+                      required
+                      value={bloodGroup}
+                      onChange={(e) => setBloodGroup(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400 appearance-none"
+                    >
                       <option value="">Select Blood Type</option>
                       <option value="A+">A+</option>
                       <option value="A-">A-</option>
@@ -147,11 +198,13 @@ export default function Login() {
                 </div>
                 <div className="relative group">
                   <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">lock</span>
-                  <input 
-                    type="password" 
+                  <input
+                    type="password"
                     required
-                    className="w-full pl-12 pr-12 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400" 
-                    placeholder="••••••••" 
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-12 pr-12 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
+                    placeholder="••••••••"
                   />
                   <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                     <span className="material-symbols-outlined text-lg">visibility</span>
@@ -159,7 +212,7 @@ export default function Login() {
                 </div>
               </div>
 
-              <button 
+              <button
                 type="submit"
                 disabled={isLoading}
                 className="w-full bg-[#ee2b2b] text-white py-4 rounded-lg font-bold text-lg shadow-xl shadow-[#ee2b2b]/20 hover:bg-[#ee2b2b]/90 active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center gap-2"
@@ -193,7 +246,7 @@ export default function Login() {
           </div>
 
           <p className="text-center text-sm font-semibold text-slate-500">
-            {isRegistering ? 'Already have an account?' : 'New to LifeLink AI?'} 
+            {isRegistering ? 'Already have an account?' : 'New to LifeLink AI?'}
             <button onClick={toggleMode} className="text-[#ee2b2b] hover:underline ml-1">
               {isRegistering ? 'Sign in' : 'Create an account'}
             </button>

@@ -1,14 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import ChatBot from '../components/ChatBot';
 import FeedbackModal from '../components/FeedbackModal';
+import { apiFetch } from '../lib/api';
 
 export default function DonorApp() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isAvailable, setIsAvailable] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [requestAccepted, setRequestAccepted] = useState(false);
+
+  const [user, setUser] = useState<any>(null);
+  const [donations, setDonations] = useState<any[]>([]);
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+    fetchDonations();
+  }, []);
+
+  const fetchDonations = async () => {
+    try {
+      const data = await apiFetch('/donor/donations');
+      setDonations(data);
+    } catch (err) {
+      console.error('Failed to fetch donations:', err);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/');
+  };
 
   // Determine active tab based on URL
   const getActiveTab = () => {
@@ -39,42 +67,51 @@ export default function DonorApp() {
             <p className="text-sm text-slate-500">Toggle active status to receive urgent blood requests via AI matching.</p>
           </div>
         </div>
-        <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-          <span className={`text-sm font-bold uppercase tracking-wider ${!isAvailable ? 'text-slate-400' : 'text-slate-300'}`}>Unavailable</span>
-          <label className="relative inline-flex items-center cursor-pointer">
-            <input 
-              type="checkbox" 
-              className="sr-only peer" 
-              checked={isAvailable}
-              onChange={() => setIsAvailable(!isAvailable)}
-            />
-            <div className="w-14 h-7 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-[#ee2b2b]"></div>
-          </label>
-          <span className={`text-sm font-bold uppercase tracking-wider ${isAvailable ? 'text-[#ee2b2b]' : 'text-slate-300'}`}>Available</span>
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <span className={`text-sm font-bold uppercase tracking-wider ${!isAvailable ? 'text-slate-400' : 'text-slate-300'}`}>Unavailable</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={isAvailable}
+                onChange={() => setIsAvailable(!isAvailable)}
+              />
+              <div className="w-14 h-7 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-[#ee2b2b]"></div>
+            </label>
+            <span className={`text-sm font-bold uppercase tracking-wider ${isAvailable ? 'text-[#ee2b2b]' : 'text-slate-300'}`}>Available</span>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-slate-500 hover:text-[#ee2b2b] transition-colors font-bold text-sm bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm"
+          >
+            <span className="material-symbols-outlined text-lg">logout</span>
+            Logout
+          </button>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-6 mb-8 border-b border-slate-200 overflow-x-auto">
-        <Link 
+        <Link
           to="/donor"
           className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Dashboard
         </Link>
-        <Link 
+        <Link
           to="/donor/centers"
           className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'centers' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Donation Centers
         </Link>
-        <Link 
+        <Link
           to="/donor/impact"
           className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'impact' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Impact Report
         </Link>
-        <Link 
+        <Link
           to="/donor/community"
           className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'community' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
@@ -83,19 +120,21 @@ export default function DonorApp() {
       </div>
 
       {activeTab === 'dashboard' && (
-        <DashboardView 
-          requestAccepted={requestAccepted} 
-          onAccept={handleAcceptRequest} 
+        <DashboardView
+          user={user}
+          donations={donations}
+          requestAccepted={requestAccepted}
+          onAccept={handleAcceptRequest}
           onRate={() => setShowFeedback(true)}
         />
       )}
       {activeTab === 'centers' && <DonationCentersView />}
-      {activeTab === 'impact' && <RewardsView />}
+      {activeTab === 'impact' && <RewardsView user={user} />}
       {activeTab === 'community' && <CommunityView />}
 
       <ChatBot />
 
-      <FeedbackModal 
+      <FeedbackModal
         isOpen={showFeedback}
         onClose={() => setShowFeedback(false)}
         targetType="hospital"
@@ -105,9 +144,10 @@ export default function DonorApp() {
   );
 }
 
-function DashboardView({ requestAccepted, onAccept, onRate }: { requestAccepted: boolean; onAccept: () => void; onRate: () => void }) {
+function DashboardView({ user, donations, requestAccepted, onAccept, onRate }: { user: any; donations: any[]; requestAccepted: boolean; onAccept: () => void; onRate: () => void }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* ... existing code ... */}
       {/* Left Column: Pending Requests */}
       <div className="lg:col-span-2 space-y-6">
         <div className="flex items-center justify-between mb-4">
@@ -142,7 +182,7 @@ function DashboardView({ requestAccepted, onAccept, onRate }: { requestAccepted:
                   </div>
                 </div>
                 <div className="flex gap-3">
-                  <button 
+                  <button
                     onClick={onAccept}
                     className="flex-1 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold py-3 rounded-lg transition-all shadow-md shadow-[#ee2b2b]/20"
                   >
@@ -184,30 +224,27 @@ function DashboardView({ requestAccepted, onAccept, onRate }: { requestAccepted:
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                <tr className="group">
-                  <td className="py-4 text-sm font-medium text-slate-900">Oct 12, 2023</td>
-                  <td className="py-4 text-sm text-slate-600">Red Cross Center #4</td>
-                  <td className="py-4 text-sm text-slate-600">Whole Blood</td>
-                  <td className="py-4">
-                    <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
-                  </td>
-                  <td className="py-4 text-right">
-                    <button onClick={onRate} className="text-xs font-bold text-[#ee2b2b] hover:bg-[#ee2b2b]/5 px-3 py-1.5 rounded-lg transition-colors">
-                      Rate Hospital
-                    </button>
-                  </td>
-                </tr>
-                <tr className="group">
-                  <td className="py-4 text-sm font-medium text-slate-900">July 04, 2023</td>
-                  <td className="py-4 text-sm text-slate-600">St. Jude Medical</td>
-                  <td className="py-4 text-sm text-slate-600">Power Red</td>
-                  <td className="py-4">
-                    <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
-                  </td>
-                  <td className="py-4 text-right">
-                    <span className="text-xs font-bold text-slate-400">Rated</span>
-                  </td>
-                </tr>
+                {donations.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-10 text-center text-slate-400 italic">No donations found. Start donating today!</td>
+                  </tr>
+                ) : (
+                  donations.map((donation) => (
+                    <tr key={donation.id} className="group">
+                      <td className="py-4 text-sm font-medium text-slate-900">{new Date(donation.donation_date).toLocaleDateString()}</td>
+                      <td className="py-4 text-sm text-slate-600">{donation.hospital_name || 'Hospital'}</td>
+                      <td className="py-4 text-sm text-slate-600">{donation.units} Units</td>
+                      <td className="py-4">
+                        <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
+                      </td>
+                      <td className="py-4 text-right">
+                        <button onClick={onRate} className="text-xs font-bold text-[#ee2b2b] hover:bg-[#ee2b2b]/5 px-3 py-1.5 rounded-lg transition-colors">
+                          Rate Hospital
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -307,9 +344,9 @@ function DonationCentersView() {
       {[1, 2, 3, 4, 5, 6].map((i) => (
         <div key={i} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
           <div className="h-40 bg-slate-200 relative">
-            <img 
-              src={`https://picsum.photos/seed/center${i}/400/200`} 
-              alt="Donation Center" 
+            <img
+              src={`https://picsum.photos/seed/center${i}/400/200`}
+              alt="Donation Center"
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
@@ -350,7 +387,7 @@ function CommunityView() {
             {[1, 2, 3].map((i) => (
               <div key={i} className="flex gap-4 pb-6 border-b border-slate-100 last:border-0 last:pb-0">
                 <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0">
-                   <img src={`https://picsum.photos/seed/user${i}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img src={`https://picsum.photos/seed/user${i}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </div>
                 <div>
                   <div className="flex items-center gap-2 mb-1">
@@ -411,7 +448,7 @@ function CommunityView() {
   );
 }
 
-function RewardsView() {
+function RewardsView({ user }: { user: any }) {
   return (
     <div className="space-y-8">
       {/* Hero Section: Rank Progress */}
@@ -430,7 +467,7 @@ function RewardsView() {
             </div>
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
-                <h1 className="text-3xl font-extrabold text-slate-900">Guardian Level</h1>
+                <h1 className="text-3xl font-extrabold text-slate-900">{user?.name || 'Donor'}</h1>
                 <span className="material-symbols-outlined text-[#ee2b2b]">verified</span>
               </div>
               <p className="text-slate-500 text-base mb-6">You are in the top 5% of donors in Seattle. Keep it up!</p>
@@ -539,8 +576,8 @@ function RewardsView() {
                   <img className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAmGCUAhVMR3Z5uQEP8UfkbMl8lgDvYah8rKZvWQnL27Bot_HUjAcoK0syZ3ECT-hAvVModhklCNJfq8b5EzHUO6_yBoToF_ZSL_1U-8tN9A0QoG_aBX1HEUdgnGRqkwM1rH2bNoxSh6rBHv57Knas2PPdArZ20LJqowRklrJ9-BlpFUZxtBUJJonEWR-DcnO-sKDEhBpT3Y76GWDrw5Jy8w2Ne1XFrRTSxLj0qdyjTnGpL6qtUZX-03S1EjZRwP25DStZYz0qdEkg" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold truncate text-slate-900">You (Guardian)</p>
-                  <p className="text-xs text-[#ee2b2b] font-bold">450 XP</p>
+                  <p className="text-sm font-bold truncate text-slate-900">{user?.name || 'You'} (Donor)</p>
+                  <p className="text-xs text-[#ee2b2b] font-bold">{user?.blood_group || 'O+'}</p>
                 </div>
               </div>
             </div>
