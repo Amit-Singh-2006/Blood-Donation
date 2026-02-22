@@ -837,6 +837,7 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
 
 function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUserTokens: (val: number) => void }) {
   const navigate = useNavigate();
+  const [showAllFacilities, setShowAllFacilities] = useState(false);
 
   const handleRedeem = (cost: number, name: string) => {
     if (userTokens >= cost) {
@@ -1012,11 +1013,54 @@ function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUse
                 </div>
               </div>
 
-              <div onClick={() => alert('Opening full catalog of 20+ partner hospitals...')} className="bg-slate-50 p-5 rounded-xl border border-slate-200 border-dashed flex flex-col justify-center items-center group hover:bg-[#ee2b2b]/5 transition-all outline-none cursor-pointer">
-                <span className="material-symbols-outlined text-4xl text-slate-400 group-hover:text-[#ee2b2b] mb-2 transition-colors">dataset</span>
-                <h4 className="font-bold text-slate-700 group-hover:text-[#ee2b2b] transition-colors">View All Facilities</h4>
-                <p className="text-xs text-slate-500 mt-1">20+ hospital partners</p>
-              </div>
+              {!showAllFacilities ? (
+                <div onClick={() => setShowAllFacilities(true)} className="bg-slate-50 p-5 rounded-xl border border-slate-200 border-dashed flex flex-col justify-center items-center group hover:bg-[#ee2b2b]/5 transition-all outline-none cursor-pointer">
+                  <span className="material-symbols-outlined text-4xl text-slate-400 group-hover:text-[#ee2b2b] mb-2 transition-colors">dataset</span>
+                  <h4 className="font-bold text-slate-700 group-hover:text-[#ee2b2b] transition-colors">View All Facilities</h4>
+                  <p className="text-xs text-slate-500 mt-1">20+ hospital partners</p>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
+                    <div>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="w-10 h-10 bg-teal-100 text-teal-600 rounded-lg flex items-center justify-center">
+                          <span className="material-symbols-outlined">psychology</span>
+                        </div>
+                        <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Lakeside Care</span>
+                      </div>
+                      <h4 className="font-bold text-slate-900 leading-tight">Mental Health Consultation</h4>
+                      <p className="text-xs text-slate-500 mt-2 line-clamp-2">1-hour confidential session with a certified therapist.</p>
+                    </div>
+                    <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-sm font-black text-green-600">6,000 <span className="text-[10px]">Tokens</span></span>
+                      <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(6000, 'Mental Health Consultation')} disabled={userTokens < 6000}>Redeem</button>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
+                    <div>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-lg flex items-center justify-center">
+                          <span className="material-symbols-outlined">favorite</span>
+                        </div>
+                        <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Heart Center</span>
+                      </div>
+                      <h4 className="font-bold text-slate-900 leading-tight">ECG & Heart Screening</h4>
+                      <p className="text-xs text-slate-500 mt-2 line-clamp-2">Basic cardiovascular screening for early detection.</p>
+                    </div>
+                    <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-sm font-black text-green-600">12,000 <span className="text-[10px]">Tokens</span></span>
+                      <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(12000, 'ECG & Heart Screening')} disabled={userTokens < 12000}>Redeem</button>
+                    </div>
+                  </div>
+
+                  <div onClick={() => setShowAllFacilities(false)} className="bg-slate-50 p-5 rounded-xl border border-slate-200 border-dashed flex flex-col justify-center items-center group hover:bg-[#ee2b2b]/5 transition-all outline-none cursor-pointer">
+                    <span className="material-symbols-outlined text-4xl text-slate-400 group-hover:text-[#ee2b2b] mb-2 transition-colors">unfold_less</span>
+                    <h4 className="font-bold text-slate-700 group-hover:text-[#ee2b2b] transition-colors">Show Less</h4>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
