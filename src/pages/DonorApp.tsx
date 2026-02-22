@@ -909,6 +909,83 @@ function RewardsView() {
               <p className="text-[10px] text-center text-slate-500 uppercase font-bold">Community Leader</p>
             </div>
           </div>
+
+          {/* Tokens & Hospital Facilities */}
+          <div className="mt-10">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold flex items-center gap-2 text-slate-900">
+                <span className="material-symbols-outlined text-green-500">toll</span>
+                Reward Tokens & Facilities
+              </h2>
+              <div className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-xl border border-green-200 shadow-sm">
+                <span className="font-black text-xl">24,000</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest mt-1">Available</span>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-500 mb-6 font-medium">
+              You earn <span className="font-bold text-[#ee2b2b]">2,000 tokens</span> for each successful donation! Redeem your tokens for free checkups and facilities at our partner hospitals.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
+                <div>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center">
+                      <span className="material-symbols-outlined">health_and_safety</span>
+                    </div>
+                    <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">City General</span>
+                  </div>
+                  <h4 className="font-bold text-slate-900 leading-tight">Comprehensive Health Checkup</h4>
+                  <p className="text-xs text-slate-500 mt-2 line-clamp-2">Full body screening including vitals, blood profile, and doctor consultation.</p>
+                </div>
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-sm font-black text-green-600">10,000 <span className="text-[10px]">Tokens</span></span>
+                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95" onClick={() => alert('Facility successfully redeemed!')}>Redeem</button>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
+                <div>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center">
+                      <span className="material-symbols-outlined">dentistry</span>
+                    </div>
+                    <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">St. Jude Medical</span>
+                  </div>
+                  <h4 className="font-bold text-slate-900 leading-tight">Dental Cleaning & Scaling</h4>
+                  <p className="text-xs text-slate-500 mt-2 line-clamp-2">Professional dental cleaning and regular maintenance consultation.</p>
+                </div>
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-sm font-black text-green-600">8,000 <span className="text-[10px]">Tokens</span></span>
+                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95" onClick={() => alert('Facility successfully redeemed!')}>Redeem</button>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
+                <div>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="w-10 h-10 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center">
+                      <span className="material-symbols-outlined">visibility</span>
+                    </div>
+                    <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">North Valley</span>
+                  </div>
+                  <h4 className="font-bold text-slate-900 leading-tight">Vision Diagnostic Test</h4>
+                  <p className="text-xs text-slate-500 mt-2 line-clamp-2">Complete eye checkup, prescription update, and retina scanning.</p>
+                </div>
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-sm font-black text-green-600">5,000 <span className="text-[10px]">Tokens</span></span>
+                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95" onClick={() => alert('Facility successfully redeemed!')}>Redeem</button>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 border-dashed flex flex-col justify-center items-center group hover:bg-[#ee2b2b]/5 transition-all outline-none cursor-pointer">
+                <span className="material-symbols-outlined text-4xl text-slate-400 group-hover:text-[#ee2b2b] mb-2 transition-colors">dataset</span>
+                <h4 className="font-bold text-slate-700 group-hover:text-[#ee2b2b] transition-colors">View All Facilities</h4>
+                <p className="text-xs text-slate-500 mt-1">20+ hospital partners</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Leaderboard Sidebar */}
