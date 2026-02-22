@@ -413,8 +413,10 @@ function DashboardView({
 
 function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
   const navigate = useNavigate();
-  const [currentMonth, setCurrentMonth] = useState(new Date(2023, 10, 1));
-  const [selectedDate, setSelectedDate] = useState<number | null>(5);
+  const today = new Date();
+
+  const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [selectedDate, setSelectedDate] = useState<number | null>(today.getDate());
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedHospital, setSelectedHospital] = useState("City Central Medical Center");
 
@@ -424,7 +426,7 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
       return;
     }
     alert(`Appointment successfully scheduled at ${selectedHospital}!`);
-    onBook({ date: `Nov ${selectedDate}`, time: selectedTime, hospital: selectedHospital, id: Date.now() });
+    onBook({ date: `${currentMonth.toLocaleString('default', { month: 'short' })} ${selectedDate}`, time: selectedTime, hospital: selectedHospital, id: Date.now() });
     navigate('/donor/pending');
   };
 
@@ -477,19 +479,31 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
               ))}
               {Array.from({ length: new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate() }, (_, i) => i + 1).map(day => {
                 const isSelected = selectedDate === day;
-                const hasSpots = [6, 11].includes(day);
+                const hasSpots = [today.getDate() + 1, today.getDate() + 2].includes(day);
+
+                const dateOfThisButton = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                const maxDate = new Date(todayMidnight);
+                maxDate.setDate(todayMidnight.getDate() + 21);
+
+                const isPast = dateOfThisButton < todayMidnight;
+                const isTooFar = dateOfThisButton > maxDate;
+                const isDisabled = isPast || isTooFar;
+
                 return (
                   <button
                     key={day}
+                    disabled={isDisabled}
                     onClick={() => setSelectedDate(day)}
-                    className={`aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-semibold transition-all relative ${isSelected
-                      ? "bg-[#ee2b2b] text-white font-bold shadow-lg shadow-[#ee2b2b]/20 scale-110 z-10"
-                      : "hover:bg-slate-100 text-slate-900"
+                    title={isDisabled ? "Appointments can only be booked within a 3-week window." : ""}
+                    className={`aspect-square flex flex-col items-center justify-center rounded-lg text-sm transition-all relative ${isDisabled ? 'text-slate-300 cursor-not-allowed bg-transparent' : 'font-semibold hover:bg-slate-100 text-slate-900'} ${isSelected && !isDisabled
+                      ? "bg-[#ee2b2b] text-white font-bold shadow-lg shadow-[#ee2b2b]/20 scale-110 z-10 hover:bg-[#ee2b2b]"
+                      : ""
                       }`}
                   >
                     {day}
-                    {isSelected && <span className="w-1 h-1 bg-white rounded-full mt-1"></span>}
-                    {!isSelected && hasSpots && <span className="absolute bottom-2 w-1 h-1 bg-[#ee2b2b]/40 rounded-full"></span>}
+                    {isSelected && !isDisabled && <span className="w-1 h-1 bg-white rounded-full mt-1"></span>}
+                    {!isSelected && hasSpots && !isDisabled && <span className="absolute bottom-2 w-1 h-1 bg-[#ee2b2b]/40 rounded-full"></span>}
                   </button>
                 );
               })}
