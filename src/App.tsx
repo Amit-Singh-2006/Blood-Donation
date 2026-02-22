@@ -31,6 +31,7 @@ export default function App() {
         <Route path="donor" element={<DonorApp />} />
         <Route path="donor/centers" element={<DonorApp />} />
         <Route path="donor/pending" element={<DonorApp />} />
+        <Route path="donor/settings" element={<DonorApp />} />
         <Route path="donor/impact" element={<DonorApp />} />
         <Route path="donor/community" element={<DonorApp />} />
 

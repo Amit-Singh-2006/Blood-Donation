@@ -26,6 +26,7 @@ export default function DonorApp() {
     if (path.includes('/impact')) return 'impact';
     if (path.includes('/community')) return 'community';
     if (path.includes('/pending')) return 'pending';
+    if (path.includes('/settings')) return 'settings';
     return 'dashboard';
   };
 
@@ -135,6 +136,7 @@ export default function DonorApp() {
       {activeTab === 'pending' && <PendingDonationsView userPoints={userPoints} appointments={pendingAppointments} onCancel={(id) => setPendingAppointments(pendingAppointments.filter(a => a.id !== id))} />}
       {activeTab === 'impact' && <RewardsView />}
       {activeTab === 'community' && <CommunityView feedPosts={feedPosts} setFeedPosts={setFeedPosts} />}
+      {activeTab === 'settings' && <SettingsView />}
 
       <ChatBot />
 
@@ -946,6 +948,42 @@ function RewardsView() {
             </div>
           </div>
         </aside>
+      </div>
+    </div>
+  );
+}
+
+function SettingsView() {
+  return (
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+          <span className="material-symbols-outlined text-[#ee2b2b]">settings</span>
+          Account Settings
+        </h2>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
+            <div>
+              <h4 className="font-bold text-slate-900">Push Notifications</h4>
+              <p className="text-sm text-slate-500">Receive alerts for emergency matches</p>
+            </div>
+            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
+              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
+            <div>
+              <h4 className="font-bold text-slate-900">Location Services</h4>
+              <p className="text-sm text-slate-500">Allow AI to find nearest hospitals for matching</p>
+            </div>
+            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
+              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
+            </div>
+          </div>
+        </div>
+        <button className="mt-8 px-6 py-3 w-full sm:w-auto bg-[#ee2b2b] text-white rounded-lg font-bold hover:bg-[#ee2b2b]/90 transition-all shadow-md">
+          Save Changes
+        </button>
       </div>
     </div>
   );
