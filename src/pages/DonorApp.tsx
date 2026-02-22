@@ -360,7 +360,7 @@ function DashboardView({
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold text-slate-900">Earned Badges</h3>
-            <a href="#" className="text-[#ee2b2b] text-xs font-bold hover:underline">View All</a>
+            <Link to="/donor/impact" className="text-[#ee2b2b] text-xs font-bold hover:underline">View All</Link>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="flex flex-col items-center text-center gap-2">
@@ -413,6 +413,7 @@ function DashboardView({
 
 function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
   const navigate = useNavigate();
+  const [currentMonth, setCurrentMonth] = useState(new Date(2023, 10, 1));
   const [selectedDate, setSelectedDate] = useState<number | null>(5);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedHospital, setSelectedHospital] = useState("City Central Medical Center");
@@ -455,11 +456,13 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <div className="flex flex-col">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Date</span>
-              <h3 className="text-xl font-bold text-slate-900">November 2023</h3>
+              <h3 className="text-xl font-bold text-slate-900">
+                {currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+              </h3>
             </div>
             <div className="flex gap-2">
-              <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><span className="material-symbols-outlined">chevron_left</span></button>
-              <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><span className="material-symbols-outlined">chevron_right</span></button>
+              <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><span className="material-symbols-outlined">chevron_left</span></button>
+              <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><span className="material-symbols-outlined">chevron_right</span></button>
             </div>
           </div>
           <div className="p-6">
@@ -469,10 +472,10 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
               ))}
             </div>
             <div className="grid grid-cols-7 gap-1">
-              <div className="aspect-square"></div>
-              <div className="aspect-square"></div>
-              <div className="aspect-square"></div>
-              {Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
+              {Array.from({ length: new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay() }).map((_, i) => (
+                <div key={`empty-${i}`} className="aspect-square"></div>
+              ))}
+              {Array.from({ length: new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate() }, (_, i) => i + 1).map(day => {
                 const isSelected = selectedDate === day;
                 const hasSpots = [6, 11].includes(day);
                 return (
