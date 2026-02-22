@@ -3,10 +3,10 @@ import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import HospitalRegistration from './pages/HospitalRegistration';
+import DonorRegistration from './pages/DonorRegistration';
 import AdminDashboard from './pages/AdminDashboard';
 import HospitalDashboard from './pages/HospitalDashboard';
 import DonorApp from './pages/DonorApp';
-import DonorRegistration from './pages/DonorRegistration';
 import Analytics from './pages/Analytics';
 import LiveTracking from './pages/LiveTracking';
 
@@ -32,13 +32,14 @@ export default function App() {
         {/* Donor Routes */}
         <Route path="donor" element={<DonorApp />} />
         <Route path="donor/centers" element={<DonorApp />} />
+        <Route path="donor/pending" element={<DonorApp />} />
         <Route path="donor/impact" element={<DonorApp />} />
         <Route path="donor/community" element={<DonorApp />} />
 
         {/* Shared Routes */}
         <Route path="analytics" element={<Analytics />} />
         <Route path="tracking" element={<LiveTracking />} />
-      </Route>
-    </Routes>
+      </Route >
+    </Routes >
   );
 }

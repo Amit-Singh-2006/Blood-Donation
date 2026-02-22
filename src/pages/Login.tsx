@@ -117,8 +117,8 @@ export default function Login() {
           className="w-full max-w-[480px] space-y-8"
         >
           <div className="text-center space-y-2">
-            <h2 className="text-4xl font-black tracking-tight text-slate-900">{isRegistering ? 'Join LifeLink AI' : 'Unified Login'}</h2>
-            <p className="text-slate-500 font-medium">{isRegistering ? 'Become a part of the emergency response network.' : 'Bridging the gap between hospitals and donors with AI.'}</p>
+            <h2 className="text-4xl font-black tracking-tight text-slate-900">Unified Login</h2>
+            <p className="text-slate-500 font-medium">Bridging the gap between hospitals and donors with AI.</p>
           </div>
 
           {/* Login Card */}
@@ -150,21 +150,6 @@ export default function Login() {
 
             {/* Input Group */}
             <form onSubmit={handleLogin} className="space-y-4">
-              {isRegistering && (
-                <div className="space-y-1.5">
-                  <label className="text-sm font-bold text-slate-700 ml-1">Full Name</label>
-                  <div className="relative group">
-                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">badge</span>
-                    <input
-                      type="text"
-                      required
-                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
-                      placeholder="John Doe"
-                    />
-                  </div>
-                </div>
-              )}
-
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-slate-700 ml-1">Email address</label>
                 <div className="relative group">
@@ -178,30 +163,10 @@ export default function Login() {
                 </div>
               </div>
 
-              {isRegistering && role === 'donor' && (
-                <div className="space-y-1.5">
-                  <label className="text-sm font-bold text-slate-700 ml-1">Blood Type</label>
-                  <div className="relative group">
-                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">bloodtype</span>
-                    <select defaultValue="" className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400 appearance-none">
-                      <option value="">Select Blood Type</option>
-                      <option value="A+">A+</option>
-                      <option value="A-">A-</option>
-                      <option value="B+">B+</option>
-                      <option value="B-">B-</option>
-                      <option value="AB+">AB+</option>
-                      <option value="AB-">AB-</option>
-                      <option value="O+">O+</option>
-                      <option value="O-">O-</option>
-                    </select>
-                  </div>
-                </div>
-              )}
-
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
-                  {!isRegistering && <a className="text-xs font-bold text-[#ee2b2b] hover:underline" href="#">Forgot?</a>}
+                  <a className="text-xs font-bold text-[#ee2b2b] hover:underline" href="#">Forgot?</a>
                 </div>
                 <div className="relative group">
                   <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">lock</span>
@@ -225,7 +190,7 @@ export default function Login() {
                 {isLoading ? (
                   <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
-                  isRegistering ? 'Create Account' : 'Sign In'
+                  'Sign In'
                 )}
               </button>
             </form>
@@ -252,7 +217,7 @@ export default function Login() {
 
           <p className="text-center text-sm font-semibold text-slate-500">
             {isRegistering ? 'Already have an account?' : 'New to LifeLink AI?'}
-            <button onClick={toggleMode} className="text-[#ee2b2b] hover:underline ml-1">
+            <button type="button" onClick={toggleMode} className="text-[#ee2b2b] hover:underline ml-1">
               {isRegistering ? 'Sign in' : 'Create an account'}
             </button>
           </p>

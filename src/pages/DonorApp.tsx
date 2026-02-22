@@ -9,6 +9,7 @@ export default function DonorApp() {
   const [isAvailable, setIsAvailable] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [requestAccepted, setRequestAccepted] = useState(false);
+  const [requestRejected, setRequestRejected] = useState(false);
   const [userPoints, setUserPoints] = useState(location.state?.initialPoints || 450);
   const [requestExpired, setRequestExpired] = useState(false);
   const [timeLeft, setTimeLeft] = useState(3 * 60 * 60); // 3 hours in seconds
@@ -35,6 +36,10 @@ export default function DonorApp() {
     alert("Thank you! The hospital has been notified. Please proceed to the location.");
   };
 
+  const handleRejectRequest = () => {
+    setRequestRejected(true);
+  };
+
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
@@ -43,7 +48,7 @@ export default function DonorApp() {
   };
 
   const openNavigation = () => {
-    alert("Opening Maps for navigation to City General Hospital...");
+    window.open("https://www.google.com/maps/dir/?api=1&destination=City+General+Hospital", "_blank");
   };
 
   return (
@@ -116,6 +121,8 @@ export default function DonorApp() {
         <DashboardView
           requestAccepted={requestAccepted}
           onAccept={handleAcceptRequest}
+          requestRejected={requestRejected}
+          onReject={handleRejectRequest}
           onRate={() => setShowFeedback(true)}
           requestExpired={requestExpired}
           timeLeft={formatTime(timeLeft)}
@@ -155,9 +162,9 @@ export default function DonorApp() {
 }
 
 function DashboardView({
-  requestAccepted, onAccept, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated
+  requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated
 }: {
-  requestAccepted: boolean; onAccept: () => void; onRate: () => void;
+  requestAccepted: boolean; onAccept: () => void; requestRejected: boolean; onReject: () => void; onRate: () => void;
   requestExpired: boolean; timeLeft: string; isAvailable: boolean; openNavigation: () => void;
   hospitalRated: boolean;
 }) {
@@ -170,10 +177,23 @@ function DashboardView({
             <span className="material-symbols-outlined text-[#ee2b2b]">emergency</span>
             Pending Requests
           </h3>
-          <span className="text-xs font-bold bg-[#ee2b2b]/10 text-[#ee2b2b] px-3 py-1 rounded-full uppercase">3 Live Matches</span>
+          {isAvailable && !requestRejected && !requestAccepted && (
+            <span className="text-xs font-bold bg-[#ee2b2b]/10 text-[#ee2b2b] px-3 py-1 rounded-full uppercase">1 Live Match</span>
+          )}
         </div>
-        {/* Urgent Card 1 */}
-        {!requestAccepted ? (
+        {requestAccepted ? (
+          <div className="bg-green-50 rounded-xl p-6 border border-green-200 flex flex-col items-center justify-center text-center space-y-4">
+            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600">
+              <span className="material-symbols-outlined text-4xl">check_circle</span>
+            </div>
+            <h3 className="text-xl font-bold text-green-800">Request Accepted!</h3>
+            <p className="text-green-700">Please proceed to City General Hospital. The staff has been notified of your arrival.</p>
+            <button onClick={openNavigation} className="text-sm font-bold text-green-700 hover:underline flex items-center gap-1">
+              <span className="material-symbols-outlined text-sm">navigation</span>
+              Get Directions
+            </button>
+          </div>
+        ) : isAvailable && !requestRejected ? (
           <div className="bg-white rounded-xl overflow-hidden border border-[#ee2b2b]/20 shadow-lg shadow-[#ee2b2b]/5 group">
             <div className="flex flex-col md:flex-row">
               <div className="md:w-1/3 relative h-48 md:h-auto bg-slate-200">
@@ -203,7 +223,13 @@ function DashboardView({
                   >
                     Accept Request
                   </button>
-                  <button className="w-12 h-12 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                  <button
+                    onClick={onReject}
+                    className="flex-none bg-white hover:bg-slate-50 text-slate-600 font-bold py-3 px-6 rounded-lg transition-all border border-slate-200"
+                  >
+                    Reject
+                  </button>
+                  <button onClick={openNavigation} className="w-12 h-12 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
                     <span className="material-symbols-outlined text-slate-600">map</span>
                   </button>
                 </div>
@@ -211,16 +237,16 @@ function DashboardView({
             </div>
           </div>
         ) : (
-          <div className="bg-green-50 rounded-xl p-6 border border-green-200 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600">
-              <span className="material-symbols-outlined text-4xl">check_circle</span>
-            </div>
-            <h3 className="text-xl font-bold text-green-800">Request Accepted!</h3>
-            <p className="text-green-700">Please proceed to City General Hospital. The staff has been notified of your arrival.</p>
-            <button className="text-sm font-bold text-green-700 hover:underline flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">navigation</span>
-              Get Directions
-            </button>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center flex flex-col items-center">
+            <span className="material-symbols-outlined text-4xl text-slate-400 mb-3">
+              {isAvailable ? "event_busy" : "power_settings_new"}
+            </span>
+            <h4 className="text-lg font-bold text-slate-900 mb-2">
+              {isAvailable ? "No matching requests" : "AI Matching Paused"}
+            </h4>
+            <p className="text-sm text-slate-500 max-w-sm">
+              {isAvailable ? "We will notify you immediately if your blood type is needed." : "Turn on your availability to start receiving live emergency requests from nearby hospitals."}
+            </p>
           </div>
         )}
 
@@ -785,6 +811,7 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
 }
 
 function RewardsView() {
+  const navigate = useNavigate();
   return (
     <div className="space-y-8">
       {/* Hero Section: Rank Progress */}
@@ -837,7 +864,7 @@ function RewardsView() {
               Donate within 48 hours to earn a <span className="font-bold">2x XP Multiplier</span> and the "First Responder" badge.
             </p>
           </div>
-          <button className="mt-6 w-full py-4 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold rounded-lg shadow-lg shadow-[#ee2b2b]/30 transition-all flex items-center justify-center gap-2">
+          <button onClick={() => navigate('/donor/centers')} className="mt-6 w-full py-4 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold rounded-lg shadow-lg shadow-[#ee2b2b]/30 transition-all flex items-center justify-center gap-2">
             <span className="material-symbols-outlined">calendar_today</span>
             Schedule Donation
           </button>
