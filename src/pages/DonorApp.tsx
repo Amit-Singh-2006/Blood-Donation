@@ -43,7 +43,7 @@ export default function DonorApp() {
   };
 
   const openNavigation = () => {
-    alert("Opening Maps for navigation to City General Hospital...");
+    window.open("https://www.google.com/maps/dir/?api=1&destination=City+General+Hospital", "_blank");
   };
 
   return (
@@ -203,7 +203,7 @@ function DashboardView({
                   >
                     Accept Request
                   </button>
-                  <button className="w-12 h-12 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                  <button onClick={openNavigation} className="w-12 h-12 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
                     <span className="material-symbols-outlined text-slate-600">map</span>
                   </button>
                 </div>
@@ -217,7 +217,7 @@ function DashboardView({
             </div>
             <h3 className="text-xl font-bold text-green-800">Request Accepted!</h3>
             <p className="text-green-700">Please proceed to City General Hospital. The staff has been notified of your arrival.</p>
-            <button className="text-sm font-bold text-green-700 hover:underline flex items-center gap-1">
+            <button onClick={openNavigation} className="text-sm font-bold text-green-700 hover:underline flex items-center gap-1">
               <span className="material-symbols-outlined text-sm">navigation</span>
               Get Directions
             </button>
