@@ -11,6 +11,7 @@ export default function DonorApp() {
   const [requestAccepted, setRequestAccepted] = useState(false);
   const [requestRejected, setRequestRejected] = useState(false);
   const [userPoints, setUserPoints] = useState(location.state?.initialPoints || 450);
+  const [userTokens, setUserTokens] = useState(24000);
   const [requestExpired, setRequestExpired] = useState(false);
   const [timeLeft, setTimeLeft] = useState(3 * 60 * 60); // 3 hours in seconds
   const [pendingAppointments, setPendingAppointments] = useState<{ date: string, time: string, hospital: string, id: number }[]>([]);
@@ -130,11 +131,14 @@ export default function DonorApp() {
           isAvailable={isAvailable}
           openNavigation={openNavigation}
           hospitalRated={hospitalRated}
+          userBloodType="O-"
+          demandBloodType="O-"
+          rewardTokens={2000}
         />
       )}
       {activeTab === 'centers' && <DonationCentersView onBook={(appt) => setPendingAppointments([...pendingAppointments, appt])} />}
       {activeTab === 'pending' && <PendingDonationsView userPoints={userPoints} appointments={pendingAppointments} onCancel={(id) => setPendingAppointments(pendingAppointments.filter(a => a.id !== id))} />}
-      {activeTab === 'impact' && <RewardsView />}
+      {activeTab === 'impact' && <RewardsView userTokens={userTokens} setUserTokens={setUserTokens} />}
       {activeTab === 'community' && <CommunityView feedPosts={feedPosts} setFeedPosts={setFeedPosts} />}
       {activeTab === 'settings' && <SettingsView />}
 
@@ -164,12 +168,14 @@ export default function DonorApp() {
 }
 
 function DashboardView({
-  requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated
+  requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated, userBloodType, demandBloodType, rewardTokens
 }: {
   requestAccepted: boolean; onAccept: () => void; requestRejected: boolean; onReject: () => void; onRate: () => void;
   requestExpired: boolean; timeLeft: string; isAvailable: boolean; openNavigation: () => void;
-  hospitalRated: boolean;
+  hospitalRated: boolean; userBloodType: string; demandBloodType: string; rewardTokens: number;
 }) {
+  const isMatch = userBloodType === demandBloodType;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Left Column: Pending Requests */}
@@ -179,10 +185,26 @@ function DashboardView({
             <span className="material-symbols-outlined text-[#ee2b2b]">emergency</span>
             Pending Requests
           </h3>
-          {isAvailable && !requestRejected && !requestAccepted && (
+          {isAvailable && !requestRejected && !requestAccepted && isMatch && (
             <span className="text-xs font-bold bg-[#ee2b2b]/10 text-[#ee2b2b] px-3 py-1 rounded-full uppercase">1 Live Match</span>
           )}
         </div>
+
+        {/* Donation Timeline Info */}
+        <div className="bg-white rounded-xl p-4 border border-blue-100 flex items-start gap-4 mb-6 shadow-sm">
+          <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+            <span className="material-symbols-outlined">calendar_clock</span>
+          </div>
+          <div>
+            <h4 className="font-bold text-slate-900 text-sm">Donation Eligibility</h4>
+            <p className="text-sm text-slate-600 mt-1">
+              Your last donation was on <strong className="text-slate-900">Oct 12, 2023</strong>.
+              You are currently <span className="font-bold text-green-600 uppercase text-xs tracking-wider">Eligible</span> to donate.
+              <br /><span className="text-xs text-slate-400 mt-1 block">(Usually, you must wait 56 days between whole blood donations.)</span>
+            </p>
+          </div>
+        </div>
+
         {requestAccepted ? (
           <div className="bg-green-50 rounded-xl p-6 border border-green-200 flex flex-col items-center justify-center text-center space-y-4">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600">
@@ -211,6 +233,7 @@ function DashboardView({
                   <div className="flex items-center gap-4 text-sm text-slate-500 mb-4">
                     <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">near_me</span> 2.4 miles</span>
                     <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">schedule</span> Needs by 4:00 PM</span>
+                    <span className="flex items-center gap-1 text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded"><span className="material-symbols-outlined text-sm">toll</span> +{rewardTokens.toLocaleString()} Tokens</span>
                   </div>
                   <div className="bg-[#ee2b2b]/5 p-3 rounded-lg border border-[#ee2b2b]/10 mb-6">
                     <p className="text-sm text-slate-700">
@@ -812,8 +835,18 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
   );
 }
 
-function RewardsView() {
+function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUserTokens: (val: number) => void }) {
   const navigate = useNavigate();
+
+  const handleRedeem = (cost: number, name: string) => {
+    if (userTokens >= cost) {
+      setUserTokens(userTokens - cost);
+      alert(`🎉 Successfully redeemed: ${name}! Instructions have been sent to your email.`);
+    } else {
+      alert(`Not enough tokens! You need ${cost - userTokens} more tokens to redeem ${name}.`);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Hero Section: Rank Progress */}
@@ -918,7 +951,7 @@ function RewardsView() {
                 Reward Tokens & Facilities
               </h2>
               <div className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-xl border border-green-200 shadow-sm">
-                <span className="font-black text-xl">24,000</span>
+                <span className="font-black text-xl">{userTokens.toLocaleString()}</span>
                 <span className="text-[10px] font-bold uppercase tracking-widest mt-1">Available</span>
               </div>
             </div>
@@ -941,7 +974,7 @@ function RewardsView() {
                 </div>
                 <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-sm font-black text-green-600">10,000 <span className="text-[10px]">Tokens</span></span>
-                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95" onClick={() => alert('Facility successfully redeemed!')}>Redeem</button>
+                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(10000, 'Comprehensive Health Checkup')} disabled={userTokens < 10000}>Redeem</button>
                 </div>
               </div>
 
@@ -958,7 +991,7 @@ function RewardsView() {
                 </div>
                 <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-sm font-black text-green-600">8,000 <span className="text-[10px]">Tokens</span></span>
-                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95" onClick={() => alert('Facility successfully redeemed!')}>Redeem</button>
+                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(8000, 'Dental Cleaning & Scaling')} disabled={userTokens < 8000}>Redeem</button>
                 </div>
               </div>
 
@@ -975,11 +1008,11 @@ function RewardsView() {
                 </div>
                 <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-sm font-black text-green-600">5,000 <span className="text-[10px]">Tokens</span></span>
-                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95" onClick={() => alert('Facility successfully redeemed!')}>Redeem</button>
+                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(5000, 'Vision Diagnostic Test')} disabled={userTokens < 5000}>Redeem</button>
                 </div>
               </div>
 
-              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 border-dashed flex flex-col justify-center items-center group hover:bg-[#ee2b2b]/5 transition-all outline-none cursor-pointer">
+              <div onClick={() => alert('Opening full catalog of 20+ partner hospitals...')} className="bg-slate-50 p-5 rounded-xl border border-slate-200 border-dashed flex flex-col justify-center items-center group hover:bg-[#ee2b2b]/5 transition-all outline-none cursor-pointer">
                 <span className="material-symbols-outlined text-4xl text-slate-400 group-hover:text-[#ee2b2b] mb-2 transition-colors">dataset</span>
                 <h4 className="font-bold text-slate-700 group-hover:text-[#ee2b2b] transition-colors">View All Facilities</h4>
                 <p className="text-xs text-slate-500 mt-1">20+ hospital partners</p>
