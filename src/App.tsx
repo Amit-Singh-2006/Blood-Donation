@@ -2,7 +2,6 @@ import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
-import DonorRegistration from './pages/DonorRegistration';
 import AdminDashboard from './pages/AdminDashboard';
 import HospitalDashboard from './pages/HospitalDashboard';
 import DonorApp from './pages/DonorApp';
@@ -14,9 +13,8 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Layout />}>
         <Route index element={<Login />} />
-        <Route path="register-donor" element={<DonorRegistration />} />
-
-
+        <Route path="register-donor" element={<Login />} /> {/* Using Login for now as placeholder */}
+        
         {/* Admin Routes */}
         <Route path="admin" element={<AdminDashboard />} />
         <Route path="admin/hospitals" element={<AdminDashboard />} />
@@ -27,11 +25,10 @@ export default function App() {
         <Route path="hospital" element={<HospitalDashboard />} />
         <Route path="hospital/requests" element={<HospitalDashboard />} />
         <Route path="hospital/inventory" element={<HospitalDashboard />} />
-
+        
         {/* Donor Routes */}
         <Route path="donor" element={<DonorApp />} />
         <Route path="donor/centers" element={<DonorApp />} />
-        <Route path="donor/pending" element={<DonorApp />} />
         <Route path="donor/impact" element={<DonorApp />} />
         <Route path="donor/community" element={<DonorApp />} />
 
