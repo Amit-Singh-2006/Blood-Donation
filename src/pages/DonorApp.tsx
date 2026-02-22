@@ -1,29 +1,63 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import ChatBot from '../components/ChatBot';
 import FeedbackModal from '../components/FeedbackModal';
 
 export default function DonorApp() {
   const location = useLocation();
-  const [isAvailable, setIsAvailable] = useState(false);
+  const [isAvailable, setIsAvailable] = useState(location.state?.isAvailable || false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [requestAccepted, setRequestAccepted] = useState(false);
+  const [userPoints, setUserPoints] = useState(location.state?.initialPoints || 450);
+  const [requestExpired, setRequestExpired] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(3 * 60 * 60); // 3 hours in seconds
 
   // Determine active tab based on URL
   const getActiveTab = () => {
     const path = location.pathname;
     if (path.includes('/centers')) return 'centers';
+    if (path.includes('/pending')) return 'pending';
     if (path.includes('/impact')) return 'impact';
     if (path.includes('/community')) return 'community';
     return 'dashboard';
   };
 
+  // Handle Countdown Timer
+  useEffect(() => {
+    if (!requestAccepted && !requestExpired && isAvailable) {
+      const timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            setRequestExpired(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [requestAccepted, requestExpired, isAvailable]);
+
   const activeTab = getActiveTab();
 
   const handleAcceptRequest = () => {
     setRequestAccepted(true);
+    setUserPoints(prev => prev + 50); // Bonus Points for Emergency
     alert("Thank you! The hospital has been notified. Please proceed to the location.");
+  };
+
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h}h ${m}m ${s}s`;
+  };
+
+  const openNavigation = () => {
+    // Mocking specific hospital coordinates
+    window.open("https://maps.google.com/?q=City+General+Hospital", "_blank");
   };
 
   return (
@@ -42,9 +76,9 @@ export default function DonorApp() {
         <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
           <span className={`text-sm font-bold uppercase tracking-wider ${!isAvailable ? 'text-slate-400' : 'text-slate-300'}`}>Unavailable</span>
           <label className="relative inline-flex items-center cursor-pointer">
-            <input 
-              type="checkbox" 
-              className="sr-only peer" 
+            <input
+              type="checkbox"
+              className="sr-only peer"
               checked={isAvailable}
               onChange={() => setIsAvailable(!isAvailable)}
             />
@@ -56,25 +90,31 @@ export default function DonorApp() {
 
       {/* Tabs */}
       <div className="flex gap-6 mb-8 border-b border-slate-200 overflow-x-auto">
-        <Link 
+        <Link
           to="/donor"
           className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Dashboard
         </Link>
-        <Link 
+        <Link
           to="/donor/centers"
           className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'centers' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Donation Centers
         </Link>
-        <Link 
+        <Link
+          to="/donor/pending"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'pending' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Pending Donations
+        </Link>
+        <Link
           to="/donor/impact"
           className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'impact' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Impact Report
         </Link>
-        <Link 
+        <Link
           to="/donor/community"
           className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'community' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
@@ -83,19 +123,24 @@ export default function DonorApp() {
       </div>
 
       {activeTab === 'dashboard' && (
-        <DashboardView 
-          requestAccepted={requestAccepted} 
-          onAccept={handleAcceptRequest} 
+        <DashboardView
+          requestAccepted={requestAccepted}
+          onAccept={handleAcceptRequest}
           onRate={() => setShowFeedback(true)}
+          requestExpired={requestExpired}
+          timeLeft={formatTime(timeLeft)}
+          isAvailable={isAvailable}
+          openNavigation={openNavigation}
         />
       )}
       {activeTab === 'centers' && <DonationCentersView />}
+      {activeTab === 'pending' && <PendingDonationsView userPoints={userPoints} />}
       {activeTab === 'impact' && <RewardsView />}
       {activeTab === 'community' && <CommunityView />}
 
       <ChatBot />
 
-      <FeedbackModal 
+      <FeedbackModal
         isOpen={showFeedback}
         onClose={() => setShowFeedback(false)}
         targetType="hospital"
@@ -105,7 +150,12 @@ export default function DonorApp() {
   );
 }
 
-function DashboardView({ requestAccepted, onAccept, onRate }: { requestAccepted: boolean; onAccept: () => void; onRate: () => void }) {
+function DashboardView({
+  requestAccepted, onAccept, onRate, requestExpired, timeLeft, isAvailable, openNavigation
+}: {
+  requestAccepted: boolean; onAccept: () => void; onRate: () => void;
+  requestExpired: boolean; timeLeft: string; isAvailable: boolean; openNavigation: () => void;
+}) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Left Column: Pending Requests */}
@@ -114,11 +164,26 @@ function DashboardView({ requestAccepted, onAccept, onRate }: { requestAccepted:
           <h3 className="text-xl font-bold flex items-center gap-2 text-slate-900">
             <span className="material-symbols-outlined text-[#ee2b2b]">emergency</span>
             Pending Requests
+            <span className="text-sm font-normal text-slate-500 ml-2">(Within 5km radius)</span>
           </h3>
-          <span className="text-xs font-bold bg-[#ee2b2b]/10 text-[#ee2b2b] px-3 py-1 rounded-full uppercase">3 Live Matches</span>
+          <span className="text-xs font-bold bg-[#ee2b2b]/10 text-[#ee2b2b] px-3 py-1 rounded-full uppercase">
+            {isAvailable && !requestExpired && !requestAccepted ? "1 Live Match" : "0 Live Matches"}
+          </span>
         </div>
         {/* Urgent Card 1 */}
-        {!requestAccepted ? (
+        {!isAvailable ? (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center">
+            <span className="material-symbols-outlined text-slate-400 text-4xl mb-4">notifications_paused</span>
+            <h3 className="text-lg font-bold text-slate-700">You are currently offline</h3>
+            <p className="text-slate-500 mt-2">Toggle your availability above to receive emergency blood requests within a 5km radius.</p>
+          </div>
+        ) : requestExpired && !requestAccepted ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
+            <span className="material-symbols-outlined text-red-400 text-4xl mb-2">timer_off</span>
+            <h3 className="text-lg font-bold text-red-800">Request Expired</h3>
+            <p className="text-red-600/80 text-sm">The 3-hour response window for the recent request has closed. It has been re-routed.</p>
+          </div>
+        ) : !requestAccepted ? (
           <div className="bg-white rounded-xl overflow-hidden border border-[#ee2b2b]/20 shadow-lg shadow-[#ee2b2b]/5 group">
             <div className="flex flex-col md:flex-row">
               <div className="md:w-1/3 relative h-48 md:h-auto bg-slate-200">
@@ -132,23 +197,24 @@ function DashboardView({ requestAccepted, onAccept, onRate }: { requestAccepted:
                     <span className="text-3xl font-black text-[#ee2b2b]">O-</span>
                   </div>
                   <div className="flex items-center gap-4 text-sm text-slate-500 mb-4">
-                    <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">near_me</span> 2.4 miles</span>
-                    <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">schedule</span> Needs by 4:00 PM</span>
+                    <span className="flex items-center gap-1 font-bold text-slate-700 bg-slate-100 px-2 py-1 rounded"><span className="material-symbols-outlined text-sm text-[#ee2b2b]">near_me</span> 2.4 km</span>
+                    <span className="flex items-center gap-1 font-mono text-[#ee2b2b] bg-red-50 px-2 py-1 rounded border border-red-100"><span className="material-symbols-outlined text-sm">timer</span> Expires in: {timeLeft}</span>
                   </div>
                   <div className="bg-[#ee2b2b]/5 p-3 rounded-lg border border-[#ee2b2b]/10 mb-6">
                     <p className="text-sm text-slate-700">
                       <strong className="text-[#ee2b2b] font-bold">AI Impact Prediction:</strong> Your O- donation could support a critical surgical procedure scheduled for tonight. High impact priority.
                     </p>
+                    <p className="text-xs font-bold text-green-600 mt-2 flex items-center gap-1"><span className="material-symbols-outlined text-xs">stars</span> Accept to earn +50 Bonus XP</p>
                   </div>
                 </div>
                 <div className="flex gap-3">
-                  <button 
+                  <button
                     onClick={onAccept}
                     className="flex-1 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold py-3 rounded-lg transition-all shadow-md shadow-[#ee2b2b]/20"
                   >
                     Accept Request
                   </button>
-                  <button className="w-12 h-12 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                  <button onClick={openNavigation} className="w-12 h-12 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors" title="Open GPS Navigation">
                     <span className="material-symbols-outlined text-slate-600">map</span>
                   </button>
                 </div>
@@ -160,9 +226,9 @@ function DashboardView({ requestAccepted, onAccept, onRate }: { requestAccepted:
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600">
               <span className="material-symbols-outlined text-4xl">check_circle</span>
             </div>
-            <h3 className="text-xl font-bold text-green-800">Request Accepted!</h3>
+            <h3 className="text-xl font-bold text-green-800">Request Accepted! (+50 XP)</h3>
             <p className="text-green-700">Please proceed to City General Hospital. The staff has been notified of your arrival.</p>
-            <button className="text-sm font-bold text-green-700 hover:underline flex items-center gap-1">
+            <button onClick={openNavigation} className="text-sm font-bold text-green-700 hover:underline flex items-center gap-1">
               <span className="material-symbols-outlined text-sm">navigation</span>
               Get Directions
             </button>
@@ -302,14 +368,21 @@ function DashboardView({ requestAccepted, onAccept, onRate }: { requestAccepted:
 }
 
 function DonationCentersView() {
+  const navigate = useNavigate();
+
+  const handleSchedule = (centerName: string) => {
+    alert(`Appointment successfully scheduled at ${centerName} for tomorrow at 10:00 AM.`);
+    navigate('/donor/pending');
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       {[1, 2, 3, 4, 5, 6].map((i) => (
         <div key={i} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
           <div className="h-40 bg-slate-200 relative">
-            <img 
-              src={`https://picsum.photos/seed/center${i}/400/200`} 
-              alt="Donation Center" 
+            <img
+              src={`https://picsum.photos/seed/center${i}/400/200`}
+              alt="Donation Center"
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
@@ -330,7 +403,10 @@ function DonationCentersView() {
                 Free Parking
               </span>
             </div>
-            <button className="w-full py-2.5 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800 transition-colors">
+            <button
+              onClick={() => handleSchedule(`Red Cross Center #${i}`)}
+              className="w-full py-2.5 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800 transition-colors"
+            >
               Schedule Appointment
             </button>
           </div>
@@ -340,36 +416,159 @@ function DonationCentersView() {
   );
 }
 
+function PendingDonationsView({ userPoints }: { userPoints: number }) {
+  return (
+    <div className="max-w-4xl mx-auto space-y-8">
+      {/* Registration Status */}
+      <div className="bg-white rounded-xl p-6 border border-slate-200">
+        <h3 className="font-bold text-lg mb-4 text-slate-900 flex items-center gap-2">
+          <span className="material-symbols-outlined text-green-500">how_to_reg</span>
+          Registration Status
+        </h3>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-bold text-slate-700">Profile Complete</span>
+          <span className="text-sm font-bold text-green-600">100%</span>
+        </div>
+        <div className="w-full bg-slate-100 rounded-full h-2">
+          <div className="bg-green-500 rounded-full h-2 w-full"></div>
+        </div>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-8">
+        {/* Upcoming scheduled donations */}
+        <div className="bg-white rounded-xl p-6 border border-slate-200">
+          <h3 className="font-bold text-lg mb-4 text-slate-900 flex items-center gap-2">
+            <span className="material-symbols-outlined text-blue-500">event_upcoming</span>
+            Upcoming Donations
+          </h3>
+          <div className="space-y-4">
+            {/* Mocked upcoming appointment */}
+            <div className="border border-blue-100 bg-blue-50 rounded-lg p-4 flex gap-4 items-start">
+              <div className="bg-white p-3 rounded-lg text-center min-w-[60px] border border-blue-100">
+                <p className="text-xs font-bold text-slate-500 uppercase">Tomorrow</p>
+                <p className="text-xl font-black text-blue-600">10:00</p>
+              </div>
+              <div>
+                <h4 className="font-bold text-slate-900">Whole Blood Donation</h4>
+                <p className="text-sm text-slate-600 mt-1">Red Cross Center #1</p>
+                <div className="mt-3 flex gap-2">
+                  <button className="text-xs font-bold bg-white border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50">Reschedule</button>
+                  <button className="text-xs font-bold text-red-600 hover:text-red-700 px-3 py-1.5 rounded">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* History Summary and Points */}
+        <div className="bg-white rounded-xl p-6 border border-slate-200">
+          <h3 className="font-bold text-lg mb-4 text-slate-900 flex items-center gap-2">
+            <span className="material-symbols-outlined text-amber-500">stars</span>
+            Impact Summary
+          </h3>
+          <div className="bg-gradient-to-br from-red-50 to-orange-50 p-6 rounded-xl border border-red-100 text-center mb-6">
+            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-1">Total Points Earned</p>
+            <p className="text-4xl font-black text-red-600">{userPoints} <span className="text-lg text-red-400">XP</span></p>
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider">Recent Activity</h4>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Profile Completion Bonus</span>
+                <span className="font-bold text-green-600">+100 XP</span>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-600">Verified Blood Group Docs</span>
+                <span className="font-bold text-green-600">+30 XP</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CommunityView() {
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [feedPosts, setFeedPosts] = useState([
+    { id: 1, user: "Alex Johnson", time: "2h ago", content: "Just completed my 5th donation at City General! The staff was amazing and the process was super smooth. Feeling great about helping out! 🩸💪", likes: 24, replies: [], showReplyInput: false }
+  ]);
+  const [replyText, setReplyText] = useState("");
+
+  const handleRegisterDrive = () => {
+    setIsRegistered(true);
+    alert("Successfully registered for the upcoming blood drive! We've sent details to your email.");
+  };
+
+  const handleToggleReply = (postId: number) => {
+    setFeedPosts(posts => posts.map(post =>
+      post.id === postId ? { ...post, showReplyInput: !post.showReplyInput } : post
+    ));
+  };
+
+  const submitReply = (postId: number) => {
+    if (!replyText.trim()) return;
+    setFeedPosts(posts => posts.map(post => {
+      if (post.id === postId) {
+        return { ...post, showReplyInput: false, replies: [...post.replies, replyText] };
+      }
+      return post;
+    }));
+    setReplyText("");
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       <div className="lg:col-span-2 space-y-6">
         <div className="bg-white rounded-xl p-6 border border-slate-200">
           <h3 className="font-bold text-lg mb-4">Community Feed</h3>
           <div className="space-y-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="flex gap-4 pb-6 border-b border-slate-100 last:border-0 last:pb-0">
+            {feedPosts.map((post) => (
+              <div key={post.id} className="flex gap-4 pb-6 border-b border-slate-100 last:border-0 last:pb-0">
                 <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0">
-                   <img src={`https://picsum.photos/seed/user${i}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img src={`https://picsum.photos/seed/user${post.id}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-bold text-sm text-slate-900">Alex Johnson</span>
-                    <span className="text-xs text-slate-400">• 2h ago</span>
+                    <span className="font-bold text-sm text-slate-900">{post.user}</span>
+                    <span className="text-xs text-slate-400">• {post.time}</span>
                   </div>
                   <p className="text-sm text-slate-600 mb-3">
-                    Just completed my 5th donation at City General! The staff was amazing and the process was super smooth. Feeling great about helping out! 🩸💪
+                    {post.content}
                   </p>
-                  <div className="flex items-center gap-4">
-                    <button className="flex items-center gap-1 text-slate-400 hover:text-[#ee2b2b] text-xs font-bold transition-colors">
+
+                  {/* Render Replies */}
+                  {post.replies.map((reply, idx) => (
+                    <div key={idx} className="bg-slate-50 p-3 rounded-lg mt-2 mb-3 ml-4 border border-slate-100 text-sm text-slate-700">
+                      <span className="font-bold text-slate-900 mr-2">You:</span>{reply}
+                    </div>
+                  ))}
+
+                  <div className="flex items-center gap-4 text-xs font-bold">
+                    <button className="flex items-center gap-1 text-slate-400 hover:text-[#ee2b2b] transition-colors">
                       <span className="material-symbols-outlined text-sm">favorite</span>
-                      24 Likes
+                      {post.likes} Likes
                     </button>
-                    <button className="flex items-center gap-1 text-slate-400 hover:text-slate-600 text-xs font-bold transition-colors">
+                    <button onClick={() => handleToggleReply(post.id)} className="flex items-center gap-1 text-slate-400 hover:text-slate-600 transition-colors">
                       <span className="material-symbols-outlined text-sm">chat_bubble</span>
                       Reply
                     </button>
                   </div>
+
+                  {/* Reply Input */}
+                  {post.showReplyInput && (
+                    <div className="mt-3 flex gap-2 w-full">
+                      <input
+                        type="text"
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder="Write a reply..."
+                        className="flex-1 text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-slate-300"
+                      />
+                      <button onClick={() => submitReply(post.id)} className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold">Send</button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -381,9 +580,15 @@ function CommunityView() {
           <div className="relative z-10">
             <h3 className="font-bold text-lg mb-2">Upcoming Drive</h3>
             <p className="text-sm text-white/90 mb-4">Join us at the Community Center this Saturday for our monthly blood drive.</p>
-            <button className="bg-white text-[#ee2b2b] px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 transition-colors">
-              Register Now
-            </button>
+            {isRegistered ? (
+              <div className="bg-white/20 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 w-fit">
+                <span className="material-symbols-outlined text-sm">check_circle</span> Registered
+              </div>
+            ) : (
+              <button onClick={handleRegisterDrive} className="bg-white text-[#ee2b2b] px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 transition-colors shadow-sm">
+                Register Now
+              </button>
+            )}
           </div>
           <div className="absolute -bottom-4 -right-4 opacity-20">
             <span className="material-symbols-outlined text-9xl">campaign</span>
@@ -412,6 +617,8 @@ function CommunityView() {
 }
 
 function RewardsView() {
+  const navigate = useNavigate();
+
   return (
     <div className="space-y-8">
       {/* Hero Section: Rank Progress */}
@@ -464,7 +671,10 @@ function RewardsView() {
               Donate within 48 hours to earn a <span className="font-bold">2x XP Multiplier</span> and the "First Responder" badge.
             </p>
           </div>
-          <button className="mt-6 w-full py-4 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold rounded-lg shadow-lg shadow-[#ee2b2b]/30 transition-all flex items-center justify-center gap-2">
+          <button
+            onClick={() => navigate('/donor/centers')}
+            className="mt-6 w-full py-4 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold rounded-lg shadow-lg shadow-[#ee2b2b]/30 transition-all flex items-center justify-center gap-2"
+          >
             <span className="material-symbols-outlined">calendar_today</span>
             Schedule Donation
           </button>
