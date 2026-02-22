@@ -24,7 +24,9 @@ export default function Login() {
   };
 
   const navigateToRegister = () => {
-    navigate('/register-donor');
+    if (role === 'donor') navigate('/register-donor');
+    else if (role === 'hospital') navigate('/register-hospital');
+    else if (role === 'admin') navigate('/register-admin');
   };
 
   return (
