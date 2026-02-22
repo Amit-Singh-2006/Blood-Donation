@@ -40,9 +40,9 @@ export default function Login() {
           <h1 className="text-xl font-extrabold tracking-tight text-slate-900">LifeLink <span className="text-[#ee2b2b]">AI</span></h1>
         </div>
         <nav className="hidden md:flex items-center gap-8">
-          <Link to="/about#how-it-works" className="text-sm font-semibold hover:text-[#ee2b2b] transition-colors">How it Works</Link>
-          <Link to="/about#emergency-network" className="text-sm font-semibold hover:text-[#ee2b2b] transition-colors">Emergency Network</Link>
-          <Link to="/about#impact-reports" className="text-sm font-semibold hover:text-[#ee2b2b] transition-colors">Impact Reports</Link>
+          <Link to="/how-it-works" className="text-sm font-semibold hover:text-[#ee2b2b] transition-colors">How it Works</Link>
+          <Link to="/emergency-network" className="text-sm font-semibold hover:text-[#ee2b2b] transition-colors">Emergency Network</Link>
+          <Link to="/impact-reports" className="text-sm font-semibold hover:text-[#ee2b2b] transition-colors">Impact Reports</Link>
         </nav>
         <div className="flex items-center gap-4">
           <div className="relative">
