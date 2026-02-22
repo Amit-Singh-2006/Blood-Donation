@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import ChatBot from '../components/ChatBot';
 import FeedbackModal from '../components/FeedbackModal';
 
@@ -24,6 +24,7 @@ export default function DonorApp() {
     if (path.includes('/centers')) return 'centers';
     if (path.includes('/impact')) return 'impact';
     if (path.includes('/community')) return 'community';
+    if (path.includes('/pending')) return 'pending';
     return 'dashboard';
   };
 
@@ -32,6 +33,17 @@ export default function DonorApp() {
   const handleAcceptRequest = () => {
     setRequestAccepted(true);
     alert("Thank you! The hospital has been notified. Please proceed to the location.");
+  };
+
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const openNavigation = () => {
+    alert("Opening Maps for navigation to City General Hospital...");
   };
 
   return (
@@ -101,9 +113,9 @@ export default function DonorApp() {
       )}
 
       {activeTab === 'dashboard' && (
-        <DashboardView 
-          requestAccepted={requestAccepted} 
-          onAccept={handleAcceptRequest} 
+        <DashboardView
+          requestAccepted={requestAccepted}
+          onAccept={handleAcceptRequest}
           onRate={() => setShowFeedback(true)}
           requestExpired={requestExpired}
           timeLeft={formatTime(timeLeft)}
@@ -119,7 +131,7 @@ export default function DonorApp() {
 
       <ChatBot />
 
-      <FeedbackModal 
+      <FeedbackModal
         isOpen={showFeedback}
         onClose={() => setShowFeedback(false)}
         targetType="hospital"
@@ -185,7 +197,7 @@ function DashboardView({
                   </div>
                 </div>
                 <div className="flex gap-3">
-                  <button 
+                  <button
                     onClick={onAccept}
                     className="flex-1 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold py-3 rounded-lg transition-all shadow-md shadow-[#ee2b2b]/20"
                   >
@@ -674,22 +686,22 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
         <div className="bg-white rounded-xl p-6 border border-slate-200">
           <h3 className="font-bold text-lg mb-4">Community Feed</h3>
           <div className="space-y-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="flex gap-4 pb-6 border-b border-slate-100 last:border-0 last:pb-0">
+            {feedPosts.map((post) => (
+              <div key={post.id} className="flex gap-4 pb-6 border-b border-slate-100 last:border-0 last:pb-0">
                 <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0">
-                   <img src={`https://picsum.photos/seed/user${i}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img src={`https://picsum.photos/seed/user${post.id}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </div>
-                <div>
+                <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-bold text-sm text-slate-900">Alex Johnson</span>
-                    <span className="text-xs text-slate-400">• 2h ago</span>
+                    <span className="font-bold text-sm text-slate-900">{post.user}</span>
+                    <span className="text-xs text-slate-400">• {post.time}</span>
                   </div>
                   <p className="text-sm text-slate-600 mb-3">
-                    Just completed my 5th donation at City General! The staff was amazing and the process was super smooth. Feeling great about helping out! 🩸💪
+                    {post.content}
                   </p>
 
                   {/* Render Replies */}
-                  {post.replies.map((reply, idx) => (
+                  {post.replies.map((reply: any, idx: number) => (
                     <div key={idx} className="bg-slate-50 p-3 rounded-lg mt-2 mb-3 ml-4 border border-slate-100 text-sm text-slate-700">
                       <span className="font-bold text-slate-900 mr-2">You:</span>{reply}
                     </div>
@@ -699,8 +711,8 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
                     <button onClick={() => handleToggleLike(post.id)} className={`flex items-center gap-1 transition-colors ${post.isLiked ? 'text-[#ee2b2b]' : 'text-slate-400 hover:text-[#ee2b2b]'}`}>
                       <svg
                         className={`w-5 h-5 transition-colors duration-200 ${post.isLiked
-                            ? 'text-[#ee2b2b] fill-[#ee2b2b]'
-                            : 'text-slate-400 fill-transparent stroke-2'
+                          ? 'text-[#ee2b2b] fill-[#ee2b2b]'
+                          : 'text-slate-400 fill-transparent stroke-2'
                           }`}
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -712,11 +724,25 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
                       </svg>
                       {post.likes} Likes
                     </button>
-                    <button className="flex items-center gap-1 text-slate-400 hover:text-slate-600 text-xs font-bold transition-colors">
+                    <button onClick={() => handleToggleReply(post.id)} className="flex items-center gap-1 text-slate-400 hover:text-slate-600 transition-colors">
                       <span className="material-symbols-outlined text-sm">chat_bubble</span>
                       Reply
                     </button>
                   </div>
+
+                  {/* Reply Input */}
+                  {post.showReplyInput && (
+                    <div className="mt-3 flex gap-2 w-full">
+                      <input
+                        type="text"
+                        value={replyText}
+                        onChange={(e) => setReplyText(e.target.value)}
+                        placeholder="Write a reply..."
+                        className="flex-1 text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-slate-300"
+                      />
+                      <button onClick={() => submitReply(post.id)} className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold">Send</button>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
