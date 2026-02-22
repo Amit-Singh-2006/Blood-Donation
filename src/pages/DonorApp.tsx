@@ -811,6 +811,7 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
 }
 
 function RewardsView() {
+  const navigate = useNavigate();
   return (
     <div className="space-y-8">
       {/* Hero Section: Rank Progress */}
@@ -863,7 +864,7 @@ function RewardsView() {
               Donate within 48 hours to earn a <span className="font-bold">2x XP Multiplier</span> and the "First Responder" badge.
             </p>
           </div>
-          <button className="mt-6 w-full py-4 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold rounded-lg shadow-lg shadow-[#ee2b2b]/30 transition-all flex items-center justify-center gap-2">
+          <button onClick={() => navigate('/donor/centers')} className="mt-6 w-full py-4 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold rounded-lg shadow-lg shadow-[#ee2b2b]/30 transition-all flex items-center justify-center gap-2">
             <span className="material-symbols-outlined">calendar_today</span>
             Schedule Donation
           </button>
