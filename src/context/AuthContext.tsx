@@ -33,6 +33,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(result.user);
             setRole(selectedRole);
             localStorage.setItem('userRole', selectedRole);
+            // Store user object in the same shape as email/password login
+            // so ProtectedRoute can read the role correctly
+            localStorage.setItem('user', JSON.stringify({
+                id: result.user.uid,
+                name: result.user.displayName,
+                email: result.user.email,
+                role: selectedRole,
+            }));
+            // Set a dummy token so ProtectedRoute's token check passes
+            localStorage.setItem('token', 'firebase-google-auth');
         } catch (error) {
             console.error("Error signing in with Google", error);
             throw error;
@@ -45,6 +55,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(null);
             setRole(null);
             localStorage.removeItem('userRole');
+            localStorage.removeItem('user');
+            localStorage.removeItem('token');
         } catch (error) {
             console.error("Error signing out", error);
             throw error;

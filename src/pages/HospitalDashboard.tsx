@@ -2,77 +2,86 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import Chat from '../components/Chat';
-import ChatBot from '../components/ChatBot';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '../lib/api';
-import { useAuth } from '../context/AuthContext';
 
-type NavItem = 'overview' | 'inventory' | 'requests' | 'map' | 'analytics' | 'settings';
+type NavItem = 'overview' | 'requests' | 'inventory' | 'map' | 'analytics' | 'settings';
+
+const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
 export default function HospitalDashboard() {
-  const [activeTab, setActiveTab] = useState<NavItem | 'dashboard' | 'inventory' | 'requests'>('dashboard');
-  const navigate = useNavigate();
-  const { logout } = useAuth();
-
+  const [activeTab, setActiveTab] = useState<NavItem>('overview');
   const [showChat, setShowChat] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   const [user, setUser] = useState<any>(null);
   const [inventory, setInventory] = useState<any[]>([]);
   const [requests, setRequests] = useState<any[]>([]);
   const [donations, setDonations] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
   const [notifications, setNotifications] = useState([
     { id: 1, title: 'Blood Request Fulfilled', message: 'Donor John D. is en route for Request #882', time: '2m ago', read: false },
     { id: 2, title: 'Low Stock Alert', message: 'O- blood type is below critical threshold', time: '1h ago', read: false },
     { id: 3, title: 'New Donor Match', message: '3 new donors found for Request #879', time: '2h ago', read: true },
   ]);
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    try {
-      const [invData, reqData, donData] = await Promise.all([
-        apiFetch('/hospital/inventory'),
-        apiFetch('/hospital/requests'),
-        apiFetch('/hospital/donations')
-      ]);
-      setInventory(invData);
-      setRequests(reqData);
-      setDonations(donData);
-    } catch (err) {
-      console.error('Failed to fetch hospital data:', err);
-    }
-  };
-
   const unreadCount = notifications.filter(n => !n.read).length;
 
   useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) setUser(JSON.parse(savedUser));
+
     function handleClickOutside(event: MouseEvent) {
       if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
         setShowNotifications(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
+    document.addEventListener('mousedown', handleClickOutside);
+    fetchData();
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const navItems: { id: string; label: string; icon: string }[] = [
-    { id: 'dashboard', label: 'Overview', icon: 'dashboard' },
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+      const [invData, reqData, donData] = await Promise.allSettled([
+        apiFetch('/hospital/inventory'),
+        apiFetch('/hospital/requests'),
+        apiFetch('/hospital/donations'),
+      ]);
+      if (invData.status === 'fulfilled') setInventory(invData.value);
+      if (reqData.status === 'fulfilled') setRequests(reqData.value);
+      if (donData.status === 'fulfilled') setDonations(donData.value);
+    } catch (err) {
+      console.error('Failed to load data', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('userRole');
+    navigate('/login');
+  };
+
+  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+
+  const navItems: { id: NavItem; label: string; icon: string }[] = [
+    { id: 'overview', label: 'Overview', icon: 'dashboard' },
     { id: 'requests', label: 'Emergencies', icon: 'emergency' },
     { id: 'inventory', label: 'Inventory', icon: 'bloodtype' },
     { id: 'map', label: 'Live Map', icon: 'map' },
     { id: 'analytics', label: 'Predictions', icon: 'monitoring' },
     { id: 'settings', label: 'Settings', icon: 'settings' },
   ];
+
+  const hospitalName = user?.name || 'City General Hospital';
+  const initials = hospitalName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <div className="flex min-h-screen bg-[#f8f6f6] overflow-hidden">
@@ -93,12 +102,12 @@ export default function HospitalDashboard() {
             {navItems.map(item => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id as any)}
+                onClick={() => setActiveTab(item.id)}
                 className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all relative group",
+                  'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all relative group',
                   activeTab === item.id
-                    ? "bg-[#ee2b2b]/5 text-[#ee2b2b]"
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
+                    ? 'bg-[#ee2b2b]/5 text-[#ee2b2b]'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                 )}
               >
                 {activeTab === item.id && (
@@ -108,8 +117,8 @@ export default function HospitalDashboard() {
                   />
                 )}
                 <span className={cn(
-                  "material-symbols-outlined text-xl transition-colors",
-                  activeTab === item.id ? "text-[#ee2b2b]" : "text-slate-400 group-hover:text-slate-600"
+                  'material-symbols-outlined text-xl transition-colors',
+                  activeTab === item.id ? 'text-[#ee2b2b]' : 'text-slate-400 group-hover:text-slate-600'
                 )}>
                   {item.icon}
                 </span>
@@ -119,23 +128,23 @@ export default function HospitalDashboard() {
           </nav>
         </div>
 
-        <div className="mt-auto p-8 pt-4">
-          <div className="bg-slate-900 rounded-2xl p-5 text-white shadow-xl shadow-slate-900/10 mb-4">
+        <div className="mt-auto p-8 pt-4 space-y-3">
+          <div className="bg-slate-900 rounded-2xl p-5 text-white shadow-xl shadow-slate-900/10">
             <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Facility Info</h4>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-black">CH</div>
+              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-black">{initials}</div>
               <div>
-                <p className="text-[11px] font-bold truncate w-32">{user?.name || 'City General Hospital'}</p>
+                <p className="text-[11px] font-bold truncate w-32">{hospitalName}</p>
                 <p className="text-[9px] text-[#ee2b2b] font-black uppercase">Verified Facility</p>
               </div>
             </div>
           </div>
           <button
-            onClick={async () => { await logout(); navigate('/'); }}
-            className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-2xl bg-white border border-slate-200 text-slate-600 font-black text-xs hover:bg-slate-50 hover:text-[#ee2b2b] transition-all group shadow-sm active:scale-95"
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-slate-500 hover:bg-red-50 hover:text-[#ee2b2b] transition-all"
           >
-            <span className="material-symbols-outlined text-xl group-hover:rotate-12 transition-transform">logout</span>
-            SIGN OUT
+            <span className="material-symbols-outlined text-lg">logout</span>
+            Sign Out
           </button>
         </div>
       </aside>
@@ -175,12 +184,16 @@ export default function HospitalDashboard() {
                   >
                     <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                       <h3 className="font-black text-xs text-slate-800 uppercase tracking-widest">Notifications</h3>
-                      <button className="text-[10px] text-[#ee2b2b] font-black hover:underline uppercase tracking-tight">Mark All Read</button>
+                      <button onClick={markAllRead} className="text-[10px] text-[#ee2b2b] font-black hover:underline uppercase tracking-tight">Mark All Read</button>
                     </div>
                     <div className="max-h-[300px] overflow-y-auto">
                       {notifications.map(n => (
-                        <div key={n.id} className="p-4 border-b border-slate-50 flex gap-3 hover:bg-slate-50 transition-colors cursor-pointer">
-                          <div className={cn("w-1.5 h-1.5 rounded-full mt-1.5 shrink-0", !n.read ? "bg-[#ee2b2b]" : "bg-slate-200")}></div>
+                        <div
+                          key={n.id}
+                          onClick={() => setNotifications(prev => prev.map(x => x.id === n.id ? { ...x, read: true } : x))}
+                          className="p-4 border-b border-slate-50 flex gap-3 hover:bg-slate-50 transition-colors cursor-pointer"
+                        >
+                          <div className={cn('w-1.5 h-1.5 rounded-full mt-1.5 shrink-0', !n.read ? 'bg-[#ee2b2b]' : 'bg-slate-200')}></div>
                           <div>
                             <h4 className="text-xs font-bold text-slate-900">{n.title}</h4>
                             <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">{n.message}</p>
@@ -214,10 +227,12 @@ export default function HospitalDashboard() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              {activeTab === 'dashboard' && <DashboardView setActiveTab={setActiveTab as any} stats={{ requests: 12, matches: 3, inventory: 428 }} />}
-              {activeTab === 'requests' && <RequestWizardView requests={requests} />}
-              {activeTab === 'inventory' && <InventoryView inventory={inventory} />}
+              {activeTab === 'overview' && <OverviewTab requests={requests} inventory={inventory} donations={donations} onGoToRequests={() => setActiveTab('requests')} />}
+              {activeTab === 'requests' && <RequestsTab requests={requests} onRefresh={fetchData} />}
+              {activeTab === 'inventory' && <InventoryTab inventory={inventory} onRefresh={fetchData} />}
               {activeTab === 'map' && <MapTab />}
+              {activeTab === 'analytics' && <AnalyticsTab requests={requests} inventory={inventory} />}
+              {activeTab === 'settings' && <SettingsTab user={user} />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -226,66 +241,30 @@ export default function HospitalDashboard() {
       {/* Floating Chat */}
       <button
         onClick={() => setShowChat(!showChat)}
-        className="fixed bottom-8 right-28 w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
+        className="fixed bottom-8 right-8 w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
       >
         <span className="material-symbols-outlined">forum</span>
       </button>
-      <Chat isOpen={showChat} recipientName="Emergency Center" recipientType="hospital" onClose={() => setShowChat(false)} />
-      <ChatBot />
-    </div >
+      <Chat isOpen={showChat} recipientName="Emergency Center" recipientType="admin" onClose={() => setShowChat(false)} />
+    </div>
   );
 }
 
-function DashboardView({ setActiveTab, stats }: { setActiveTab: (tab: 'dashboard' | 'inventory' | 'requests') => void; stats: { requests: number; matches: number; inventory: number } }) {
-  const [quickRequestType, setQuickRequestType] = useState('O-');
-  const [quickRequestUrgency, setQuickRequestUrgency] = useState('Critical (Immediate)');
-  const [quickRequestUnits, setQuickRequestUnits] = useState(2);
-  const [isMatching, setIsMatching] = useState(false);
-
-  const [donorAppointments, setDonorAppointments] = useState([
-    { id: 101, name: "Alex Johnson", bloodType: "O-", eligibility: "Verified (100%)", type: "Whole Blood", time: "Tomorrow, 10:30 AM", status: "pending" },
-    { id: 102, name: "Maria Garcia", bloodType: "A+", eligibility: "Pending Review", type: "Power Red", time: "Tomorrow, 2:00 PM", status: "pending" }
-  ]);
-
-  const handleApproveAppointment = (id: number) => {
-    setDonorAppointments(prev => prev.map(a => a.id === id ? { ...a, status: 'approved' } : a));
-  };
-
-  const handleRejectAppointment = (id: number) => {
-    setDonorAppointments(prev => prev.map(a => a.id === id ? { ...a, status: 'rejected' } : a));
-  };
-
-  const handleQuickMatch = async () => {
-    setIsMatching(true);
-    try {
-      await apiFetch('/hospital/requests', {
-        method: 'POST',
-        body: JSON.stringify({
-          blood_group: quickRequestType,
-          units_required: quickRequestUnits,
-          urgency: quickRequestUrgency.split(' ')[0], // e.g. "Critical"
-          latitude: 47.6062, // Defaulting to Seattle for prototype
-          longitude: -122.3321
-        })
-      });
-      alert('Quick request created and matching started!');
-      setActiveTab('requests');
-    } catch (err: any) {
-      alert(err.message || 'Failed to create request');
-    } finally {
-      setIsMatching(false);
-    }
-  };
+// ─────────────────── OVERVIEW TAB ───────────────────
+function OverviewTab({ requests, inventory, donations, onGoToRequests }: { requests: any[], inventory: any[], donations: any[], onGoToRequests: () => void }) {
+  const criticalRequests = requests.filter(r => r.urgency === 'critical').length;
+  const totalUnits = inventory.reduce((sum, i) => sum + (i.units || 0), 0);
+  const lowStock = inventory.filter(i => i.units < 20);
 
   return (
     <div className="space-y-8">
       {/* Stats Blocks */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Active Escort', value: '03', icon: 'ambulance', color: '#ee2b2b', trend: '+2 this hour' },
-          { label: 'Potential Donors', value: '48', icon: 'person_search', color: '#3b82f6', trend: 'Nearby area' },
-          { label: 'Shortage Risk', value: 'Low', icon: 'analytics', color: '#10b981', trend: 'AI Prediction' },
-          { label: 'Network Rank', value: '#12', icon: 'trophy', color: '#f59e0b', trend: 'Global network' },
+          { label: 'Active Requests', value: requests.length.toString(), icon: 'emergency', color: '#ee2b2b', trend: `${criticalRequests} critical` },
+          { label: 'Total Blood Units', value: totalUnits.toString(), icon: 'bloodtype', color: '#3b82f6', trend: 'Across all types' },
+          { label: 'Low Stock Types', value: lowStock.length.toString(), icon: 'analytics', color: lowStock.length > 0 ? '#ef4444' : '#10b981', trend: lowStock.length > 0 ? lowStock.map(i => i.blood_group).join(', ') : 'All optimal' },
+          { label: 'Donations Today', value: donations.length.toString(), icon: 'trophy', color: '#f59e0b', trend: 'Verified' },
         ].map((stat, i) => (
           <motion.div
             key={i}
@@ -317,473 +296,362 @@ function DashboardView({ setActiveTab, stats }: { setActiveTab: (tab: 'dashboard
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
         {/* Main Feed */}
         <div className="xl:col-span-2 space-y-8">
-          <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-[#ee2b2b]/5 rounded-full blur-3xl -z-10 translate-x-1/2 -translate-y-1/2"></div>
+          <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm relative overflow-hidden">
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h3 className="text-xl font-black text-slate-900">Live Matching Engine</h3>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Real-time AI Donor Search</p>
+                <h3 className="text-xl font-black text-slate-900">Live Emergency Requests</h3>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Real-time Blood Requests</p>
               </div>
-              <div className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-500 bg-slate-100 px-3 py-1.5 rounded-full">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
-                Processing 12 requests
-              </div>
+              <button onClick={onGoToRequests} className="text-[10px] font-black text-[#ee2b2b] hover:underline uppercase tracking-tight">View All</button>
             </div>
 
             <div className="space-y-4">
-              {[
-                { type: 'O-', id: '882', status: '8 Donors Notified', urgency: 'Critical', time: '12m ago' },
-                { type: 'A+', id: '879', status: '14 Donors Notified', urgency: 'Standard', time: '2h ago' }
-              ].map((req, i) => (
-                <div key={i} className="flex items-center justify-between p-5 rounded-2xl border border-slate-100 bg-slate-50/30 hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all group/item">
+              {requests.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 font-bold">No active requests. Use "NEW REQUEST" to create one.</div>
+              ) : requests.slice(0, 3).map((req, i) => (
+                <div key={i} className="flex items-center justify-between p-5 rounded-2xl border border-slate-100 bg-slate-50/30 hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all">
                   <div className="flex items-center gap-5">
                     <div className={cn(
-                      "w-14 h-14 rounded-2xl flex flex-col items-center justify-center text-white shadow-lg relative overflow-hidden",
-                      req.urgency === 'Critical' ? "bg-[#ee2b2b]" : "bg-slate-900"
+                      'w-14 h-14 rounded-2xl flex flex-col items-center justify-center text-white shadow-lg relative overflow-hidden',
+                      req.urgency === 'critical' ? 'bg-[#ee2b2b]' : 'bg-slate-900'
                     )}>
-                      {req.urgency === 'Critical' && (
-                        <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
-                      )}
-                      <span className="text-xs font-black relative z-10">{req.type}</span>
+                      {req.urgency === 'critical' && <div className="absolute inset-0 bg-white/20 animate-pulse"></div>}
+                      <span className="text-xs font-black relative z-10">{req.blood_group}</span>
                       <span className="text-[8px] font-black uppercase tracking-tighter opacity-70 relative z-10">Type</span>
                     </div>
                     <div>
-                      <h4 className="font-black text-slate-900">Urgent Request #{req.id}</h4>
-                      <p className="text-[10px] font-bold text-slate-400 mt-1">{req.status} • {req.time}</p>
+                      <h4 className="font-black text-slate-900">Request #{req.id}</h4>
+                      <p className="text-[10px] font-bold text-slate-400 mt-1">{req.units_required} units • {req.urgency}</p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <span className={cn(
-                        "text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded inline-block",
-                        req.urgency === 'Critical' ? "bg-red-100 text-[#ee2b2b]" : "bg-slate-100 text-slate-500"
-                      )}>
-                        {req.urgency}
-                      </span>
-                    </div>
-                    <button className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover/item:bg-[#ee2b2b] group-hover/item:text-white transition-all">
-                      <span className="material-symbols-outlined">chevron_right</span>
-                    </button>
-                  </div>
+                  <span className={cn(
+                    'text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded',
+                    req.urgency === 'critical' ? 'bg-red-100 text-[#ee2b2b]' : 'bg-slate-100 text-slate-500'
+                  )}>
+                    {req.status || req.urgency}
+                  </span>
                 </div>
               ))}
-              {donorAppointments.length === 0 && (
-                <div className="py-8 text-center text-slate-500 text-sm">
-                  No pending appointments at this time.
-                </div>
-              )}
+            </div>
+          </div>
+
+          <div className="bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden shadow-2xl shadow-slate-900/20">
+            <div className="absolute top-0 right-0 p-8">
+              <span className="material-symbols-outlined text-white/10 text-9xl">psychology</span>
+            </div>
+            <div className="relative z-10 max-w-lg">
+              <span className="text-[10px] font-black text-[#ee2b2b] uppercase tracking-[0.2em] bg-red-500/10 px-3 py-1.5 rounded-full inline-block mb-4">AI Prediction Engine</span>
+              <h3 className="text-2xl font-black leading-tight mb-4">Upcoming O- Shortage Predicted for Next Friday</h3>
+              <p className="text-sm font-medium text-slate-400 leading-relaxed mb-6">Based on historical data and upcoming regional events, we anticipate a 40% increase in blood demand. We recommend initiating a proactive donor campaign.</p>
+              <button className="bg-white text-slate-900 px-6 py-3 rounded-xl font-black text-xs hover:scale-105 transition-all">START CAMPAIGN</button>
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
 
-function InventoryView({ inventory }: { inventory: any[] }) {
-  const [stock, setStock] = useState<Record<string, number>>(() => {
-    const initialStock: Record<string, number> = {
-      'A+': 0, 'A-': 0, 'B+': 0, 'B-': 0, 'AB+': 0, 'AB-': 0, 'O+': 0, 'O-': 0
-    };
-    inventory.forEach(item => {
-      if (initialStock[item.blood_group] !== undefined) {
-        initialStock[item.blood_group] = item.units;
-      }
-    });
-    return initialStock;
-  });
-
-  const updateStock = (type: keyof typeof stock, change: number) => {
-    setStock(prev => ({
-      ...prev,
-      [type]: Math.max(0, prev[type] + change)
-    }));
-  };
-
-  const getStatus = (count: number, type: string) => {
-    if (type.includes('-') && count < 50) return { label: 'Critical Low', color: 'text-[#ee2b2b]', bg: 'bg-red-100' };
-    if (count < 100) return { label: 'Low', color: 'text-orange-600', bg: 'bg-orange-50' };
-    return { label: 'Optimal', color: 'text-green-600', bg: 'bg-green-50' };
-  };
-
-  return (
-    <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">Inventory & Predictions</h1>
-          <div className="flex items-center gap-2 mt-2">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-            </span>
-            <p className="text-slate-500 text-sm font-medium">Last Synced: 2 minutes ago • AI Engine Active</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Highlight Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* A+ Card */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-center mb-6">
-            <div className="h-12 w-12 rounded-lg bg-slate-100 flex items-center justify-center font-black text-2xl text-slate-900">A+</div>
-            <span className="px-2.5 py-1 bg-green-50 text-green-600 text-xs font-bold rounded-full">Optimal</span>
-          </div>
-          <div className="space-y-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Current Stock</span>
-              <span className="text-slate-900 font-bold">{stock['A+']} Units</span>
-            </div>
-            <div className="relative w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-              <div className="absolute left-0 top-0 h-full bg-green-500 w-[75%] rounded-full"></div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => updateStock('A+', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
-              <button onClick={() => updateStock('A+', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
-            </div>
-          </div>
-        </div>
-        {/* O- Card */}
-        <div className="bg-white p-6 rounded-xl border-2 border-[#ee2b2b]/40 shadow-lg shadow-[#ee2b2b]/5">
-          <div className="flex justify-between items-center mb-6">
-            <div className="h-12 w-12 rounded-lg bg-[#ee2b2b]/10 flex items-center justify-center font-black text-2xl text-[#ee2b2b]">O-</div>
-            <span className="px-2.5 py-1 bg-red-100 text-[#ee2b2b] text-xs font-bold rounded-full animate-pulse">Critical Low</span>
-          </div>
-          <div className="space-y-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Current Stock</span>
-              <span className="text-[#ee2b2b] font-bold">{stock['O-']} Units</span>
-            </div>
-            <div className="relative w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-              <div className="absolute left-0 top-0 h-full bg-[#ee2b2b] w-[15%] rounded-full"></div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => updateStock('O-', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
-              <button onClick={() => updateStock('O-', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
-            </div>
-          </div>
-        </div>
-        {/* B+ Card */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200 hover:shadow-md transition-shadow">
-          <div className="flex justify-between items-center mb-6">
-            <div className="h-12 w-12 rounded-lg bg-slate-100 flex items-center justify-center font-black text-2xl text-slate-900">B+</div>
-            <span className="px-2.5 py-1 bg-orange-50 text-orange-600 text-xs font-bold rounded-full">Caution</span>
-          </div>
-          <div className="space-y-4">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Current Stock</span>
-              <span className="text-slate-900 font-bold">{stock['B+']} Units</span>
-            </div>
-            <div className="relative w-full h-3 bg-slate-100 rounded-full overflow-hidden">
-              <div className="absolute left-0 top-0 h-full bg-orange-400 w-[42%] rounded-full"></div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => updateStock('B+', -1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">-</button>
-              <button onClick={() => updateStock('B+', 1)} className="flex-1 py-1.5 text-xs font-bold border border-slate-200 rounded hover:bg-slate-50">+</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Full Inventory Table */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mt-8">
-        <div className="p-6 border-b border-slate-100">
-          <h3 className="text-lg font-bold text-slate-900">Full Inventory Status</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500 font-semibold">
-              <tr>
-                <th className="px-6 py-4">Blood Type</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Quantity (Units)</th>
-                <th className="px-6 py-4">Last Updated</th>
-                <th className="px-6 py-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {(Object.keys(stock) as Array<keyof typeof stock>).map((type) => {
-                const status = getStatus(stock[type], type);
+        {/* Sidebar Widgets */}
+        <div className="space-y-8">
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm">
+            <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 mb-6">
+              <span className="material-symbols-outlined text-[#ee2b2b] text-lg">bloodtype</span>
+              Stock Health
+            </h4>
+            <div className="space-y-4">
+              {BLOOD_TYPES.map((type) => {
+                const item = inventory.find(i => i.blood_group === type);
+                const units = item?.units || 0;
+                const max = 200;
+                const pct = Math.min((units / max) * 100, 100);
+                const color = pct < 20 ? 'bg-red-500' : pct < 50 ? 'bg-yellow-400' : 'bg-green-400';
                 return (
-                  <tr key={type} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-4 font-bold text-slate-900">{type}</td>
-                    <td className="px-6 py-4">
-                      <span className={cn("px-2.5 py-1 rounded-full text-xs font-bold", status.bg, status.color)}>
-                        {status.label}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 font-medium">{stock[type]}</td>
-                    <td className="px-6 py-4 text-slate-500">Just now</td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button onClick={() => updateStock(type, -1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600">
-                          <span className="material-symbols-outlined text-sm">remove</span>
-                        </button>
-                        <button onClick={() => updateStock(type, 1)} className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600">
-                          <span className="material-symbols-outlined text-sm">add</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+                  <div key={type} className="space-y-1">
+                    <div className="flex justify-between text-[11px] font-black uppercase">
+                      <span>{type}</span>
+                      <span>{units} units</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.8 }}
+                        className={cn('h-full rounded-full', color)}
+                      />
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function RequestWizardView({ requests }: { requests: any[] }) {
-  const [urgency, setUrgency] = useState('Normal');
-  const [bloodType, setBloodType] = useState<string | null>(null);
-  const [units, setUnits] = useState(4);
-  const [reason, setReason] = useState('Major Trauma / Surgery');
+// ─────────────────── REQUESTS TAB ───────────────────
+function RequestsTab({ requests, onRefresh }: { requests: any[], onRefresh: () => void }) {
+  const [showForm, setShowForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [form, setForm] = useState({ blood_group: 'O+', units_required: '', urgency: 'standard' });
 
-  const handleSubmit = async () => {
-    if (!bloodType) return;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     setIsSubmitting(true);
+    setError('');
     try {
       await apiFetch('/hospital/requests', {
         method: 'POST',
-        body: JSON.stringify({
-          blood_group: bloodType,
-          units_required: units,
-          urgency: urgency,
-          latitude: 47.6062, // Defaulting to Seattle for prototype
-          longitude: -122.3321
-        })
+        body: JSON.stringify(form),
       });
-      alert('Request submitted successfully!');
+      setSuccess('Emergency request created successfully!');
+      setShowForm(false);
+      setForm({ blood_group: 'O+', units_required: '', urgency: 'standard' });
+      onRefresh();
+      setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
-      alert(err.message || 'Failed to submit request');
+      setError(err.message || 'Failed to create request');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-      <div className="p-8">
-        <h1 className="text-2xl font-extrabold text-slate-900 mb-2">Blood Requirement Details</h1>
-        <p className="text-slate-500 mb-8">Specify the blood components needed and the urgency of the request.</p>
+    <div className="space-y-6">
+      {success && <div className="p-4 bg-green-50 text-green-700 rounded-xl font-bold border border-green-200">{success}</div>}
 
-        <div className="space-y-8">
+      {/* Create Request Form */}
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="p-8 flex items-center justify-between">
           <div>
-            <label className="block text-sm font-bold text-slate-700 mb-4">Urgency Level</label>
-            <div className="grid grid-cols-3 gap-4">
-              <button
-                onClick={() => setUrgency('Normal')}
-                className={cn(
-                  "flex flex-col items-center justify-center p-4 border-2 rounded-xl transition-all",
-                  urgency === 'Normal' ? "border-slate-400 bg-slate-50" : "border-slate-100 hover:border-slate-200"
-                )}
-              >
-                <span className="material-symbols-outlined text-slate-400 mb-1">check_circle</span>
-                <span className="text-sm font-bold text-slate-600">Normal</span>
-              </button>
-              <button
-                onClick={() => setUrgency('Urgent')}
-                className={cn(
-                  "flex flex-col items-center justify-center p-4 border-2 rounded-xl transition-all",
-                  urgency === 'Urgent' ? "border-orange-400 bg-orange-50" : "border-orange-100 bg-orange-50/30 hover:border-orange-200"
-                )}
-              >
-                <span className="material-symbols-outlined text-orange-500 mb-1">priority_high</span>
-                <span className="text-sm font-bold text-orange-700">Urgent</span>
-              </button>
-              <button
-                onClick={() => setUrgency('Critical')}
-                className={cn(
-                  "flex flex-col items-center justify-center p-4 border-2 rounded-xl transition-all",
-                  urgency === 'Critical' ? "border-[#ee2b2b] bg-[#ee2b2b]/5 ring-2 ring-[#ee2b2b]/10" : "border-[#ee2b2b]/30 bg-[#ee2b2b]/5 hover:border-[#ee2b2b]"
-                )}
-              >
-                <span className="material-symbols-outlined text-[#ee2b2b] mb-1">emergency</span>
-                <span className="text-sm font-bold text-[#ee2b2b]">Critical</span>
-              </button>
-            </div>
+            <h2 className="text-xl font-black text-slate-900">Emergency Request Wizard</h2>
+            <p className="text-sm text-slate-500 mt-1">Create a new blood request and notify nearby donors.</p>
           </div>
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="bg-[#ee2b2b] text-white px-6 py-3 rounded-xl font-black text-xs shadow-lg shadow-[#ee2b2b]/20 hover:scale-105 transition-all flex items-center gap-2"
+          >
+            <span className="material-symbols-outlined text-sm">{showForm ? 'close' : 'add'}</span>
+            {showForm ? 'Cancel' : 'New Request'}
+          </button>
+        </div>
 
-          <div>
-            <div className="flex justify-between items-center mb-4">
-              <label className="text-sm font-bold text-slate-700">Select Blood Type</label>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map(type => (
-                <button
-                  key={type}
-                  onClick={() => setBloodType(type)}
-                  className={cn(
-                    "aspect-square flex items-center justify-center rounded-xl border text-xl font-bold transition-colors",
-                    bloodType === type
-                      ? "border-2 border-[#ee2b2b] bg-[#ee2b2b]/5 text-[#ee2b2b]"
-                      : "border-slate-200 bg-white hover:border-[#ee2b2b]"
-                  )}
-                >
-                  {type}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-8">
-            <div>
-              <label className="block text-sm font-bold text-slate-700 mb-4">Units Required</label>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => setUnits(Math.max(1, units - 1))}
-                  className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors"
-                >
-                  <span className="material-symbols-outlined">remove</span>
-                </button>
-                <div className="flex-1 text-center">
-                  <span className="text-4xl font-extrabold text-slate-900">{units.toString().padStart(2, '0')}</span>
-                </div>
-                <button
-                  onClick={() => setUnits(units + 1)}
-                  className="w-12 h-12 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 hover:bg-slate-200 transition-colors"
-                >
-                  <span className="material-symbols-outlined">add</span>
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden shadow-2xl shadow-slate-900/20">
-              <div className="absolute top-0 right-0 p-8">
-                <span className="material-symbols-outlined text-white/10 text-9xl">psychology</span>
-              </div>
-              <div className="relative z-10 max-w-lg">
-                <span className="text-[10px] font-black text-[#ee2b2b] uppercase tracking-[0.2em] bg-red-500/10 px-3 py-1.5 rounded-full inline-block mb-4">AI Prediction Engine</span>
-                <h3 className="text-2xl font-black leading-tight mb-4">Upcoming O- Shortage Predicted for Next Friday</h3>
-                <p className="text-sm font-medium text-slate-400 leading-relaxed mb-6">Based on historical data and upcoming regional events, we anticipate a 40% increase in blood demand. We recommend initiating a proactive donor campaign.</p>
-                <button className="bg-white text-slate-900 px-6 py-3 rounded-xl font-black text-xs hover:scale-105 transition-all">START CAMPAIGN</button>
-              </div>
-            </div>
-          </div>
-
-          {/* Sidebar Widgets */}
-          <div className="space-y-8">
-            <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-sm h-min">
-              <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2 mb-6">
-                <span className="material-symbols-outlined text-[#ee2b2b] text-lg">event_available</span>
-                Scheduled Today
-              </h4>
-              <div className="space-y-6">
-                {[
-                  { name: 'Alex Johnson', time: '10:30 AM', type: 'O-', typeLabel: 'Whole Blood' },
-                  { name: 'Maria Garcia', time: '02:00 PM', type: 'A+', typeLabel: 'Platelets' }
-                ].map((appt, i) => (
-                  <div key={i} className="flex gap-4 group">
-                    <div className="flex flex-col items-center">
-                      <div className="w-2 h-2 rounded-full bg-[#ee2b2b]"></div>
-                      <div className="w-px h-full bg-slate-100 my-1"></div>
-                    </div>
-                    <div className="pb-6">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">{appt.time}</p>
-                      <h5 className="font-bold text-slate-900 mt-1">{appt.name}</h5>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="w-7 h-7 bg-red-50 text-[#ee2b2b] text-[10px] font-black rounded-lg flex items-center justify-center border border-red-100">{appt.type}</span>
-                        <span className="text-[10px] font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded-lg">{appt.typeLabel}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <button className="w-full py-4 text-[10px] font-black text-slate-400 hover:text-slate-900 transition-colors uppercase tracking-[0.2em] border-t border-slate-50">View Calendar</button>
-            </div>
-
-            <div className="bg-blue-600 rounded-3xl p-8 text-white relative overflow-hidden shadow-xl shadow-blue-500/20">
-              <h3 className="text-xl font-black mb-1">Stock Health</h3>
-              <p className="text-xs font-bold text-blue-100/70 mb-6 italic tracking-tight">AI Audit • 1m ago</p>
-              <div className="space-y-6">
-                {[
-                  { type: 'A+', level: 85, color: 'bg-green-400' },
-                  { type: 'O+', level: 62, color: 'bg-white' },
-                  { type: 'O-', level: 12, color: 'bg-red-400' }
-                ].map((s, i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="flex justify-between text-[11px] font-black uppercase">
-                      <span>{s.type} Groups</span>
-                      <span>{s.level}%</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-blue-700/50 rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${s.level}%` }}
-                        transition={{ delay: 0.5 + i * 0.1, duration: 1 }}
-                        className={cn("h-full rounded-full", s.color)}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-8 pt-6 border-t border-slate-100 flex justify-end">
-            <button
-              onClick={handleSubmit}
-              disabled={isSubmitting || !bloodType}
-              className="bg-[#ee2b2b] text-white px-8 py-4 rounded-xl font-black text-sm hover:scale-[1.02] transition-all disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-3 shadow-lg shadow-[#ee2b2b]/20"
+        <AnimatePresence>
+          {showForm && (
+            <motion.form
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              onSubmit={handleSubmit}
+              className="border-t border-slate-100 p-8 space-y-6"
             >
-              {isSubmitting ? (
-                <>
-                  <span className="animate-spin material-symbols-outlined">sync</span>
-                  INITIATING OVERRIDE...
-                </>
-              ) : (
-                <>
-                  <span className="material-symbols-outlined">emergency_share</span>
-                  BROADCAST EMERGENCY
-                </>
-              )}
-            </button>
+              {error && <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm font-bold border border-red-100">{error}</div>}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-black text-slate-700">Blood Group</label>
+                  <select
+                    value={form.blood_group}
+                    onChange={e => setForm(p => ({ ...p, blood_group: e.target.value }))}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] outline-none"
+                  >
+                    {BLOOD_TYPES.map(t => <option key={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-black text-slate-700">Units Required</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={form.units_required}
+                    onChange={e => setForm(p => ({ ...p, units_required: e.target.value }))}
+                    placeholder="e.g. 2"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl font-bold focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] outline-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-black text-slate-700">Urgency</label>
+                  <div className="flex gap-3">
+                    {['standard', 'critical'].map(u => (
+                      <button
+                        key={u}
+                        type="button"
+                        onClick={() => setForm(p => ({ ...p, urgency: u }))}
+                        className={cn(
+                          'flex-1 py-3 rounded-xl text-xs font-black border-2 transition-all capitalize',
+                          form.urgency === u
+                            ? u === 'critical' ? 'border-[#ee2b2b] bg-[#ee2b2b] text-white' : 'border-slate-900 bg-slate-900 text-white'
+                            : 'border-slate-200 text-slate-500 hover:border-slate-400'
+                        )}
+                      >
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="bg-[#ee2b2b] text-white px-8 py-3 rounded-xl font-black shadow-lg shadow-[#ee2b2b]/20 hover:bg-[#ee2b2b]/90 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-60"
+              >
+                {isSubmitting ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <span className="material-symbols-outlined text-sm">emergency</span>}
+                {isSubmitting ? 'Submitting...' : 'Broadcast Request'}
+              </button>
+            </motion.form>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Requests List */}
+      <div className="space-y-4">
+        {requests.length === 0 ? (
+          <div className="bg-white rounded-3xl p-12 border border-slate-100 shadow-sm text-center">
+            <span className="material-symbols-outlined text-5xl text-slate-200 mb-4 block">emergency_share</span>
+            <p className="text-slate-400 font-bold">No emergency requests yet. Create your first one above.</p>
           </div>
-        </div>
+        ) : requests.map((req, i) => (
+          <div key={i} className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center justify-between hover:shadow-md transition-shadow">
+            <div className="flex items-center gap-5">
+              <div className={cn(
+                'w-14 h-14 rounded-2xl flex flex-col items-center justify-center text-white shadow-lg',
+                req.urgency === 'critical' ? 'bg-[#ee2b2b]' : 'bg-slate-800'
+              )}>
+                <span className="text-sm font-black">{req.blood_group}</span>
+              </div>
+              <div>
+                <h4 className="font-black text-slate-900">Request #{req.id}</h4>
+                <p className="text-xs text-slate-500 mt-1">{req.units_required} units needed • {new Date(req.created_at).toLocaleDateString()}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className={cn(
+                'text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full',
+                req.urgency === 'critical' ? 'bg-red-100 text-[#ee2b2b]' : 'bg-slate-100 text-slate-500'
+              )}>
+                {req.urgency}
+              </span>
+              <span className={cn(
+                'text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full',
+                req.status === 'fulfilled' ? 'bg-green-100 text-green-600' : 'bg-yellow-50 text-yellow-600'
+              )}>
+                {req.status || 'pending'}
+              </span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function RequestsTab() {
+// ─────────────────── INVENTORY TAB ───────────────────
+function InventoryTab({ inventory, onRefresh }: { inventory: any[], onRefresh: () => void }) {
+  const [editingType, setEditingType] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [message, setMessage] = useState('');
+
+  const getUnits = (type: string) => {
+    const item = inventory.find(i => i.blood_group === type);
+    return item?.units ?? '—';
+  };
+
+  const getStatus = (units: number | string) => {
+    if (units === '—' || units === 0) return { label: 'Empty', color: 'bg-red-100 text-red-600' };
+    if ((units as number) < 20) return { label: 'Critical', color: 'bg-red-100 text-red-600' };
+    if ((units as number) < 60) return { label: 'Low', color: 'bg-yellow-100 text-yellow-600' };
+    return { label: 'Optimal', color: 'bg-green-100 text-green-600' };
+  };
+
+  const handleSave = async (type: string) => {
+    setIsSaving(true);
+    try {
+      await apiFetch('/hospital/inventory', {
+        method: 'PUT',
+        body: JSON.stringify({ blood_group: type, units: parseInt(editValue) }),
+      });
+      setMessage(`${type} updated to ${editValue} units`);
+      setEditingType(null);
+      onRefresh();
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err: any) {
+      setMessage('Failed to update: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
-    <div className="bg-white rounded-3xl p-12 border border-slate-100 shadow-sm text-center">
-      <div className="w-20 h-20 bg-[#ee2b2b]/5 rounded-3xl flex items-center justify-center text-[#ee2b2b] mx-auto mb-6">
-        <span className="material-symbols-outlined text-4xl">emergency_share</span>
+    <div className="space-y-6">
+      {message && (
+        <div className="p-4 bg-blue-50 text-blue-700 rounded-xl font-bold border border-blue-200">{message}</div>
+      )}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {BLOOD_TYPES.map((type) => {
+          const units = getUnits(type);
+          const status = getStatus(units);
+          const isEditing = editingType === type;
+          return (
+            <div key={type} className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all group border-b-4 border-b-transparent hover:border-b-[#ee2b2b]">
+              <div className="flex justify-between items-center mb-6">
+                <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-900 font-black text-xl group-hover:bg-[#ee2b2b] group-hover:text-white transition-colors">
+                  {type}
+                </div>
+                <span className={cn('text-[9px] font-black uppercase px-2 py-1 rounded-full', status.color)}>
+                  {status.label}
+                </span>
+              </div>
+              <div className="space-y-1 mb-4">
+                <p className="text-xs font-bold text-slate-400">Total Units</p>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    min="0"
+                    value={editValue}
+                    onChange={e => setEditValue(e.target.value)}
+                    className="text-2xl font-black text-slate-900 w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none focus:border-[#ee2b2b]"
+                    autoFocus
+                  />
+                ) : (
+                  <h4 className="text-3xl font-black text-slate-900">{units}</h4>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {isEditing ? (
+                  <>
+                    <button
+                      onClick={() => handleSave(type)}
+                      disabled={isSaving}
+                      className="flex-1 py-2 bg-[#ee2b2b] text-white text-xs font-black rounded-lg hover:bg-[#ee2b2b]/90 transition-all disabled:opacity-60"
+                    >
+                      {isSaving ? 'Saving...' : 'Save'}
+                    </button>
+                    <button
+                      onClick={() => setEditingType(null)}
+                      className="py-2 px-3 bg-slate-100 text-slate-500 text-xs font-black rounded-lg hover:bg-slate-200 transition-all"
+                    >
+                      ✕
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => { setEditingType(type); setEditValue(units === '—' ? '0' : units.toString()); }}
+                    className="w-full py-2 text-xs font-black text-slate-400 hover:text-[#ee2b2b] border border-slate-100 hover:border-[#ee2b2b] rounded-lg transition-all"
+                  >
+                    Update Units
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
-      <h2 className="text-2xl font-black text-slate-900 mb-2">Emergency Request Wizard</h2>
-      <p className="text-slate-500 max-w-md mx-auto font-medium">Configure advanced AI parameters for your emergency requirement.</p>
     </div>
   );
 }
 
-function InventoryTab() {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-      {['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((type, i) => (
-        <div key={i} className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-all border-b-4 border-b-transparent hover:border-b-[#ee2b2b] group">
-          <div className="flex justify-between items-center mb-8">
-            <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-900 font-black text-xl group-hover:bg-[#ee2b2b] group-hover:text-white transition-colors">
-              {type}
-            </div>
-            <div className="text-right">
-              <span className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</span>
-              <span className="text-[10px] font-black text-green-500 uppercase">Optimal</span>
-            </div>
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs font-bold text-slate-400">Total Units</p>
-            <h4 className="text-3xl font-black text-slate-900">428</h4>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
+// ─────────────────── MAP TAB ───────────────────
 function MapTab() {
   return (
     <div className="h-[600px] bg-slate-900 rounded-3xl relative overflow-hidden flex items-center justify-center text-white border-8 border-white shadow-2xl">
@@ -800,6 +668,93 @@ function MapTab() {
         <div className="mt-8 flex gap-4 justify-center">
           <div className="px-4 py-2 bg-white/5 rounded-xl border border-white/10 text-xs font-black uppercase">Active Donors: 42</div>
           <div className="px-4 py-2 bg-white/5 rounded-xl border border-white/10 text-xs font-black uppercase">Ambulances: 03</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────── ANALYTICS TAB ───────────────────
+function AnalyticsTab({ requests, inventory }: { requests: any[], inventory: any[] }) {
+  const criticalCount = requests.filter(r => r.urgency === 'critical').length;
+  const standardCount = requests.filter(r => r.urgency === 'standard').length;
+  const fulfilledCount = requests.filter(r => r.status === 'fulfilled').length;
+
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {[
+          { label: 'Critical Requests', value: criticalCount, color: '#ee2b2b', icon: 'emergency' },
+          { label: 'Standard Requests', value: standardCount, color: '#3b82f6', icon: 'local_hospital' },
+          { label: 'Fulfilled', value: fulfilledCount, color: '#10b981', icon: 'check_circle' },
+        ].map((s, i) => (
+          <div key={i} className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm">
+            <div className="flex justify-between items-start mb-4">
+              <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{s.label}</p>
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white" style={{ backgroundColor: s.color }}>
+                <span className="material-symbols-outlined text-lg">{s.icon}</span>
+              </div>
+            </div>
+            <h3 className="text-4xl font-black text-slate-900">{s.value}</h3>
+          </div>
+        ))}
+      </div>
+
+      <div className="bg-slate-900 rounded-3xl p-8 text-white relative overflow-hidden shadow-2xl">
+        <div className="absolute top-0 right-0 p-8">
+          <span className="material-symbols-outlined text-white/10 text-9xl">psychology</span>
+        </div>
+        <div className="relative z-10 max-w-lg">
+          <span className="text-[10px] font-black text-[#ee2b2b] uppercase tracking-[0.2em] bg-red-500/10 px-3 py-1.5 rounded-full inline-block mb-4">AI Prediction Engine</span>
+          <h3 className="text-2xl font-black leading-tight mb-4">Upcoming O- Shortage Predicted for Next Friday</h3>
+          <p className="text-sm font-medium text-slate-400 leading-relaxed mb-6">Based on historical data and upcoming regional events, we anticipate a 40% increase in blood demand. Recommend initiating a proactive donor campaign.</p>
+          <button className="bg-white text-slate-900 px-6 py-3 rounded-xl font-black text-xs hover:scale-105 transition-all">START CAMPAIGN</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────── SETTINGS TAB ───────────────────
+function SettingsTab({ user }: { user: any }) {
+  return (
+    <div className="max-w-2xl space-y-6">
+      <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+        <h3 className="text-lg font-black text-slate-900 mb-6">Account Information</h3>
+        <div className="space-y-4">
+          {[
+            { label: 'Hospital Name', value: user?.name || 'City General Hospital' },
+            { label: 'Email', value: user?.email || '—' },
+            { label: 'Role', value: 'Hospital' },
+            { label: 'Account ID', value: user?.id || '—' },
+          ].map((field, i) => (
+            <div key={i} className="flex justify-between items-center py-3 border-b border-slate-50 last:border-0">
+              <span className="text-sm font-bold text-slate-500">{field.label}</span>
+              <span className="text-sm font-black text-slate-900">{field.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+        <h3 className="text-lg font-black text-slate-900 mb-2">Notification Preferences</h3>
+        <p className="text-sm text-slate-500 mb-6">Choose which alerts you want to receive.</p>
+        <div className="space-y-4">
+          {[
+            'Critical blood shortage alerts',
+            'New donor match notifications',
+            'Request fulfilled updates',
+            'Weekly inventory summary',
+          ].map((pref, i) => (
+            <label key={i} className="flex items-center justify-between cursor-pointer group">
+              <span className="text-sm font-bold text-slate-700 group-hover:text-slate-900 transition-colors">{pref}</span>
+              <div className="relative">
+                <input type="checkbox" defaultChecked className="sr-only peer" />
+                <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:bg-[#ee2b2b] transition-colors"></div>
+                <div className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5"></div>
+              </div>
+            </label>
+          ))}
         </div>
       </div>
     </div>

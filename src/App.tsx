@@ -23,6 +23,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 export default function App() {
   return (
     <Routes>
+      {/* Public routes - wrapped in Layout (has public navbar/sidebar) */}
       <Route path="/" element={<Layout />}>
         <Route index element={<HomePage />} />
         <Route path="login" element={<Login />} />
@@ -36,37 +37,37 @@ export default function App() {
         <Route path="terms" element={<TermsOfService />} />
         <Route path="partnership" element={<HospitalPartnership />} />
         <Route path="support" element={<Support />} />
-
-        {/* Admin Routes */}
-        <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
-          <Route path="admin" element={<AdminDashboard />} />
-          <Route path="admin/hospitals" element={<AdminDashboard />} />
-          <Route path="admin/donors" element={<AdminDashboard />} />
-          <Route path="admin/analytics" element={<AdminDashboard />} />
-          <Route path="admin/settings" element={<AdminDashboard />} />
-        </Route>
-
-        {/* Hospital Routes */}
-        <Route element={<ProtectedRoute allowedRoles={['hospital']} />}>
-          <Route path="hospital" element={<HospitalDashboard />} />
-          <Route path="hospital/requests" element={<HospitalDashboard />} />
-          <Route path="hospital/inventory" element={<HospitalDashboard />} />
-        </Route>
-
-        {/* Donor Routes */}
-        <Route element={<ProtectedRoute allowedRoles={['donor']} />}>
-          <Route path="donor" element={<DonorApp />} />
-          <Route path="donor/centers" element={<DonorApp />} />
-          <Route path="donor/pending" element={<DonorApp />} />
-          <Route path="donor/settings" element={<DonorApp />} />
-          <Route path="donor/impact" element={<DonorApp />} />
-          <Route path="donor/community" element={<DonorApp />} />
-        </Route>
-
-        {/* Shared Routes */}
         <Route path="analytics" element={<Analytics />} />
         <Route path="tracking" element={<LiveTracking />} />
-      </Route >
-    </Routes >
+      </Route>
+
+      {/* Dashboard routes - NO Layout wrapper, each dashboard has its own sidebar */}
+
+      {/* Admin Routes */}
+      <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
+        <Route path="admin" element={<AdminDashboard />} />
+        <Route path="admin/hospitals" element={<AdminDashboard />} />
+        <Route path="admin/donors" element={<AdminDashboard />} />
+        <Route path="admin/analytics" element={<AdminDashboard />} />
+        <Route path="admin/settings" element={<AdminDashboard />} />
+      </Route>
+
+      {/* Hospital Routes */}
+      <Route element={<ProtectedRoute allowedRoles={['hospital']} />}>
+        <Route path="hospital" element={<HospitalDashboard />} />
+        <Route path="hospital/requests" element={<HospitalDashboard />} />
+        <Route path="hospital/inventory" element={<HospitalDashboard />} />
+      </Route>
+
+      {/* Donor Routes */}
+      <Route element={<ProtectedRoute allowedRoles={['donor']} />}>
+        <Route path="donor" element={<DonorApp />} />
+        <Route path="donor/centers" element={<DonorApp />} />
+        <Route path="donor/pending" element={<DonorApp />} />
+        <Route path="donor/settings" element={<DonorApp />} />
+        <Route path="donor/impact" element={<DonorApp />} />
+        <Route path="donor/community" element={<DonorApp />} />
+      </Route>
+    </Routes>
   );
 }

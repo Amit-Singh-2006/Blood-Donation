@@ -82,8 +82,17 @@ export default function Login() {
   };
 
   const handleGoogleSignIn = async () => {
-    setIsLoading(true);
     setError(null);
+
+    // Require admin key before allowing Google Sign-In for admin role
+    if (role === 'admin') {
+      if (adminKey !== '7291admin') {
+        setError('Invalid Admin Access Key. Please enter the correct key before signing in with Google.');
+        return;
+      }
+    }
+
+    setIsLoading(true);
     try {
       await loginWithGoogle(role);
       if (role === 'donor') navigate('/donor');
@@ -91,7 +100,6 @@ export default function Login() {
       else if (role === 'admin') navigate('/admin');
     } catch (err: any) {
       console.error("Google Sign-In Error:", err);
-      alert(`Google Sign-In Error: ${err.message || err.code || 'Unknown Error'}`);
       setError('Failed to sign in with Google');
     } finally {
       setIsLoading(false);
