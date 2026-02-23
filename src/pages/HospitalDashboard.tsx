@@ -245,7 +245,7 @@ export default function HospitalDashboard() {
       >
         <span className="material-symbols-outlined">forum</span>
       </button>
-      <Chat isOpen={showChat} recipientName="Emergency Center" recipientType="admin" onClose={() => setShowChat(false)} />
+      <Chat isOpen={showChat} recipientName="Emergency Center" recipientType="hospital" onClose={() => setShowChat(false)} />
     </div>
   );
 }
