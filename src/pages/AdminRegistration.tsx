@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { Shield, Mail, CheckCircle2, ArrowRight, Lock } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 
 export default function AdminRegistration() {
     const navigate = useNavigate();
@@ -11,8 +12,9 @@ export default function AdminRegistration() {
     const [specialId, setSpecialId] = useState('');
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [name, setName] = useState('');
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
 
@@ -23,16 +25,29 @@ export default function AdminRegistration() {
 
         setIsSubmitting(true);
 
-        // Simulate API call
-        setTimeout(() => {
-            setIsSubmitting(false);
-            setIsSuccess(true);
+        try {
+            const response = await apiFetch('/auth/register', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: name,
+                    email: email,
+                    password: password,
+                    role: 'admin'
+                }),
+            });
 
-            // Redirect to admin dashboard after success
+            localStorage.setItem('token', response.token);
+            localStorage.setItem('user', JSON.stringify(response.user));
+
+            setIsSuccess(true);
             setTimeout(() => {
                 navigate('/admin');
             }, 2000);
-        }, 1500);
+        } catch (err: any) {
+            setError(err.message || 'Registration failed');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     if (isSuccess) {
@@ -55,7 +70,7 @@ export default function AdminRegistration() {
     }
 
     return (
-        <div className="max-w-2xl mx-auto py-10">
+        <div className="max-w-2xl mx-auto py-10 px-4">
             <div className="text-center mb-10">
                 <h1 className="text-3xl font-bold text-slate-900">Admin Registration</h1>
                 <p className="text-slate-600 mt-2">Create an administrative account to oversee network operations using your special ID.</p>
@@ -94,7 +109,21 @@ export default function AdminRegistration() {
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                            <Mail className="w-4 h-4" /> Gmail Address
+                            <Lock className="w-4 h-4" /> Full Name
+                        </label>
+                        <input
+                            required
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="John Doe"
+                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                            <Mail className="w-4 h-4" /> Email Address
                         </label>
                         <input
                             required

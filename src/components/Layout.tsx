@@ -70,7 +70,7 @@ export default function Layout() {
                 <NavLink to="/admin" icon="dashboard" label="Network Overview" />
                 <NavLink to="/admin/hospitals" icon="local_hospital" label="Hospitals" />
                 <NavLink to="/admin/donors" icon="group" label="Donors" />
-                <NavLink to="/analytics" icon="query_stats" label="Analytics" />
+                <NavLink to="/admin/analytics" icon="query_stats" label="Analytics" />
                 <NavLink to="/admin/settings" icon="settings" label="Settings" />
               </>
             ) : (
@@ -86,15 +86,15 @@ export default function Layout() {
 
           <div className="p-4 border-t border-slate-100">
             <div className="flex items-center gap-3 px-2 mb-4">
-              <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
-                <span className="material-symbols-outlined text-slate-400">person</span>
+              <div className="w-10 h-10 rounded-full bg-[#ee2b2b]/10 flex items-center justify-center overflow-hidden">
+                <span className="material-symbols-outlined text-[#ee2b2b]">person</span>
               </div>
               <div className="overflow-hidden">
                 <p className="text-sm font-bold truncate">
-                  {location.pathname.startsWith('/admin') ? 'Sarah Jenkins' : 'City General'}
+                  {user?.name || user?.email?.split('@')[0] || 'User'}
                 </p>
-                <p className="text-xs text-slate-500 truncate">
-                  {location.pathname.startsWith('/admin') ? 'System Admin' : 'Hospital Admin'}
+                <p className="text-xs text-slate-500 truncate capitalize">
+                  {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User'}
                 </p>
               </div>
             </div>

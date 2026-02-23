@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
+import { apiFetch } from '../lib/api';
 
 type Step = 'basic' | 'location' | 'contact' | 'infrastructure' | 'verification';
 
 export default function HospitalRegistration() {
     const navigate = useNavigate();
     const [currentStep, setCurrentStep] = useState<Step>('basic');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState('');
     const [formData, setFormData] = useState({
         hospitalName: '',
         registrationId: '',
@@ -16,6 +19,7 @@ export default function HospitalRegistration() {
         state: '',
         zipCode: '',
         email: '',
+        password: '', // Added from main
         phone: '',
         emergencyHotline: '',
         website: '',
@@ -33,6 +37,32 @@ export default function HospitalRegistration() {
         { key: 'infrastructure', label: 'Infrastructure', icon: 'meeting_room' },
         { key: 'verification', label: 'Verification', icon: 'verified_user' },
     ];
+
+    const handleSubmit = async () => {
+        setIsSubmitting(true);
+        setError('');
+        try {
+            const response = await apiFetch('/auth/register', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: formData.hospitalName,
+                    email: formData.email,
+                    password: formData.password || 'password123', // Use a default if not set, or ensure it's collected
+                    role: 'hospital',
+                    hospital_name: formData.hospitalName,
+                    city: formData.city,
+                    contact_number: formData.phone
+                }),
+            });
+            localStorage.setItem('token', response.token);
+            localStorage.setItem('user', JSON.stringify(response.user));
+            navigate('/hospital');
+        } catch (err: any) {
+            setError(err.message || 'Registration failed');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     const handleNext = () => {
         const currentIndex = steps.findIndex(s => s.key === currentStep);
@@ -100,7 +130,7 @@ export default function HospitalRegistration() {
                                         <div className={`absolute right-1/2 top-4 w-full h-0.5 -translate-y-1/2 -z-10 ${isPast ? 'bg-[#ee2b2b]' : 'bg-slate-200'}`}></div>
                                     )}
                                     <div className={`w-9 h-9 rounded-full flex items-center justify-center transition-all ${isActive ? 'bg-[#ee2b2b] text-white shadow-lg shadow-[#ee2b2b]/30 scale-110' :
-                                            isPast ? 'bg-[#ee2b2b] text-white' : 'bg-slate-200 text-slate-500'
+                                        isPast ? 'bg-[#ee2b2b] text-white' : 'bg-slate-200 text-slate-500'
                                         }`}>
                                         {isPast ? (
                                             <span className="material-symbols-outlined text-sm">check</span>
@@ -170,8 +200,8 @@ export default function HospitalRegistration() {
                                                 key={type}
                                                 onClick={() => updateFormData('hospitalType', type)}
                                                 className={`py-3 px-4 rounded-xl text-sm font-bold border-2 transition-all ${formData.hospitalType === type
-                                                        ? 'border-[#ee2b2b] bg-[#ee2b2b]/5 text-[#ee2b2b]'
-                                                        : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
+                                                    ? 'border-[#ee2b2b] bg-[#ee2b2b]/5 text-[#ee2b2b]'
+                                                    : 'border-slate-100 bg-slate-50 text-slate-500 hover:border-slate-200'
                                                     }`}
                                             >
                                                 {type}
@@ -342,8 +372,8 @@ export default function HospitalRegistration() {
                                                         key={v}
                                                         onClick={() => updateFormData('hasBloodBank', v.toLowerCase())}
                                                         className={`flex-1 py-2 rounded-xl text-sm font-bold border-2 transition-all ${formData.hasBloodBank === v.toLowerCase()
-                                                                ? 'border-[#ee2b2b] bg-[#ee2b2b] text-white shadow-lg shadow-[#ee2b2b]/20'
-                                                                : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                                                            ? 'border-[#ee2b2b] bg-[#ee2b2b] text-white shadow-lg shadow-[#ee2b2b]/20'
+                                                            : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
                                                             }`}
                                                     >
                                                         {v}
@@ -359,8 +389,8 @@ export default function HospitalRegistration() {
                                                                 key={type}
                                                                 onClick={() => toggleSelection('bloodGroups', type)}
                                                                 className={`w-10 h-10 rounded-lg text-[10px] font-black border transition-all ${formData.bloodGroups.includes(type)
-                                                                        ? 'bg-[#ee2b2b] text-white border-[#ee2b2b]'
-                                                                        : 'bg-white text-slate-500 border-slate-200 hover:border-[#ee2b2b]'
+                                                                    ? 'bg-[#ee2b2b] text-white border-[#ee2b2b]'
+                                                                    : 'bg-white text-slate-500 border-slate-200 hover:border-[#ee2b2b]'
                                                                     }`}
                                                             >
                                                                 {type}
@@ -381,8 +411,8 @@ export default function HospitalRegistration() {
                                                 key={dept}
                                                 onClick={() => toggleSelection('specializations', dept)}
                                                 className={`px-4 py-2 rounded-full text-xs font-black border transition-all ${formData.specializations.includes(dept)
-                                                        ? 'bg-slate-900 text-white border-slate-900 shadow-xl shadow-slate-900/10'
-                                                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-900/50'
+                                                    ? 'bg-slate-900 text-white border-slate-900 shadow-xl shadow-slate-900/10'
+                                                    : 'bg-white text-slate-500 border-slate-200 hover:border-slate-900/50'
                                                     }`}
                                             >
                                                 {dept}
@@ -454,10 +484,11 @@ export default function HospitalRegistration() {
                             Back
                         </button>
                         <button
-                            onClick={currentStep === 'verification' ? () => navigate('/hospital') : handleNext}
-                            className="bg-[#ee2b2b] text-white px-10 py-4 rounded-xl font-black shadow-xl shadow-[#ee2b2b]/20 hover:bg-[#ee2b2b]/90 active:scale-95 transition-all flex items-center gap-3"
+                            onClick={currentStep === 'verification' ? handleSubmit : handleNext}
+                            disabled={isSubmitting}
+                            className="bg-[#ee2b2b] text-white px-10 py-4 rounded-xl font-black shadow-xl shadow-[#ee2b2b]/20 hover:bg-[#ee2b2b]/90 active:scale-95 transition-all flex items-center gap-3 disabled:opacity-50"
                         >
-                            {currentStep === 'verification' ? 'Complete Onboarding' : 'Continue'}
+                            {isSubmitting ? 'Processing...' : currentStep === 'verification' ? 'Complete Onboarding' : 'Continue'}
                             <span className="material-symbols-outlined">
                                 {currentStep === 'verification' ? 'done_all' : 'arrow_forward'}
                             </span>
@@ -470,6 +501,7 @@ export default function HospitalRegistration() {
                     Already have an account?
                     <button onClick={() => navigate('/')} className="text-[#ee2b2b] hover:underline ml-1">Sign in</button>
                 </p>
+                {error && <p className="text-center text-red-500 font-bold mt-4">{error}</p>}
             </div>
         </div>
     );

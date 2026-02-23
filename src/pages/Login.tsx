@@ -2,27 +2,40 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { apiFetch } from '../lib/api';
+import { useAuth } from '../context/AuthContext';
 
 export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { loginWithGoogle } = useAuth();
   const [role, setRole] = useState<'donor' | 'hospital' | 'admin'>('donor');
   const [isLoading, setIsLoading] = useState(false);
   const [isEmergencyAvailable, setIsEmergencyAvailable] = useState(false);
-  const [isSupportOpen, setIsSupportOpen] = useState(false);
   const [isRegistering, setIsRegistering] = useState(location.pathname === '/register-donor');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [bloodGroup, setBloodGroup] = useState('');
+  const [adminKey, setAdminKey] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
 
+    // Validate admin special key
+    if (role === 'admin' && adminKey !== '7291admin') {
+      setError('Invalid Admin Access Key. Please contact your system administrator.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
+      let authResponse;
       if (isRegistering) {
         // Register
         const registerData = {
@@ -32,28 +45,52 @@ export default function Login() {
           role,
           ...(role === 'donor' && { blood_group: bloodGroup }),
         };
-        const response = await apiFetch('/auth/register', {
+        authResponse = await apiFetch('/auth/register', {
           method: 'POST',
           body: JSON.stringify(registerData),
         });
-        localStorage.setItem('token', response.token);
-        localStorage.setItem('user', JSON.stringify(response.user));
       } else {
         // Login
-        const response = await apiFetch('/auth/login', {
+        authResponse = await apiFetch('/auth/login', {
           method: 'POST',
           body: JSON.stringify({ email, password }),
         });
-        localStorage.setItem('token', response.token);
-        localStorage.setItem('user', JSON.stringify(response.user));
+      }
+
+      localStorage.setItem('token', authResponse.token);
+      localStorage.setItem('user', JSON.stringify(authResponse.user));
+
+      // Ensure the user's actual role matches the selected login tab
+      const userRole = authResponse.user.role;
+      if (userRole !== role) {
+        // Role mismatch — reject login and clear storage
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setError(`Invalid credentials. Please use the correct login tab for your account type.`);
+        return;
       }
 
       // Navigate based on role
+      if (userRole === 'donor') navigate('/donor');
+      else if (userRole === 'hospital') navigate('/hospital');
+      else if (userRole === 'admin') navigate('/admin');
+    } catch (err: any) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      await loginWithGoogle(role);
       if (role === 'donor') navigate('/donor');
       else if (role === 'hospital') navigate('/hospital');
       else if (role === 'admin') navigate('/admin');
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      setError('Failed to sign in with Google');
     } finally {
       setIsLoading(false);
     }
@@ -87,56 +124,14 @@ export default function Login() {
           <Link to="/impact-reports" className="text-sm font-semibold hover:text-[#ee2b2b] transition-colors">Impact Reports</Link>
         </nav>
         <div className="flex items-center gap-4">
-          <div className="relative">
-            <button
-              onClick={() => setIsSupportOpen(!isSupportOpen)}
-              className="text-sm font-bold text-slate-600 hover:text-[#ee2b2b] transition-colors"
-            >
-              Support
-            </button>
-            {isSupportOpen && (
-              <div className="absolute top-full right-0 mt-4 bg-white rounded-xl shadow-[0_10px_25px_-5px_rgba(242,13,13,0.1),0_8px_10px_-6px_rgba(0,0,0,0.01)] border border-slate-100 p-5 w-72 z-50">
-                <h4 className="text-sm font-black text-slate-900 mb-3 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[#ee2b2b]">support_agent</span>
-                  Support Contacts
-                </h4>
-                <div className="space-y-1.5">
-                  <a href="mailto:support@lifelink.ai" className="group flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg transition-colors">
-                    <div className="bg-slate-100 p-2 rounded-lg group-hover:bg-[#ee2b2b]/10 transition-colors">
-                      <span className="material-symbols-outlined text-slate-500 group-hover:text-[#ee2b2b] text-sm transition-colors">mail</span>
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-tight">General</p>
-                      <p className="text-sm font-bold text-slate-800">support@lifelink.ai</p>
-                    </div>
-                  </a>
-                  <a href="mailto:emergency@lifelink.ai" className="group flex items-center gap-3 p-2 hover:bg-red-50 rounded-lg transition-colors">
-                    <div className="bg-red-100/50 p-2 rounded-lg group-hover:bg-red-200/50 transition-colors">
-                      <span className="material-symbols-outlined text-red-500 text-sm">emergency</span>
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-red-500 uppercase tracking-tight">Emergency</p>
-                      <p className="text-sm font-bold text-red-900">emergency@lifelink.ai</p>
-                    </div>
-                  </a>
-                  <a href="tel:+18005550199" className="group flex items-center gap-3 p-2 hover:bg-slate-50 rounded-lg transition-colors">
-                    <div className="bg-slate-100 p-2 rounded-lg group-hover:bg-[#ee2b2b]/10 transition-colors">
-                      <span className="material-symbols-outlined text-slate-500 group-hover:text-[#ee2b2b] text-sm transition-colors">phone</span>
-                    </div>
-                    <div>
-                      <p className="text-xs font-bold text-slate-500 uppercase tracking-tight">Helpline (24/7)</p>
-                      <p className="text-sm font-bold text-slate-800">+1 (800) 555-0199</p>
-                    </div>
-                  </a>
-                </div>
-              </div>
-            )}
-          </div>
+          <Link
+            to="/support"
+            className="text-sm font-bold text-slate-600 hover:text-[#ee2b2b] transition-colors"
+          >
+            Support
+          </Link>
           <button
-            onClick={() => {
-              if (role === 'hospital') navigate('/register-hospital');
-              else navigate('/register-donor');
-            }}
+            onClick={() => navigate(`/register-${role}`)}
             className="bg-[#ee2b2b] text-white px-5 py-2 rounded-lg text-sm font-bold shadow-lg shadow-[#ee2b2b]/20 hover:bg-[#ee2b2b]/90 transition-all active:scale-95"
           >
             Join Network
@@ -257,18 +252,44 @@ export default function Login() {
                 <div className="relative group">
                   <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">lock</span>
                   <input
-                    type="password"
+                    type={showPassword ? 'text' : 'password'}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-12 pr-12 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
                     placeholder="••••••••"
                   />
-                  <button type="button" className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                    <span className="material-symbols-outlined text-lg">visibility</span>
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#ee2b2b] transition-colors">
+                    <span className="material-symbols-outlined text-lg">{showPassword ? 'visibility_off' : 'visibility'}</span>
                   </button>
                 </div>
               </div>
+
+              {/* Admin Special Key Field */}
+              {role === 'admin' && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-1.5"
+                >
+                  <label className="text-sm font-black text-[#ee2b2b] ml-1 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-base">shield_lock</span>
+                    Admin Access Key
+                  </label>
+                  <div className="relative group">
+                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#ee2b2b]/60 group-focus-within:text-[#ee2b2b] transition-colors">key</span>
+                    <input
+                      type="password"
+                      required={role === 'admin'}
+                      value={adminKey}
+                      onChange={(e) => setAdminKey(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3.5 bg-red-50 border border-[#ee2b2b]/20 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400 font-mono tracking-widest"
+                      placeholder="LIFELINK-ADMIN-••••"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 ml-1 font-medium">🔐 This key is issued by LifeLink AI system administrators only.</p>
+                </motion.div>
+              )}
 
               <button
                 type="submit"
@@ -292,7 +313,7 @@ export default function Login() {
             </div>
 
             {/* Social Auth */}
-            <button className="w-full flex items-center justify-center gap-3 py-3.5 border border-slate-200 rounded-lg font-bold text-slate-700 hover:bg-slate-50 transition-colors">
+            <button type="button" onClick={handleGoogleSignIn} disabled={isLoading} className="w-full flex items-center justify-center gap-3 py-3.5 border border-slate-200 rounded-lg font-bold text-slate-700 hover:bg-slate-50 transition-colors disabled:opacity-50">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"></path>
                 <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"></path>
@@ -320,9 +341,9 @@ export default function Login() {
             <span className="text-xs font-bold uppercase tracking-tighter">Secure & Encrypted Matching</span>
           </div>
           <div className="flex gap-6">
-            <a className="text-xs font-bold text-slate-500 hover:text-[#ee2b2b]" href="#">Privacy Policy</a>
-            <a className="text-xs font-bold text-slate-500 hover:text-[#ee2b2b]" href="#">Terms of Service</a>
-            <a className="text-xs font-bold text-slate-500 hover:text-[#ee2b2b]" href="#">Hospital Partnership</a>
+            <Link className="text-xs font-bold text-slate-500 hover:text-[#ee2b2b]" to="/privacy">Privacy Policy</Link>
+            <Link className="text-xs font-bold text-slate-500 hover:text-[#ee2b2b]" to="/terms">Terms of Service</Link>
+            <Link className="text-xs font-bold text-slate-500 hover:text-[#ee2b2b]" to="/partnership">Hospital Partnership</Link>
           </div>
           <p className="text-xs font-bold text-slate-400">© 2024 LifeLink AI. All rights reserved.</p>
         </div>

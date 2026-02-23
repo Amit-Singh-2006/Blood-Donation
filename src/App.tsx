@@ -13,6 +13,10 @@ import HospitalDashboard from './pages/HospitalDashboard';
 import DonorApp from './pages/DonorApp';
 import Analytics from './pages/Analytics';
 import LiveTracking from './pages/LiveTracking';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
+import HospitalPartnership from './pages/HospitalPartnership';
+import Support from './pages/Support';
 import ProtectedRoute from './components/ProtectedRoute';
 
 export default function App() {
@@ -26,12 +30,17 @@ export default function App() {
         <Route path="how-it-works" element={<HowItWorks />} />
         <Route path="emergency-network" element={<EmergencyNetwork />} />
         <Route path="impact-reports" element={<ImpactReports />} />
+        <Route path="privacy" element={<PrivacyPolicy />} />
+        <Route path="terms" element={<TermsOfService />} />
+        <Route path="partnership" element={<HospitalPartnership />} />
+        <Route path="support" element={<Support />} />
 
         {/* Admin Routes */}
         <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
           <Route path="admin" element={<AdminDashboard />} />
           <Route path="admin/hospitals" element={<AdminDashboard />} />
           <Route path="admin/donors" element={<AdminDashboard />} />
+          <Route path="admin/analytics" element={<AdminDashboard />} />
           <Route path="admin/settings" element={<AdminDashboard />} />
         </Route>
 
