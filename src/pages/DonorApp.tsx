@@ -60,7 +60,10 @@ export default function DonorApp() {
   ]);
 
   const [user, setUser] = useState<any>(null);
-  const [donations, setDonations] = useState<any[]>([]);
+  const [donations, setDonations] = useState<any[]>([
+    { id: 'd2', donation_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), hospital_name: 'St. Mary\'s Medical', units: 1, rated: false },
+    { id: 'd1', donation_date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(), hospital_name: 'City General Hospital', units: 1, rated: true }
+  ]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
@@ -73,7 +76,10 @@ export default function DonorApp() {
   const fetchDonations = async () => {
     try {
       const data = await apiFetch('/donor/donations');
-      setDonations(data);
+      if (data && data.length > 0) {
+        // Merge API data with dummies if needed, or just replace
+        setDonations(data.map((d: any) => ({ ...d, rated: false })));
+      }
     } catch (err) {
       console.error('Failed to fetch donations:', err);
     }
@@ -220,12 +226,14 @@ export default function DonorApp() {
         isOpen={showFeedback}
         onClose={() => setShowFeedback(false)}
         targetType="hospital"
-        targetName="Red Cross Center #4"
+        targetName="St. Mary's Medical"
         onSubmit={(comment) => {
           setHospitalRated(true);
+          // Also update the donation list for the demo
+          setDonations(prev => prev.map(d => d.id === 'd2' ? { ...d, rated: true } : d));
           setFeedPosts(prev => [{
             id: Date.now(),
-            user: "Alex Johnson",
+            user: (user as any)?.name || "Alex Johnson",
             time: "Just now",
             content: comment,
             likes: 0,
@@ -377,7 +385,7 @@ function DashboardView({
                         <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
                       </td>
                       <td className="py-4 text-right">
-                        {hospitalRated ? (
+                        {donation.rated ? (
                           <span className="text-xs font-bold text-slate-400">Rated</span>
                         ) : (
                           <button onClick={onRate} className="text-xs font-bold text-[#ee2b2b] hover:bg-[#ee2b2b]/5 px-3 py-1.5 rounded-lg transition-colors">

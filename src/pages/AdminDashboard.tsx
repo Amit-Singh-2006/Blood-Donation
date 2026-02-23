@@ -1,21 +1,50 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { cn } from '../lib/utils';
 
 export default function AdminDashboard() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('overview');
   const [isExporting, setIsExporting] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState([
+    { id: 1, title: 'Critical Shortage', msg: 'Sector 4 reporting O- deficit', time: '2m ago', type: 'urgent' },
+    { id: 2, title: 'New Facility', msg: 'Westside Med joined the network', time: '1h ago', type: 'info' },
+    { id: 3, title: 'System Update', msg: 'AI Engine v2.4 deployed', time: '5h ago', type: 'system' }
+  ]);
 
   useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) setUser(JSON.parse(savedUser));
+
     if (location.pathname.includes('/hospitals')) setActiveTab('hospitals');
     else if (location.pathname.includes('/donors')) setActiveTab('donors');
     else if (location.pathname.includes('/analytics')) setActiveTab('analytics');
     else if (location.pathname.includes('/settings')) setActiveTab('settings');
     else setActiveTab('overview');
   }, [location.pathname]);
+
+  const handleSignOut = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    localStorage.removeItem('userRole');
+    navigate('/login');
+  };
+
+  const navItems = [
+    { id: 'overview', label: 'Network Health', icon: 'dashboard' },
+    { id: 'hospitals', label: 'Hospitals', icon: 'local_hospital' },
+    { id: 'donors', label: 'Donors', icon: 'group' },
+    { id: 'analytics', label: 'Analytics', icon: 'monitoring' },
+    { id: 'settings', label: 'Settings', icon: 'settings_suggest' },
+  ];
 
   const handleExportPDF = () => {
     setIsExporting(true);
@@ -97,46 +126,206 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="p-8 space-y-8 max-w-7xl mx-auto w-full relative">
-      {/* Title & Actions */}
-      <div className="flex justify-between items-end">
-        <div>
-          <h2 className="text-2xl font-extrabold text-slate-900">
-            {activeTab === 'overview' && "Network Health Overview"}
-            {activeTab === 'hospitals' && "Hospital Network Management"}
-            {activeTab === 'donors' && "Donor Database"}
-            {activeTab === 'analytics' && "Regional Analytics & Planning"}
-            {activeTab === 'settings' && "System Settings"}
-          </h2>
-          <p className="text-slate-500">
-            {activeTab === 'overview' && "Real-time status of LifeLink AI donor-hospital connectivity."}
-            {activeTab === 'hospitals' && "Monitor and manage registered medical facilities."}
-            {activeTab === 'donors' && "Overview of active blood donors in the network."}
-            {activeTab === 'analytics' && "Analysis of regional hospital demand vs. donor availability."}
-            {activeTab === 'settings' && "Configure system-wide parameters and AI thresholds."}
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold hover:bg-slate-50 transition-all">
-            <span className="material-symbols-outlined text-sm">calendar_today</span>
-            <span>Last 30 Days</span>
-          </button>
-          <button
-            onClick={handleExportPDF}
-            disabled={isExporting}
-            className="flex items-center gap-2 px-6 py-3 bg-[#ee2b2b] text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-[#ee2b2b]/90 shadow-xl shadow-[#ee2b2b]/20 transition-all active:scale-95 disabled:opacity-50"
-          >
-            <span className="material-symbols-outlined text-sm">{isExporting ? 'sync' : 'file_download'}</span>
-            <span>{isExporting ? 'Generating Report...' : 'Export PDF Report'}</span>
-          </button>
-        </div>
-      </div>
+    <div className="flex min-h-screen bg-[#f8f6f6] overflow-hidden">
+      {/* Sidebar */}
+      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col z-30">
+        <div className="p-8 pb-4">
+          <div className="flex items-center gap-2 mb-8">
+            <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center">
+              <span className="material-symbols-outlined text-white">shield</span>
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-slate-900 leading-none">LifeLink AI</h2>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Admin Control</p>
+            </div>
+          </div>
 
-      {activeTab === 'overview' && <OverviewView />}
-      {activeTab === 'hospitals' && <HospitalsView />}
-      {activeTab === 'donors' && <DonorsView />}
-      {activeTab === 'analytics' && <RegionalAnalyticsView />}
-      {activeTab === 'settings' && <SettingsView />}
+          <nav className="space-y-1">
+            {navItems.map(item => (
+              <button
+                key={item.id}
+                onClick={() => setActiveTab(item.id)}
+                className={cn(
+                  'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all relative group',
+                  activeTab === item.id
+                    ? 'bg-slate-900 shadow-lg shadow-slate-200 text-white'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                )}
+              >
+                {activeTab === item.id && (
+                  <motion.div
+                    layoutId="admin-sidebar-active"
+                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[#ee2b2b] rounded-full"
+                  />
+                )}
+                <span className={cn(
+                  'material-symbols-outlined text-xl transition-colors',
+                  activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'
+                )}>
+                  {item.icon}
+                </span>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        <div className="mt-auto p-8 pt-4 space-y-3">
+          <div className="bg-slate-100 rounded-2xl p-5 border border-slate-200 shadow-sm">
+            <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">System Info</h4>
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-[10px] font-black">SA</div>
+              <div>
+                <p className="text-[11px] font-bold truncate w-32">System Admin</p>
+                <p className="text-[9px] text-[#ee2b2b] font-black uppercase tracking-tighter">Root Access</p>
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold text-slate-500 hover:bg-red-50 hover:text-[#ee2b2b] transition-all"
+          >
+            <span className="material-symbols-outlined text-lg">logout</span>
+            Sign Out
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20 shrink-0">
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-black text-slate-900 capitalize">{activeTab} Panel</h1>
+            <div className="h-6 w-px bg-slate-200 mx-2"></div>
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-[#ee2b2b]/5 text-[#ee2b2b] rounded-full text-[10px] font-bold uppercase tracking-wider">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ee2b2b] animate-pulse"></span>
+              Network Security Active
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 relative">
+            {showSearch && (
+              <motion.div
+                initial={{ width: 0, opacity: 0 }}
+                animate={{ width: 240, opacity: 1 }}
+                className="relative"
+              >
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+                <input
+                  type="text"
+                  autoFocus
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Universal Search..."
+                  className="w-full pl-9 pr-4 py-2 bg-slate-100 border-none rounded-xl text-xs focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all outline-none"
+                />
+              </motion.div>
+            )}
+
+            <div className="relative">
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className={cn(
+                  "w-10 h-10 rounded-xl flex items-center justify-center transition-all relative",
+                  showNotifications ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
+              >
+                <span className="material-symbols-outlined text-lg">notifications</span>
+                <span className="absolute top-2 right-2 w-2 h-2 bg-[#ee2b2b] rounded-full border-2 border-white"></span>
+              </button>
+
+              <AnimatePresence>
+                {showNotifications && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-[100] overflow-hidden"
+                  >
+                    <div className="p-4 border-b border-slate-100 flex justify-between items-center">
+                      <h4 className="font-black text-slate-900 text-xs uppercase tracking-widest">Notifications</h4>
+                      <button className="text-[10px] font-bold text-[#ee2b2b]">Mark all read</button>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {notifications.map(n => (
+                        <div key={n.id} className="p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 cursor-pointer">
+                          <div className="flex justify-between items-start mb-1">
+                            <p className="font-bold text-slate-900 text-xs">{n.title}</p>
+                            <span className="text-[9px] font-medium text-slate-400">{n.time}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-medium">{n.msg}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <button
+              onClick={() => setShowSearch(!showSearch)}
+              className={cn(
+                "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
+                showSearch ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              )}
+            >
+              <span className="material-symbols-outlined text-lg">search</span>
+            </button>
+            <button
+              onClick={handleExportPDF}
+              disabled={isExporting}
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#ee2b2b] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#ee2b2b]/90 shadow-lg shadow-[#ee2b2b]/10 transition-all disabled:opacity-50"
+            >
+              <span className="material-symbols-outlined text-sm">{isExporting ? 'sync' : 'description'}</span>
+              <span>Report</span>
+            </button>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, scale: 0.98, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.98, y: -10 }}
+              transition={{ duration: 0.25, ease: "easeOut" }}
+              className="max-w-7xl mx-auto w-full"
+            >
+              <div className="flex justify-between items-end mb-8">
+                <div>
+                  <h2 className="text-3xl font-black text-slate-900 tracking-tight">
+                    {activeTab === 'overview' && "Network Health Overview"}
+                    {activeTab === 'hospitals' && "Hospital Network Management"}
+                    {activeTab === 'donors' && "Donor Database"}
+                    {activeTab === 'analytics' && "Regional Analytics & Planning"}
+                    {activeTab === 'settings' && "System Settings"}
+                  </h2>
+                  <p className="text-slate-500 font-medium mt-1">
+                    {activeTab === 'overview' && "Real-time status of LifeLink AI donor-hospital connectivity."}
+                    {activeTab === 'hospitals' && "Monitor and manage registered medical facilities."}
+                    {activeTab === 'donors' && "Overview of active blood donors in the network."}
+                    {activeTab === 'analytics' && "Analysis of regional hospital demand vs. donor availability."}
+                    {activeTab === 'settings' && "Configure system-wide parameters and AI thresholds."}
+                  </p>
+                </div>
+                {activeTab === 'overview' && (
+                  <div className="flex bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm gap-2">
+                    <span className="material-symbols-outlined text-slate-400 text-sm">calendar_today</span>
+                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Last 30 Days Tracking</span>
+                  </div>
+                )}
+              </div>
+
+              {activeTab === 'overview' && <OverviewView />}
+              {activeTab === 'hospitals' && <HospitalsView initialSearch={searchQuery} />}
+              {activeTab === 'donors' && <DonorsView initialSearch={searchQuery} />}
+              {activeTab === 'analytics' && <RegionalAnalyticsView />}
+              {activeTab === 'settings' && <SettingsView />}
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </main>
     </div>
   );
 }
@@ -654,8 +843,13 @@ function OverviewView() {
   );
 }
 
-function HospitalsView() {
+function HospitalsView({ initialSearch = '' }: { initialSearch?: string }) {
   const [selectedHospital, setSelectedHospital] = useState<any>(null);
+  const [localSearch, setLocalSearch] = useState(initialSearch);
+
+  useEffect(() => {
+    setLocalSearch(initialSearch);
+  }, [initialSearch]);
 
   const hospitals = [
     {
@@ -708,6 +902,11 @@ function HospitalsView() {
     }
   ];
 
+  const filteredHospitals = hospitals.filter(h =>
+    h.name.toLowerCase().includes(localSearch.toLowerCase()) ||
+    h.location.toLowerCase().includes(localSearch.toLowerCase())
+  );
+
   if (selectedHospital) {
     return <HospitalDetailView hospital={selectedHospital} onBack={() => setSelectedHospital(null)} />;
   }
@@ -719,14 +918,20 @@ function HospitalsView() {
         <div className="flex gap-2">
           <div className="relative">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
-            <input type="text" placeholder="Search facilities..." className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-64 focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all outline-none" />
+            <input
+              type="text"
+              value={localSearch}
+              onChange={(e) => setLocalSearch(e.target.value)}
+              placeholder="Search facilities..."
+              className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-64 focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all outline-none"
+            />
           </div>
           <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors">+ Add New Hospital</button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {hospitals.map((h) => (
+        {filteredHospitals.map((h) => (
           <motion.div
             key={h.id}
             initial={{ opacity: 0, y: 10 }}
@@ -886,10 +1091,19 @@ function HospitalDetailView({ hospital, onBack }: { hospital: any, onBack: () =>
                   <span className="material-symbols-outlined text-blue-500">trending_up</span>
                   Usage Activity
                 </h4>
-                <div className="h-32 flex items-end gap-1">
+                <div className="h-32 flex items-end gap-2 px-2">
                   {[40, 70, 45, 90, 65, 80, 50].map((v, i) => (
-                    <div key={i} className="flex-1 bg-blue-500/20 rounded-t-sm relative group">
-                      <div className="absolute bottom-0 w-full bg-blue-500 rounded-t-sm transition-all" style={{ height: `${v}%` }}></div>
+                    <div key={i} className="flex-1 h-full relative group">
+                      <motion.div
+                        initial={{ height: 0 }}
+                        animate={{ height: `${v}%` }}
+                        transition={{ delay: i * 0.1, duration: 1, ease: "easeOut" }}
+                        className="absolute bottom-0 w-full bg-blue-500 rounded-t-md group-hover:bg-[#ee2b2b] transition-colors cursor-pointer"
+                      >
+                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-black px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-all pointer-events-none">
+                          {v}%
+                        </div>
+                      </motion.div>
                     </div>
                   ))}
                 </div>
@@ -1118,8 +1332,13 @@ function HospitalDetailView({ hospital, onBack }: { hospital: any, onBack: () =>
   );
 }
 
-function DonorsView() {
+function DonorsView({ initialSearch = '' }: { initialSearch?: string }) {
   const [selectedDonor, setSelectedDonor] = useState<any>(null);
+  const [localSearch, setLocalSearch] = useState(initialSearch);
+
+  useEffect(() => {
+    setLocalSearch(initialSearch);
+  }, [initialSearch]);
 
   const donors = [
     {
@@ -1190,6 +1409,11 @@ function DonorsView() {
     }
   ];
 
+  const filteredDonors = donors.filter(d =>
+    d.name.toLowerCase().includes(localSearch.toLowerCase()) ||
+    d.group.toLowerCase().includes(localSearch.toLowerCase())
+  );
+
   if (selectedDonor) {
     return <DonorProfileView donor={selectedDonor} onBack={() => setSelectedDonor(null)} />;
   }
@@ -1200,12 +1424,18 @@ function DonorsView() {
         <h3 className="text-xl font-bold text-slate-800">Top Network Donors</h3>
         <div className="relative">
           <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
-          <input type="text" placeholder="Search donors by name or blood group..." className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-72 focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all outline-none" />
+          <input
+            type="text"
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
+            placeholder="Search donors by name or blood group..."
+            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-72 focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all outline-none"
+          />
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {donors.map((d) => (
+        {filteredDonors.map((d) => (
           <motion.div
             key={d.id}
             initial={{ opacity: 0, scale: 0.95 }}
