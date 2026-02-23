@@ -217,13 +217,23 @@ function DashboardView({ setActiveTab, stats }: { setActiveTab: (tab: 'dashboard
   const [quickRequestUnits, setQuickRequestUnits] = useState(2);
   const [isMatching, setIsMatching] = useState(false);
 
-  const handleQuickMatch = () => {
+  const handleQuickMatch = async () => {
     setIsMatching(true);
-    setTimeout(() => {
+    try {
+      await apiFetch('/hospital/requests', 'POST', {
+        blood_group: quickRequestType,
+        units_required: quickRequestUnits,
+        urgency: quickRequestUrgency.split(' ')[0], // e.g. "Critical"
+        latitude: 47.6062, // Defaulting to Seattle for prototype
+        longitude: -122.3321
+      });
+      alert('Quick request created and matching started!');
+      setActiveTab('requests');
+    } catch (err: any) {
+      alert(err.message || 'Failed to create request');
+    } finally {
       setIsMatching(false);
-      setActiveTab('requests'); // Redirect to full request view or show success
-      // Ideally show a success toast here
-    }, 2000);
+    }
   };
 
   return (
@@ -552,14 +562,23 @@ function RequestWizardView({ requests }: { requests: any[] }) {
   const [reason, setReason] = useState('Major Trauma / Surgery');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!bloodType) return;
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      // Reset or show success
+    try {
+      await apiFetch('/hospital/requests', 'POST', {
+        blood_group: bloodType,
+        units_required: units,
+        urgency: urgency,
+        latitude: 47.6062, // Defaulting to Seattle for prototype
+        longitude: -122.3321
+      });
       alert('Request submitted successfully!');
-    }, 2000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit request');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

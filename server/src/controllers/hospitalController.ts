@@ -137,17 +137,28 @@ export const getPotentialDonors = async (req: AuthRequest, res: Response) => {
 
         const request = requestResult.rows[0];
 
-        // 2. Find matching donors
-        const donors = await query(
-            `SELECT u.name, d.blood_group, d.city, d.phone, d.is_eligible, d.xp_points
+        // 2. Find matching donors using distance if coordinates exist
+        let matchesQuery = `
+             SELECT u.name, d.blood_group, d.city, d.phone, d.is_eligible, d.xp_points
              FROM donors d
              JOIN users u ON d.user_id = u.id
              WHERE d.blood_group = $1
-             AND (d.city = (SELECT city FROM hospitals WHERE user_id = $2) OR d.latitude IS NOT NULL)
              AND d.is_eligible = TRUE
-             ORDER BY d.xp_points DESC`,
-            [request.blood_group, request.hospital_id]
-        );
+        `;
+        let queryParams = [request.blood_group];
+
+        if (request.latitude != null && request.longitude != null) {
+            matchesQuery += ` AND d.latitude IS NOT NULL AND calculate_distance(d.latitude, d.longitude, $2, $3) < 50 `;
+            queryParams.push(request.latitude, request.longitude);
+        } else {
+            // Fallback to hospital city
+            matchesQuery += ` AND d.city = (SELECT city FROM hospitals WHERE user_id = $2) `;
+            queryParams.push(request.hospital_id);
+        }
+
+        matchesQuery += ` ORDER BY d.xp_points DESC NULLS LAST`;
+
+        const donors = await query(matchesQuery, queryParams);
 
         res.json(donors.rows);
     } catch (err: any) {

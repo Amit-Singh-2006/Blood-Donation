@@ -73,7 +73,7 @@ export const login = async (req: Request, res: Response) => {
 
         let profileData = {};
         if (user.role === 'donor') {
-            const donorResult = await query('SELECT blood_group, city, phone, is_eligible FROM donors WHERE user_id = $1', [user.id]);
+            const donorResult = await query('SELECT blood_group, city, phone, is_eligible, xp_points, current_level, badges FROM donors WHERE user_id = $1', [user.id]);
             if (donorResult.rows.length > 0) {
                 profileData = donorResult.rows[0];
             }

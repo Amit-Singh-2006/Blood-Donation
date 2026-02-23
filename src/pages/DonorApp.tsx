@@ -449,6 +449,11 @@ function CommunityView() {
 }
 
 function RewardsView({ user }: { user: any }) {
+  const xp = user?.xp_points || 0;
+  const level = user?.current_level || 1;
+  const nextTarget = level * 100;
+  const progressPercent = Math.min(100, Math.round((xp / nextTarget) * 100));
+
   return (
     <div className="space-y-8">
       {/* Hero Section: Rank Progress */}
@@ -463,7 +468,7 @@ function RewardsView({ user }: { user: any }) {
                   <span className="material-symbols-outlined text-5xl">shield</span>
                 </div>
               </div>
-              <div className="absolute -bottom-2 -right-2 bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-widest border-2 border-white">Tier 4</div>
+              <div className="absolute -bottom-2 -right-2 bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-widest border-2 border-white">Tier {level}</div>
             </div>
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
@@ -473,15 +478,15 @@ function RewardsView({ user }: { user: any }) {
               <p className="text-slate-500 text-base mb-6">You are in the top 5% of donors in Seattle. Keep it up!</p>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm font-bold">
-                  <span className="text-[#ee2b2b]">450 / 1000 XP</span>
+                  <span className="text-[#ee2b2b]">{xp} / {nextTarget} XP</span>
                   <span className="text-slate-400">Next: Life Sentinel</span>
                 </div>
                 <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200">
-                  <div className="h-full bg-[#ee2b2b] rounded-full transition-all duration-1000" style={{ width: '45%' }}></div>
+                  <div className="h-full bg-[#ee2b2b] rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
                 </div>
                 <p className="text-xs text-slate-400 flex items-center gap-1">
                   <span className="material-symbols-outlined text-xs">info</span>
-                  550 XP remaining to unlock Sentinel status and exclusive rewards.
+                  {nextTarget - xp} XP remaining to unlock Sentinel status and exclusive rewards.
                 </p>
               </div>
             </div>

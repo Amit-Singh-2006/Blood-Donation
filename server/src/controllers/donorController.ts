@@ -30,17 +30,29 @@ export const getMatchedRequests = async (req: AuthRequest, res: Response) => {
 
         const donor = donorResult.rows[0];
 
-        // 2. Simple Matching: Same blood type + Same city (Can be expanded with radius logic later)
-        const matches = await query(
-            `SELECT br.*, h.hospital_name, h.city as hospital_city
-             FROM blood_requests br
-             JOIN hospitals h ON br.hospital_id = h.user_id
-             WHERE br.blood_group = $1 
-             AND br.status = 'Open'
-             AND (h.city = $2 OR br.latitude IS NOT NULL)
-             ORDER BY br.urgency DESC, br.created_at DESC`,
-            [donor.blood_group, donor.city]
-        );
+        // 2. Advanced Matching: Use calculate_distance if coordinates are available, else fallback to city
+        let matchesQuery = `
+            SELECT br.*, h.hospital_name, h.city as hospital_city
+            FROM blood_requests br
+            JOIN hospitals h ON br.hospital_id = h.user_id
+            WHERE br.blood_group = $1 
+            AND br.status = 'Open'
+        `;
+        let queryParams = [donor.blood_group];
+
+        if (donor.latitude != null && donor.longitude != null) {
+            // Match within ~50 miles radius
+            matchesQuery += ` AND calculate_distance(h.latitude, h.longitude, $2, $3) < 50 `;
+            queryParams.push(donor.latitude, donor.longitude);
+        } else {
+            // Fallback to city
+            matchesQuery += ` AND h.city = $2 `;
+            queryParams.push(donor.city);
+        }
+
+        matchesQuery += ` ORDER BY br.urgency DESC, br.created_at DESC`;
+
+        const matches = await query(matchesQuery, queryParams);
 
         res.json(matches.rows);
     } catch (err: any) {
