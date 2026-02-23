@@ -17,6 +17,7 @@ export default function Login() {
   const [name, setName] = useState('');
   const [bloodGroup, setBloodGroup] = useState('');
   const [adminKey, setAdminKey] = useState('');
+  const [hospitalKey, setHospitalKey] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +31,13 @@ export default function Login() {
     // Validate admin special key
     if (role === 'admin' && adminKey !== '7291admin') {
       setError('Invalid Admin Access Key. Please contact your system administrator.');
+      setIsLoading(false);
+      return;
+    }
+
+    // Validate hospital special key
+    if (role === 'hospital' && hospitalKey !== 'HOSP-7291') {
+      setError('Invalid Hospital ID. Access denied.');
       setIsLoading(false);
       return;
     }
@@ -84,10 +92,17 @@ export default function Login() {
   const handleGoogleSignIn = async () => {
     setError(null);
 
-    // Require admin key before allowing Google Sign-In for admin role
+    // Require keys before allowing Google Sign-In for specific roles
     if (role === 'admin') {
       if (adminKey !== '7291admin') {
         setError('Invalid Admin Access Key. Please enter the correct key before signing in with Google.');
+        return;
+      }
+    }
+
+    if (role === 'hospital') {
+      if (hospitalKey !== 'HOSP-7291') {
+        setError('Invalid Hospital ID. Please enter a valid ID before signing in with Google.');
         return;
       }
     }
@@ -298,6 +313,32 @@ export default function Login() {
                     />
                   </div>
                   <p className="text-[10px] text-slate-400 ml-1 font-medium">🔐 This key is issued by LifeLink AI system administrators only.</p>
+                </motion.div>
+              )}
+
+              {/* Hospital ID Field */}
+              {role === 'hospital' && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-1.5"
+                >
+                  <label className="text-sm font-black text-slate-700 ml-1 flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-base text-[#ee2b2b]">badge</span>
+                    Hospital ID / Access Key
+                  </label>
+                  <div className="relative group">
+                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">domain_verification</span>
+                    <input
+                      type="text"
+                      required={role === 'hospital'}
+                      value={hospitalKey}
+                      onChange={(e) => setHospitalKey(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400 font-bold"
+                      placeholder="HOSP-••••"
+                    />
+                  </div>
+                  <p className="text-[10px] text-slate-400 ml-1 font-medium italic">Required for verified medical facility access.</p>
                 </motion.div>
               )}
 
