@@ -44,6 +44,34 @@ export default function HospitalDashboard() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  const DUMMY_INVENTORY = [
+    { blood_group: 'A+', units: 142, threshold: 50 },
+    { blood_group: 'A-', units: 28, threshold: 30 },
+    { blood_group: 'B+', units: 95, threshold: 40 },
+    { blood_group: 'B-', units: 12, threshold: 25 },
+    { blood_group: 'AB+', units: 67, threshold: 30 },
+    { blood_group: 'AB-', units: 8, threshold: 20 },
+    { blood_group: 'O+', units: 210, threshold: 80 },
+    { blood_group: 'O-', units: 19, threshold: 40 },
+  ];
+
+  const DUMMY_REQUESTS = [
+    { id: 'REQ-001', blood_group: 'O-', urgency: 'critical', units_required: 4, status: 'active', time: '8 min ago', patient: 'Trauma Bay 2', matchedDonors: 2 },
+    { id: 'REQ-002', blood_group: 'AB+', urgency: 'high', units_required: 2, status: 'active', time: '23 min ago', patient: 'Surgery Room 3', matchedDonors: 5 },
+    { id: 'REQ-003', blood_group: 'B-', urgency: 'medium', units_required: 3, status: 'pending', time: '1 hr ago', patient: 'Ward 4 – Bed 12', matchedDonors: 1 },
+    { id: 'REQ-004', blood_group: 'A+', urgency: 'critical', units_required: 6, status: 'active', time: '2 min ago', patient: 'ICU – Bed 7', matchedDonors: 3 },
+    { id: 'REQ-005', blood_group: 'O+', urgency: 'low', units_required: 1, status: 'fulfilled', time: '3 hr ago', patient: 'OPD', matchedDonors: 8 },
+  ];
+
+  const DUMMY_DONATIONS = [
+    { id: 'DON-201', donor: 'Rahul Sharma', blood_group: 'O-', units: 1, time: '09:14 AM', status: 'verified' },
+    { id: 'DON-202', donor: 'Priya Mehta', blood_group: 'A+', units: 1, time: '10:02 AM', status: 'verified' },
+    { id: 'DON-203', donor: 'Aditya Kumar', blood_group: 'B+', units: 1, time: '11:30 AM', status: 'processing' },
+    { id: 'DON-204', donor: 'Sneha Iyer', blood_group: 'AB+', units: 1, time: '12:45 PM', status: 'verified' },
+    { id: 'DON-205', donor: 'Vikram Singh', blood_group: 'O+', units: 1, time: '01:18 PM', status: 'verified' },
+    { id: 'DON-206', donor: 'Ananya Reddy', blood_group: 'A-', units: 1, time: '02:33 PM', status: 'processing' },
+  ];
+
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -52,15 +80,19 @@ export default function HospitalDashboard() {
         apiFetch('/hospital/requests'),
         apiFetch('/hospital/donations'),
       ]);
-      if (invData.status === 'fulfilled') setInventory(invData.value);
-      if (reqData.status === 'fulfilled') setRequests(reqData.value);
-      if (donData.status === 'fulfilled') setDonations(donData.value);
+      setInventory(invData.status === 'fulfilled' && invData.value?.length ? invData.value : DUMMY_INVENTORY);
+      setRequests(reqData.status === 'fulfilled' && reqData.value?.length ? reqData.value : DUMMY_REQUESTS);
+      setDonations(donData.status === 'fulfilled' && donData.value?.length ? donData.value : DUMMY_DONATIONS);
     } catch (err) {
       console.error('Failed to load data', err);
+      setInventory(DUMMY_INVENTORY);
+      setRequests(DUMMY_REQUESTS);
+      setDonations(DUMMY_DONATIONS);
     } finally {
       setIsLoading(false);
     }
   };
+
 
   const handleSignOut = () => {
     localStorage.removeItem('token');
