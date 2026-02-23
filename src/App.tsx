@@ -39,6 +39,16 @@ export default function App() {
         <Route path="support" element={<Support />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="tracking" element={<LiveTracking />} />
+
+        {/* Donor Routes - inside Layout so the topbar renders */}
+        <Route element={<ProtectedRoute allowedRoles={['donor']} />}>
+          <Route path="donor" element={<DonorApp />} />
+          <Route path="donor/centers" element={<DonorApp />} />
+          <Route path="donor/pending" element={<DonorApp />} />
+          <Route path="donor/settings" element={<DonorApp />} />
+          <Route path="donor/impact" element={<DonorApp />} />
+          <Route path="donor/community" element={<DonorApp />} />
+        </Route>
       </Route>
 
       {/* Dashboard routes - NO Layout wrapper, each dashboard has its own sidebar */}
@@ -59,15 +69,7 @@ export default function App() {
         <Route path="hospital/inventory" element={<HospitalDashboard />} />
       </Route>
 
-      {/* Donor Routes */}
-      <Route element={<ProtectedRoute allowedRoles={['donor']} />}>
-        <Route path="donor" element={<DonorApp />} />
-        <Route path="donor/centers" element={<DonorApp />} />
-        <Route path="donor/pending" element={<DonorApp />} />
-        <Route path="donor/settings" element={<DonorApp />} />
-        <Route path="donor/impact" element={<DonorApp />} />
-        <Route path="donor/community" element={<DonorApp />} />
-      </Route>
+
     </Routes>
   );
 }
