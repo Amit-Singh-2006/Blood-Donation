@@ -1,28 +1,61 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { User, Phone, Mail, MapPin, Building, FileText, CheckCircle2, ArrowRight } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { User, Phone, Mail, MapPin, Building, FileText, CheckCircle2, ArrowRight, Lock } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 
 export default function HospitalRegistration() {
     const navigate = useNavigate();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [error, setError] = useState('');
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const [formData, setFormData] = useState({
+        hospitalName: '',
+        licenseNumber: '',
+        contactPerson: '',
+        email: '',
+        password: '',
+        phone: '',
+        city: '',
+        address: ''
+    });
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    };
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
+        setError('');
 
-        // Simulate API call
-        setTimeout(() => {
-            setIsSubmitting(false);
+        try {
+            const response = await apiFetch('/auth/register', {
+                method: 'POST',
+                body: JSON.stringify({
+                    name: formData.hospitalName,
+                    email: formData.email,
+                    password: formData.password,
+                    role: 'hospital',
+                    hospital_name: formData.hospitalName,
+                    city: formData.city,
+                    contact_number: formData.phone
+                }),
+            });
+
+            localStorage.setItem('token', response.token);
+            localStorage.setItem('user', JSON.stringify(response.user));
+
             setIsSuccess(true);
-
-            // Redirect to hospital dashboard after success
             setTimeout(() => {
                 navigate('/hospital');
             }, 2000);
-        }, 1500);
+        } catch (err: any) {
+            setError(err.message || 'Registration failed');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     if (isSuccess) {
@@ -45,7 +78,7 @@ export default function HospitalRegistration() {
     }
 
     return (
-        <div className="max-w-2xl mx-auto py-10">
+        <div className="max-w-2xl mx-auto py-10 px-4">
             <div className="text-center mb-10">
                 <h1 className="text-3xl font-bold text-slate-900">Hospital Registration</h1>
                 <p className="text-slate-600 mt-2">Join our AI-enhanced network and streamline blood donation matching.</p>
@@ -57,6 +90,11 @@ export default function HospitalRegistration() {
                 onSubmit={handleSubmit}
                 className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-6"
             >
+                {error && (
+                    <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm font-bold border border-red-100 italic">
+                        {error}
+                    </div>
+                )}
                 <div className="grid md:grid-cols-2 gap-6">
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
@@ -65,6 +103,9 @@ export default function HospitalRegistration() {
                         <input
                             required
                             type="text"
+                            name="hospitalName"
+                            value={formData.hospitalName}
+                            onChange={handleChange}
                             placeholder="City General Hospital"
                             className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
                         />
@@ -77,6 +118,9 @@ export default function HospitalRegistration() {
                         <input
                             required
                             type="text"
+                            name="licenseNumber"
+                            value={formData.licenseNumber}
+                            onChange={handleChange}
                             placeholder="LIC-12345678"
                             className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
                         />
@@ -89,6 +133,9 @@ export default function HospitalRegistration() {
                         <input
                             required
                             type="text"
+                            name="contactPerson"
+                            value={formData.contactPerson}
+                            onChange={handleChange}
                             placeholder="Dr. Smith"
                             className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
                         />
@@ -101,6 +148,9 @@ export default function HospitalRegistration() {
                         <input
                             required
                             type="tel"
+                            name="phone"
+                            value={formData.phone}
+                            onChange={handleChange}
                             placeholder="+1 (800) 123-4567"
                             className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
                         />
@@ -113,7 +163,40 @@ export default function HospitalRegistration() {
                         <input
                             required
                             type="email"
+                            name="email"
+                            value={formData.email}
+                            onChange={handleChange}
                             placeholder="admin@hospital.com"
+                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                            <MapPin className="w-4 h-4" /> City
+                        </label>
+                        <input
+                            required
+                            type="text"
+                            name="city"
+                            value={formData.city}
+                            onChange={handleChange}
+                            placeholder="e.g. New York"
+                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
+                        />
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                        <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                            <Lock className="w-4 h-4" /> Password
+                        </label>
+                        <input
+                            required
+                            type="password"
+                            name="password"
+                            value={formData.password}
+                            onChange={handleChange}
+                            placeholder="••••••••"
                             className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
                         />
                     </div>
@@ -125,6 +208,9 @@ export default function HospitalRegistration() {
                     </label>
                     <textarea
                         required
+                        name="address"
+                        value={formData.address}
+                        onChange={handleChange}
                         rows={3}
                         placeholder="Enter full hospital address..."
                         className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all resize-none"

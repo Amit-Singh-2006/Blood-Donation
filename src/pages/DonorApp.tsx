@@ -773,6 +773,9 @@ function PendingDonationsView({ userPoints, appointments, onCancel }: { userPoin
 
 function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedPosts: any }) {
   const [isRegistered, setIsRegistered] = useState(false);
+  const [showCampaignModal, setShowCampaignModal] = useState(false);
+  const [campaignForm, setCampaignForm] = useState({ name: '', email: '', phone: '', size: 'M' });
+  const [campaignSubmitted, setCampaignSubmitted] = useState(false);
   const [replyText, setReplyText] = useState("");
 
   const handleToggleLike = (postId: number) => {
@@ -789,8 +792,15 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
   };
 
   const handleRegisterDrive = () => {
+    setShowCampaignModal(true);
+    setCampaignSubmitted(false);
+  };
+
+  const handleCampaignSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setCampaignSubmitted(true);
     setIsRegistered(true);
-    alert("Successfully registered for the upcoming blood drive! We've sent details to your email.");
+    setTimeout(() => setShowCampaignModal(false), 2500);
   };
 
   const handleToggleReply = (postId: number) => {
@@ -885,14 +895,136 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
           <div className="relative z-10">
             <h3 className="font-bold text-lg mb-2">Upcoming Drive</h3>
             <p className="text-sm text-white/90 mb-4">Join us at the Community Center this Saturday for our monthly blood drive.</p>
-            <button className="bg-white text-[#ee2b2b] px-4 py-2 rounded-lg text-sm font-bold hover:bg-slate-50 transition-colors">
-              Register Now
+            <button
+              onClick={handleRegisterDrive}
+              disabled={isRegistered}
+              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${isRegistered
+                  ? 'bg-white/50 text-white/70 cursor-default'
+                  : 'bg-white text-[#ee2b2b] hover:bg-slate-50'
+                }`}
+            >
+              {isRegistered ? '✓ Registered!' : 'Register Now'}
             </button>
           </div>
           <div className="absolute -bottom-4 -right-4 opacity-20">
             <span className="material-symbols-outlined text-9xl">campaign</span>
           </div>
         </div>
+
+        {/* Campaign Registration Modal */}
+        {showCampaignModal && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+            >
+              {campaignSubmitted ? (
+                <div className="p-10 text-center">
+                  <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="material-symbols-outlined text-3xl text-emerald-500">check_circle</span>
+                  </div>
+                  <h3 className="text-xl font-black text-slate-900 mb-2">You're Registered! 🎉</h3>
+                  <p className="text-sm text-slate-500">We've sent your confirmation & drive details to your email. See you Saturday!</p>
+                </div>
+              ) : (
+                <>
+                  {/* Modal Header */}
+                  <div className="bg-[#ee2b2b] p-6 relative overflow-hidden">
+                    <div className="absolute -bottom-4 -right-4 opacity-10">
+                      <span className="material-symbols-outlined text-8xl">campaign</span>
+                    </div>
+                    <div className="relative z-10">
+                      <h3 className="text-xl font-black text-white">Register for Upcoming Drive</h3>
+                      <p className="text-sm text-white/80 mt-1">Community Center · This Saturday · 9AM – 4PM</p>
+                    </div>
+                    <button
+                      onClick={() => setShowCampaignModal(false)}
+                      className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
+                    >
+                      <span className="material-symbols-outlined">close</span>
+                    </button>
+                  </div>
+
+                  {/* Modal Form */}
+                  <form onSubmit={handleCampaignSubmit} className="p-6 space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Full Name</label>
+                      <div className="relative">
+                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">person</span>
+                        <input
+                          required
+                          value={campaignForm.name}
+                          onChange={e => setCampaignForm(f => ({ ...f, name: e.target.value }))}
+                          placeholder="Amit Singh"
+                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b]/50 transition-all"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</label>
+                      <div className="relative">
+                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">mail</span>
+                        <input
+                          type="email"
+                          required
+                          value={campaignForm.email}
+                          onChange={e => setCampaignForm(f => ({ ...f, email: e.target.value }))}
+                          placeholder="you@example.com"
+                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b]/50 transition-all"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phone Number</label>
+                      <div className="relative">
+                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">phone</span>
+                        <input
+                          type="tel"
+                          required
+                          value={campaignForm.phone}
+                          onChange={e => setCampaignForm(f => ({ ...f, phone: e.target.value }))}
+                          placeholder="+91 98765 43210"
+                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b]/50 transition-all"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Campaign T-Shirt Size</label>
+                      <select
+                        value={campaignForm.size}
+                        onChange={e => setCampaignForm(f => ({ ...f, size: e.target.value }))}
+                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all"
+                      >
+                        <option value="XS">XS – Extra Small</option>
+                        <option value="S">S – Small</option>
+                        <option value="M">M – Medium</option>
+                        <option value="L">L – Large</option>
+                        <option value="XL">XL – Extra Large</option>
+                        <option value="XXL">XXL – Double Extra Large</option>
+                      </select>
+                    </div>
+                    <div className="pt-2 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowCampaignModal(false)}
+                        className="flex-1 py-3 border border-slate-200 rounded-xl text-sm font-black text-slate-600 hover:bg-slate-50 transition-all"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-1 py-3 bg-[#ee2b2b] text-white rounded-xl text-sm font-black hover:bg-[#ee2b2b]/90 shadow-lg shadow-[#ee2b2b]/20 transition-all active:scale-95"
+                      >
+                        Confirm Registration
+                      </button>
+                    </div>
+                  </form>
+                </>
+              )}
+            </motion.div>
+          </div>
+        )}
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <h3 className="font-bold text-sm text-slate-900 mb-4 uppercase tracking-wider">Top Contributors</h3>
           <div className="space-y-4">
