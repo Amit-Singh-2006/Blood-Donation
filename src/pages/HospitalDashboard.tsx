@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import Chat from '../components/Chat';
+import AgentChat from '../components/AgentChat';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '../lib/api';
 
@@ -238,14 +238,14 @@ export default function HospitalDashboard() {
         </div>
       </main>
 
-      {/* Floating Chat */}
+      {/* Floating AI Chat */}
       <button
         onClick={() => setShowChat(!showChat)}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
+        className="fixed bottom-8 right-8 w-14 h-14 bg-[#ee2b2b] text-white rounded-full shadow-2xl shadow-[#ee2b2b]/30 flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
       >
-        <span className="material-symbols-outlined">forum</span>
+        <span className="material-symbols-outlined">psychology</span>
       </button>
-      <Chat isOpen={showChat} recipientName="Emergency Center" recipientType="admin" onClose={() => setShowChat(false)} />
+      <AgentChat isOpen={showChat} context="hospital" onClose={() => setShowChat(false)} />
     </div>
   );
 }

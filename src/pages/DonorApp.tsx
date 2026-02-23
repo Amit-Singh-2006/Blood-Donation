@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
-import ChatBot from '../components/ChatBot';
+import AgentChat from '../components/AgentChat';
 import FeedbackModal from '../components/FeedbackModal';
 import { apiFetch } from '../lib/api';
 
@@ -46,6 +46,7 @@ export default function DonorApp() {
   const navigate = useNavigate();
   const [isAvailable, setIsAvailable] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [requestAccepted, setRequestAccepted] = useState(false);
   const [requestRejected, setRequestRejected] = useState(false);
   const [userPoints, setUserPoints] = useState(location.state?.initialPoints || 450);
@@ -206,7 +207,14 @@ export default function DonorApp() {
       {activeTab === 'community' && <CommunityView feedPosts={feedPosts} setFeedPosts={setFeedPosts} />}
       {activeTab === 'settings' && <DonorSettingsView />}
 
-      <ChatBot />
+      {/* Floating AI Chat Button */}
+      <button
+        onClick={() => setShowChat(!showChat)}
+        className="fixed bottom-8 right-8 w-14 h-14 bg-[#ee2b2b] text-white rounded-full shadow-2xl shadow-[#ee2b2b]/30 flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
+      >
+        <span className="material-symbols-outlined">psychology</span>
+      </button>
+      <AgentChat isOpen={showChat} context="donor" onClose={() => setShowChat(false)} />
 
       <FeedbackModal
         isOpen={showFeedback}
@@ -899,8 +907,8 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
               onClick={handleRegisterDrive}
               disabled={isRegistered}
               className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${isRegistered
-                  ? 'bg-white/50 text-white/70 cursor-default'
-                  : 'bg-white text-[#ee2b2b] hover:bg-slate-50'
+                ? 'bg-white/50 text-white/70 cursor-default'
+                : 'bg-white text-[#ee2b2b] hover:bg-slate-50'
                 }`}
             >
               {isRegistered ? '✓ Registered!' : 'Register Now'}

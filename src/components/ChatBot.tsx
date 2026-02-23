@@ -19,14 +19,20 @@ export default function ChatBot() {
     setInput('');
 
     try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "";
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      const apiKey = import.meta.env.VITE_GROQ_API_KEY || "";
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: userInput }] }] })
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages: [{ role: "user", content: userInput }]
+        })
       });
       const data = await res.json();
-      const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "I'm not sure about that. Could you ask differently?";
+      const responseText = data.choices?.[0]?.message?.content || "I'm not sure about that. Could you ask differently?";
       setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), sender: 'bot', text: responseText }]);
     } catch (err) {
       setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), sender: 'bot', text: "Sorry, I am having trouble connecting to the network right now." }]);
