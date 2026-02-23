@@ -5,6 +5,42 @@ import ChatBot from '../components/ChatBot';
 import FeedbackModal from '../components/FeedbackModal';
 import { apiFetch } from '../lib/api';
 
+function DonorSettingsView() {
+  return (
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+          <span className="material-symbols-outlined text-[#ee2b2b]">settings</span>
+          Account Settings
+        </h2>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
+            <div>
+              <h4 className="font-bold text-slate-900">Push Notifications</h4>
+              <p className="text-sm text-slate-500">Receive alerts for emergency matches</p>
+            </div>
+            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
+              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
+            <div>
+              <h4 className="font-bold text-slate-900">Location Services</h4>
+              <p className="text-sm text-slate-500">Allow AI to find nearest hospitals for matching</p>
+            </div>
+            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
+              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
+            </div>
+          </div>
+        </div>
+        <button className="mt-8 px-6 py-3 w-full sm:w-auto bg-[#ee2b2b] text-white rounded-lg font-bold hover:bg-[#ee2b2b]/90 transition-all shadow-md">
+          Save Changes
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function DonorApp() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -109,75 +145,7 @@ export default function DonorApp() {
             <span className={`text-sm font-bold uppercase tracking-wider ${isAvailable ? 'text-[#ee2b2b]' : 'text-slate-300'}`}>Available</span>
           </div>
         </div>
-<<<<<<< HEAD
       )}
-
-      {/* Tabs */}
-      {activeTab !== 'centers' && (
-        <div className="flex gap-6 mb-8 border-b border-slate-200 overflow-x-auto">
-          <Link
-            to="/donor"
-            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Dashboard
-          </Link>
-          <Link
-            to="/donor/centers"
-            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${(activeTab as string) === 'centers' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Donation Centers
-          </Link>
-          <Link
-            to="/donor/pending"
-            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'pending' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Pending Donations
-          </Link>
-          <Link
-            to="/donor/impact"
-            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'impact' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Impact Report
-          </Link>
-          <Link
-            to="/donor/community"
-            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'community' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Community
-          </Link>
-        </div>
-      )}
-
-      {activeTab === 'dashboard' && (
-        <DashboardView
-          requestAccepted={requestAccepted}
-          onAccept={handleAcceptRequest}
-          requestRejected={requestRejected}
-          onReject={handleRejectRequest}
-=======
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
-            <span className={`text-sm font-bold uppercase tracking-wider ${!isAvailable ? 'text-slate-400' : 'text-slate-300'}`}>Unavailable</span>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={isAvailable}
-                onChange={() => setIsAvailable(!isAvailable)}
-              />
-              <div className="w-14 h-7 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-[#ee2b2b]"></div>
-            </label>
-            <span className={`text-sm font-bold uppercase tracking-wider ${isAvailable ? 'text-[#ee2b2b]' : 'text-slate-300'}`}>Available</span>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 text-slate-500 hover:text-[#ee2b2b] transition-colors font-bold text-sm bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm"
-          >
-            <span className="material-symbols-outlined text-lg">logout</span>
-            Logout
-          </button>
-        </div>
-      </div>
 
       {/* Tabs */}
       <div className="flex gap-6 mb-8 border-b border-slate-200 overflow-x-auto">
@@ -189,9 +157,15 @@ export default function DonorApp() {
         </Link>
         <Link
           to="/donor/centers"
-          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'centers' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${(activeTab as string) === 'centers' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
           Donation Centers
+        </Link>
+        <Link
+          to="/donor/pending"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'pending' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Pending Donations
         </Link>
         <Link
           to="/donor/impact"
@@ -213,7 +187,8 @@ export default function DonorApp() {
           donations={donations}
           requestAccepted={requestAccepted}
           onAccept={handleAcceptRequest}
->>>>>>> aditya
+          requestRejected={requestRejected}
+          onReject={handleRejectRequest}
           onRate={() => setShowFeedback(true)}
           requestExpired={requestExpired}
           timeLeft={formatTime(timeLeft)}
@@ -225,17 +200,11 @@ export default function DonorApp() {
           rewardTokens={2000}
         />
       )}
-<<<<<<< HEAD
       {activeTab === 'centers' && <DonationCentersView onBook={(appt) => setPendingAppointments([...pendingAppointments, appt])} />}
       {activeTab === 'pending' && <PendingDonationsView userPoints={userPoints} appointments={pendingAppointments} onCancel={(id) => setPendingAppointments(pendingAppointments.filter(a => a.id !== id))} />}
-      {activeTab === 'impact' && <RewardsView userTokens={userTokens} setUserTokens={setUserTokens} />}
+      {activeTab === 'impact' && <RewardsView userTokens={userTokens} setUserTokens={setUserTokens} user={user} />}
       {activeTab === 'community' && <CommunityView feedPosts={feedPosts} setFeedPosts={setFeedPosts} />}
-      {activeTab === 'settings' && <SettingsView />}
-=======
-      {activeTab === 'centers' && <DonationCentersView />}
-      {activeTab === 'impact' && <RewardsView user={user} />}
-      {activeTab === 'community' && <CommunityView />}
->>>>>>> aditya
+      {activeTab === 'settings' && <DonorSettingsView />}
 
       <ChatBot />
 
@@ -262,19 +231,15 @@ export default function DonorApp() {
   );
 }
 
-<<<<<<< HEAD
 function DashboardView({
-  requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated, userBloodType, demandBloodType, rewardTokens
+  user, donations, requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated, userBloodType, demandBloodType, rewardTokens
 }: {
-  requestAccepted: boolean; onAccept: () => void; requestRejected: boolean; onReject: () => void; onRate: () => void;
+  user: any; donations: any[]; requestAccepted: boolean; onAccept: () => void; requestRejected: boolean; onReject: () => void; onRate: () => void;
   requestExpired: boolean; timeLeft: string; isAvailable: boolean; openNavigation: () => void;
   hospitalRated: boolean; userBloodType: string; demandBloodType: string; rewardTokens: number;
 }) {
   const isMatch = userBloodType === demandBloodType;
 
-=======
-function DashboardView({ user, donations, requestAccepted, onAccept, onRate }: { user: any; donations: any[]; requestAccepted: boolean; onAccept: () => void; onRate: () => void }) {
->>>>>>> aditya
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* ... existing code ... */}
@@ -390,36 +355,6 @@ function DashboardView({ user, donations, requestAccepted, onAccept, onRate }: {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-<<<<<<< HEAD
-                <tr className="group">
-                  <td className="py-4 text-sm font-medium text-slate-900">Oct 12, 2023</td>
-                  <td className="py-4 text-sm text-slate-600">Red Cross Center #4</td>
-                  <td className="py-4 text-sm text-slate-600">Whole Blood</td>
-                  <td className="py-4">
-                    <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
-                  </td>
-                  <td className="py-4 text-right">
-                    {hospitalRated ? (
-                      <span className="text-xs font-bold text-slate-400">Rated</span>
-                    ) : (
-                      <button onClick={onRate} className="text-xs font-bold text-[#ee2b2b] hover:bg-[#ee2b2b]/5 px-3 py-1.5 rounded-lg transition-colors">
-                        Rate Hospital
-                      </button>
-                    )}
-                  </td>
-                </tr>
-                <tr className="group">
-                  <td className="py-4 text-sm font-medium text-slate-900">July 04, 2023</td>
-                  <td className="py-4 text-sm text-slate-600">St. Jude Medical</td>
-                  <td className="py-4 text-sm text-slate-600">Power Red</td>
-                  <td className="py-4">
-                    <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
-                  </td>
-                  <td className="py-4 text-right">
-                    <span className="text-xs font-bold text-slate-400">Rated</span>
-                  </td>
-                </tr>
-=======
                 {donations.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="py-10 text-center text-slate-400 italic">No donations found. Start donating today!</td>
@@ -434,14 +369,17 @@ function DashboardView({ user, donations, requestAccepted, onAccept, onRate }: {
                         <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
                       </td>
                       <td className="py-4 text-right">
-                        <button onClick={onRate} className="text-xs font-bold text-[#ee2b2b] hover:bg-[#ee2b2b]/5 px-3 py-1.5 rounded-lg transition-colors">
-                          Rate Hospital
-                        </button>
+                        {hospitalRated ? (
+                          <span className="text-xs font-bold text-slate-400">Rated</span>
+                        ) : (
+                          <button onClick={onRate} className="text-xs font-bold text-[#ee2b2b] hover:bg-[#ee2b2b]/5 px-3 py-1.5 rounded-lg transition-colors">
+                            Rate Hospital
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))
                 )}
->>>>>>> aditya
               </tbody>
             </table>
           </div>
@@ -555,7 +493,6 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
   };
 
   return (
-<<<<<<< HEAD
     <div className="flex flex-col gap-8 -mt-2 pb-24">
       {/* Breadcrumbs & Title */}
       <div className="flex flex-col gap-2">
@@ -568,21 +505,6 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
           <div>
             <h2 className="text-3xl md:text-4xl font-black text-slate-900 leading-tight">Schedule Your Donation</h2>
             <p className="text-slate-500 max-w-2xl mt-1">Our AI predicts high demand for O- and A+ types this week. Your donation could save up to three lives.</p>
-=======
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {[1, 2, 3, 4, 5, 6].map((i) => (
-        <div key={i} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
-          <div className="h-40 bg-slate-200 relative">
-            <img
-              src={`https://picsum.photos/seed/center${i}/400/200`}
-              alt="Donation Center"
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-            <div className="absolute top-3 right-3 bg-white/90 backdrop-blur px-2 py-1 rounded text-xs font-bold text-slate-700">
-              {i * 1.2} miles away
-            </div>
->>>>>>> aditya
           </div>
           <div className="flex items-center gap-2 bg-[#ee2b2b]/10 text-[#ee2b2b] px-4 py-2 rounded-lg border border-[#ee2b2b]/20">
             <span className="material-symbols-outlined animate-pulse">priority_high</span>
@@ -854,7 +776,7 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
   const [replyText, setReplyText] = useState("");
 
   const handleToggleLike = (postId: number) => {
-    setFeedPosts(posts => posts.map(post => {
+    setFeedPosts((posts: any[]) => posts.map(post => {
       if (post.id === postId) {
         return {
           ...post,
@@ -872,14 +794,14 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
   };
 
   const handleToggleReply = (postId: number) => {
-    setFeedPosts(posts => posts.map(post =>
+    setFeedPosts((posts: any[]) => posts.map(post =>
       post.id === postId ? { ...post, showReplyInput: !post.showReplyInput } : post
     ));
   };
 
   const submitReply = (postId: number) => {
     if (!replyText.trim()) return;
-    setFeedPosts(posts => posts.map(post => {
+    setFeedPosts((posts: any[]) => posts.map(post => {
       if (post.id === postId) {
         return { ...post, showReplyInput: false, replies: [...post.replies, replyText] };
       }
@@ -894,14 +816,10 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
         <div className="bg-white rounded-xl p-6 border border-slate-200">
           <h3 className="font-bold text-lg mb-4">Community Feed</h3>
           <div className="space-y-6">
-            {feedPosts.map((post) => (
+            {feedPosts.map((post: any, i: number) => (
               <div key={post.id} className="flex gap-4 pb-6 border-b border-slate-100 last:border-0 last:pb-0">
                 <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0">
-<<<<<<< HEAD
-                  <img src={`https://picsum.photos/seed/user${post.id}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-=======
-                  <img src={`https://picsum.photos/seed/user${i}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
->>>>>>> aditya
+                  <img src={`https://picsum.photos/seed/user${post.id || i}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
@@ -961,6 +879,7 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
           </div>
         </div>
       </div>
+
       <div className="space-y-6">
         <div className="bg-[#ee2b2b] text-white rounded-xl p-6 relative overflow-hidden">
           <div className="relative z-10">
@@ -996,10 +915,14 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
   );
 }
 
-<<<<<<< HEAD
-function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUserTokens: (val: number) => void }) {
+function RewardsView({ userTokens, setUserTokens, user }: { userTokens: number, setUserTokens: (val: number) => void, user: any }) {
   const navigate = useNavigate();
   const [showAllFacilities, setShowAllFacilities] = useState(false);
+
+  const xp = user?.xp_points || 0;
+  const level = user?.current_level || 1;
+  const nextTarget = level * 100;
+  const progressPercent = Math.min(100, Math.round((xp / nextTarget) * 100));
 
   const handleRedeem = (cost: number, name: string) => {
     if (userTokens >= cost) {
@@ -1009,13 +932,6 @@ function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUse
       alert(`Not enough tokens! You need ${cost - userTokens} more tokens to redeem ${name}.`);
     }
   };
-=======
-function RewardsView({ user }: { user: any }) {
-  const xp = user?.xp_points || 0;
-  const level = user?.current_level || 1;
-  const nextTarget = level * 100;
-  const progressPercent = Math.min(100, Math.round((xp / nextTarget) * 100));
->>>>>>> aditya
 
   return (
     <div className="space-y-8">
@@ -1276,38 +1192,5 @@ function RewardsView({ user }: { user: any }) {
   );
 }
 
-function SettingsView() {
-  return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm">
-        <h2 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-          <span className="material-symbols-outlined text-[#ee2b2b]">settings</span>
-          Account Settings
-        </h2>
-        <div className="space-y-6">
-          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
-            <div>
-              <h4 className="font-bold text-slate-900">Push Notifications</h4>
-              <p className="text-sm text-slate-500">Receive alerts for emergency matches</p>
-            </div>
-            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
-              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
-            </div>
-          </div>
-          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
-            <div>
-              <h4 className="font-bold text-slate-900">Location Services</h4>
-              <p className="text-sm text-slate-500">Allow AI to find nearest hospitals for matching</p>
-            </div>
-            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
-              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
-            </div>
-          </div>
-        </div>
-        <button className="mt-8 px-6 py-3 w-full sm:w-auto bg-[#ee2b2b] text-white rounded-lg font-bold hover:bg-[#ee2b2b]/90 transition-all shadow-md">
-          Save Changes
-        </button>
-      </div>
-    </div>
-  );
-}
+
+

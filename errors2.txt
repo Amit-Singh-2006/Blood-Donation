@@ -1,1 +1,0 @@
-src/pages/DonorApp.tsx(104,97): error TS2367: This comparison appears to be unintentional because the types '"dashboard" | "pending" | "impact" | "community"' and '"centers"' have no overlap.

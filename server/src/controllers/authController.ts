@@ -46,7 +46,10 @@ export const register = async (req: Request, res: Response) => {
         });
     } catch (err: any) {
         console.error('Registration error:', err);
-        res.status(500).json({ message: err.message });
+        res.status(500).json({
+            message: err.message || 'Unknown registration error',
+            error: err
+        });
     }
 };
 
