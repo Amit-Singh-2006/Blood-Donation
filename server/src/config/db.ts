@@ -8,6 +8,10 @@ export const pool = new Pool({
     ssl: {
         rejectUnauthorized: false,
     },
+    max: 5,                   // limit concurrent connections for Supabase pooler
+    idleTimeoutMillis: 30000, // close idle clients after 30s
+    connectionTimeoutMillis: 10000, // fail fast if can't connect in 10s
+    keepAlive: true,
 });
 
 pool.connect()

@@ -90,6 +90,8 @@ export default function Login() {
       else if (role === 'hospital') navigate('/hospital');
       else if (role === 'admin') navigate('/admin');
     } catch (err: any) {
+      console.error("Google Sign-In Error:", err);
+      alert(`Google Sign-In Error: ${err.message || err.code || 'Unknown Error'}`);
       setError('Failed to sign in with Google');
     } finally {
       setIsLoading(false);
