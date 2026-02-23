@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import HomePage from './pages/HomePage';
 import DonorRegistration from './pages/DonorRegistration';
 import HospitalRegistration from './pages/HospitalRegistration';
 import AdminRegistration from './pages/AdminRegistration';
@@ -23,7 +24,8 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<Layout />}>
-        <Route index element={<Login />} />
+        <Route index element={<HomePage />} />
+        <Route path="login" element={<Login />} />
         <Route path="register-donor" element={<DonorRegistration />} />
         <Route path="register-hospital" element={<HospitalRegistration />} />
         <Route path="register-admin" element={<AdminRegistration />} />

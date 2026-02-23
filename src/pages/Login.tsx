@@ -82,7 +82,7 @@ export default function Login() {
   const toggleMode = () => {
     setIsRegistering(!isRegistering);
     setError('');
-    navigate(isRegistering ? '/' : `/register-${role}`);
+    navigate(isRegistering ? '/login' : `/register-${role}`);
   };
 
   return (
