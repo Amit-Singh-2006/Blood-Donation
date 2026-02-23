@@ -19,7 +19,7 @@ export default function Layout() {
     }
   }, [location.pathname]); // Update when navigating in case user changes
 
-  const hideNav = location.pathname === '/' || location.pathname === '/register-donor' || location.pathname === '/register-hospital' || location.pathname === '/register-admin' || location.pathname === '/how-it-works' || location.pathname === '/emergency-network' || location.pathname === '/impact-reports';
+  const hideNav = ['/', '/login', '/register-donor', '/register-hospital', '/register-admin', '/how-it-works', '/emergency-network', '/impact-reports', '/privacy', '/terms', '/partnership', '/support'].includes(location.pathname);
 
   // Determine layout type based on path
   const isSidebarLayout = location.pathname.startsWith('/admin') || location.pathname.startsWith('/hospital') || location.pathname.startsWith('/analytics') || location.pathname.startsWith('/tracking');

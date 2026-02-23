@@ -11,7 +11,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
     const user = userStr ? JSON.parse(userStr) : null;
 
     if (!token || !user) {
-        return <Navigate to="/" replace />;
+        return <Navigate to="/login" replace />;
     }
 
     if (allowedRoles && !allowedRoles.includes(user.role)) {
@@ -19,7 +19,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
         if (user.role === 'donor') return <Navigate to="/donor" replace />;
         if (user.role === 'hospital') return <Navigate to="/hospital" replace />;
         if (user.role === 'admin') return <Navigate to="/admin" replace />;
-        return <Navigate to="/" replace />;
+        return <Navigate to="/login" replace />;
     }
 
     return <Outlet />;
