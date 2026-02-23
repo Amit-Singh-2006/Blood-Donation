@@ -1,19 +1,55 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import Chat from '../components/Chat';
 import { cn } from '@/lib/utils';
+import { apiFetch } from '../lib/api';
 
 export default function HospitalDashboard() {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'dashboard' | 'inventory' | 'requests'>('dashboard');
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/');
+  };
   const [showChat, setShowChat] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
 
+  const [user, setUser] = useState<any>(null);
+  const [inventory, setInventory] = useState<any[]>([]);
+  const [requests, setRequests] = useState<any[]>([]);
+  const [donations, setDonations] = useState<any[]>([]);
   const [notifications, setNotifications] = useState([
     { id: 1, title: 'Blood Request Fulfilled', message: 'Donor John D. is en route for Request #882', time: '2m ago', read: false },
     { id: 2, title: 'Low Stock Alert', message: 'O- blood type is below critical threshold', time: '1h ago', read: false },
     { id: 3, title: 'New Donor Match', message: '3 new donors found for Request #879', time: '2h ago', read: true },
   ]);
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [invData, reqData, donData] = await Promise.all([
+        apiFetch('/hospital/inventory'),
+        apiFetch('/hospital/requests'),
+        apiFetch('/hospital/donations')
+      ]);
+      setInventory(invData);
+      setRequests(reqData);
+      setDonations(donData);
+    } catch (err) {
+      console.error('Failed to fetch hospital data:', err);
+    }
+  };
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
@@ -42,13 +78,20 @@ export default function HospitalDashboard() {
       {/* Header */}
       <header className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-3xl font-black text-slate-900">Hospital Emergency Dashboard</h2>
+          <h2 className="text-3xl font-black text-slate-900">{user?.name || 'Hospital Emergency Dashboard'}</h2>
           <p className="text-slate-500 mt-1 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-500 inline-block animate-pulse"></span>
             AI Engine Status: <span className="font-semibold text-green-600">Optimal (14% Load)</span>
           </p>
         </div>
         <div className="flex items-center gap-4">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-slate-500 hover:text-[#ee2b2b] transition-colors font-bold text-sm bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm mr-2"
+          >
+            <span className="material-symbols-outlined text-lg">logout</span>
+            Logout
+          </button>
           <div className="relative group" ref={notificationRef}>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
@@ -141,9 +184,18 @@ export default function HospitalDashboard() {
       </div>
 
       {/* Content */}
-      {activeTab === 'dashboard' && <DashboardView setActiveTab={setActiveTab} />}
-      {activeTab === 'inventory' && <InventoryView />}
-      {activeTab === 'requests' && <RequestWizardView />}
+      {activeTab === 'dashboard' && (
+        <DashboardView
+          setActiveTab={setActiveTab}
+          stats={{
+            requests: requests.length,
+            matches: 48,
+            inventory: inventory.reduce((acc, curr) => acc + curr.units, 0)
+          }}
+        />
+      )}
+      {activeTab === 'inventory' && <InventoryView inventory={inventory} />}
+      {activeTab === 'requests' && <RequestWizardView requests={requests} />}
 
       {/* Chat Toggle */}
       <button
@@ -159,7 +211,7 @@ export default function HospitalDashboard() {
   );
 }
 
-function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'inventory' | 'requests') => void }) {
+function DashboardView({ setActiveTab, stats }: { setActiveTab: (tab: 'dashboard' | 'inventory' | 'requests') => void; stats: { requests: number; matches: number; inventory: number } }) {
   const [quickRequestType, setQuickRequestType] = useState('O-');
   const [quickRequestUrgency, setQuickRequestUrgency] = useState('Critical (Immediate)');
   const [quickRequestUnits, setQuickRequestUnits] = useState(2);
@@ -178,13 +230,26 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'in
     setDonorAppointments(prev => prev.map(a => a.id === id ? { ...a, status: 'rejected' } : a));
   };
 
-  const handleQuickMatch = () => {
+  const handleQuickMatch = async () => {
     setIsMatching(true);
-    setTimeout(() => {
+    try {
+      await apiFetch('/hospital/requests', {
+        method: 'POST',
+        body: JSON.stringify({
+          blood_group: quickRequestType,
+          units_required: quickRequestUnits,
+          urgency: quickRequestUrgency.split(' ')[0], // e.g. "Critical"
+          latitude: 47.6062, // Defaulting to Seattle for prototype
+          longitude: -122.3321
+        })
+      });
+      alert('Quick request created and matching started!');
+      setActiveTab('requests');
+    } catch (err: any) {
+      alert(err.message || 'Failed to create request');
+    } finally {
       setIsMatching(false);
-      setActiveTab('requests'); // Redirect to full request view or show success
-      // Ideally show a success toast here
-    }, 2000);
+    }
   };
 
   return (
@@ -431,16 +496,17 @@ function DashboardView({ setActiveTab }: { setActiveTab: (tab: 'dashboard' | 'in
   );
 }
 
-function InventoryView() {
-  const [stock, setStock] = useState({
-    'A+': 428,
-    'A-': 45,
-    'B+': 115,
-    'B-': 28,
-    'AB+': 62,
-    'AB-': 12,
-    'O+': 340,
-    'O-': 34
+function InventoryView({ inventory }: { inventory: any[] }) {
+  const [stock, setStock] = useState<Record<string, number>>(() => {
+    const initialStock: Record<string, number> = {
+      'A+': 0, 'A-': 0, 'B+': 0, 'B-': 0, 'AB+': 0, 'AB-': 0, 'O+': 0, 'O-': 0
+    };
+    inventory.forEach(item => {
+      if (initialStock[item.blood_group] !== undefined) {
+        initialStock[item.blood_group] = item.units;
+      }
+    });
+    return initialStock;
   });
 
   const updateStock = (type: keyof typeof stock, change: number) => {
@@ -585,21 +651,33 @@ function InventoryView() {
   );
 }
 
-function RequestWizardView() {
+function RequestWizardView({ requests }: { requests: any[] }) {
   const [urgency, setUrgency] = useState('Normal');
   const [bloodType, setBloodType] = useState<string | null>(null);
   const [units, setUnits] = useState(4);
   const [reason, setReason] = useState('Major Trauma / Surgery');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!bloodType) return;
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
-      // Reset or show success
+    try {
+      await apiFetch('/hospital/requests', {
+        method: 'POST',
+        body: JSON.stringify({
+          blood_group: bloodType,
+          units_required: units,
+          urgency: urgency,
+          latitude: 47.6062, // Defaulting to Seattle for prototype
+          longitude: -122.3321
+        })
+      });
       alert('Request submitted successfully!');
-    }, 2000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to submit request');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (

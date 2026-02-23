@@ -3,9 +3,11 @@ import { motion } from 'framer-motion';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import ChatBot from '../components/ChatBot';
 import FeedbackModal from '../components/FeedbackModal';
+import { apiFetch } from '../lib/api';
 
 export default function DonorApp() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isAvailable, setIsAvailable] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [requestAccepted, setRequestAccepted] = useState(false);
@@ -19,6 +21,32 @@ export default function DonorApp() {
   const [feedPosts, setFeedPosts] = useState([
     { id: 1, user: "Alex Johnson", time: "2h ago", content: "Just completed my 5th donation at City General! The staff was amazing and the process was super smooth. Feeling great about helping out! 🩸💪", likes: 24, replies: [], showReplyInput: false, isLiked: false }
   ]);
+
+  const [user, setUser] = useState<any>(null);
+  const [donations, setDonations] = useState<any[]>([]);
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+    fetchDonations();
+  }, []);
+
+  const fetchDonations = async () => {
+    try {
+      const data = await apiFetch('/donor/donations');
+      setDonations(data);
+    } catch (err) {
+      console.error('Failed to fetch donations:', err);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/');
+  };
 
   // Determine active tab based on URL
   const getActiveTab = () => {
@@ -81,6 +109,7 @@ export default function DonorApp() {
             <span className={`text-sm font-bold uppercase tracking-wider ${isAvailable ? 'text-[#ee2b2b]' : 'text-slate-300'}`}>Available</span>
           </div>
         </div>
+<<<<<<< HEAD
       )}
 
       {/* Tabs */}
@@ -125,6 +154,66 @@ export default function DonorApp() {
           onAccept={handleAcceptRequest}
           requestRejected={requestRejected}
           onReject={handleRejectRequest}
+=======
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100">
+            <span className={`text-sm font-bold uppercase tracking-wider ${!isAvailable ? 'text-slate-400' : 'text-slate-300'}`}>Unavailable</span>
+            <label className="relative inline-flex items-center cursor-pointer">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={isAvailable}
+                onChange={() => setIsAvailable(!isAvailable)}
+              />
+              <div className="w-14 h-7 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-[#ee2b2b]"></div>
+            </label>
+            <span className={`text-sm font-bold uppercase tracking-wider ${isAvailable ? 'text-[#ee2b2b]' : 'text-slate-300'}`}>Available</span>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-2 text-slate-500 hover:text-[#ee2b2b] transition-colors font-bold text-sm bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm"
+          >
+            <span className="material-symbols-outlined text-lg">logout</span>
+            Logout
+          </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-6 mb-8 border-b border-slate-200 overflow-x-auto">
+        <Link
+          to="/donor"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Dashboard
+        </Link>
+        <Link
+          to="/donor/centers"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'centers' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Donation Centers
+        </Link>
+        <Link
+          to="/donor/impact"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'impact' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Impact Report
+        </Link>
+        <Link
+          to="/donor/community"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'community' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Community
+        </Link>
+      </div>
+
+      {activeTab === 'dashboard' && (
+        <DashboardView
+          user={user}
+          donations={donations}
+          requestAccepted={requestAccepted}
+          onAccept={handleAcceptRequest}
+>>>>>>> aditya
           onRate={() => setShowFeedback(true)}
           requestExpired={requestExpired}
           timeLeft={formatTime(timeLeft)}
@@ -136,11 +225,17 @@ export default function DonorApp() {
           rewardTokens={2000}
         />
       )}
+<<<<<<< HEAD
       {activeTab === 'centers' && <DonationCentersView onBook={(appt) => setPendingAppointments([...pendingAppointments, appt])} />}
       {activeTab === 'pending' && <PendingDonationsView userPoints={userPoints} appointments={pendingAppointments} onCancel={(id) => setPendingAppointments(pendingAppointments.filter(a => a.id !== id))} />}
       {activeTab === 'impact' && <RewardsView userTokens={userTokens} setUserTokens={setUserTokens} />}
       {activeTab === 'community' && <CommunityView feedPosts={feedPosts} setFeedPosts={setFeedPosts} />}
       {activeTab === 'settings' && <SettingsView />}
+=======
+      {activeTab === 'centers' && <DonationCentersView />}
+      {activeTab === 'impact' && <RewardsView user={user} />}
+      {activeTab === 'community' && <CommunityView />}
+>>>>>>> aditya
 
       <ChatBot />
 
@@ -167,6 +262,7 @@ export default function DonorApp() {
   );
 }
 
+<<<<<<< HEAD
 function DashboardView({
   requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated, userBloodType, demandBloodType, rewardTokens
 }: {
@@ -176,8 +272,12 @@ function DashboardView({
 }) {
   const isMatch = userBloodType === demandBloodType;
 
+=======
+function DashboardView({ user, donations, requestAccepted, onAccept, onRate }: { user: any; donations: any[]; requestAccepted: boolean; onAccept: () => void; onRate: () => void }) {
+>>>>>>> aditya
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* ... existing code ... */}
       {/* Left Column: Pending Requests */}
       <div className="lg:col-span-2 space-y-6">
         <div className="flex items-center justify-between mb-4">
@@ -290,6 +390,7 @@ function DashboardView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
+<<<<<<< HEAD
                 <tr className="group">
                   <td className="py-4 text-sm font-medium text-slate-900">Oct 12, 2023</td>
                   <td className="py-4 text-sm text-slate-600">Red Cross Center #4</td>
@@ -318,6 +419,29 @@ function DashboardView({
                     <span className="text-xs font-bold text-slate-400">Rated</span>
                   </td>
                 </tr>
+=======
+                {donations.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-10 text-center text-slate-400 italic">No donations found. Start donating today!</td>
+                  </tr>
+                ) : (
+                  donations.map((donation) => (
+                    <tr key={donation.id} className="group">
+                      <td className="py-4 text-sm font-medium text-slate-900">{new Date(donation.donation_date).toLocaleDateString()}</td>
+                      <td className="py-4 text-sm text-slate-600">{donation.hospital_name || 'Hospital'}</td>
+                      <td className="py-4 text-sm text-slate-600">{donation.units} Units</td>
+                      <td className="py-4">
+                        <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
+                      </td>
+                      <td className="py-4 text-right">
+                        <button onClick={onRate} className="text-xs font-bold text-[#ee2b2b] hover:bg-[#ee2b2b]/5 px-3 py-1.5 rounded-lg transition-colors">
+                          Rate Hospital
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+>>>>>>> aditya
               </tbody>
             </table>
           </div>
@@ -431,6 +555,7 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
   };
 
   return (
+<<<<<<< HEAD
     <div className="flex flex-col gap-8 -mt-2 pb-24">
       {/* Breadcrumbs & Title */}
       <div className="flex flex-col gap-2">
@@ -443,6 +568,21 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
           <div>
             <h2 className="text-3xl md:text-4xl font-black text-slate-900 leading-tight">Schedule Your Donation</h2>
             <p className="text-slate-500 max-w-2xl mt-1">Our AI predicts high demand for O- and A+ types this week. Your donation could save up to three lives.</p>
+=======
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {[1, 2, 3, 4, 5, 6].map((i) => (
+        <div key={i} className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+          <div className="h-40 bg-slate-200 relative">
+            <img
+              src={`https://picsum.photos/seed/center${i}/400/200`}
+              alt="Donation Center"
+              className="w-full h-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+            <div className="absolute top-3 right-3 bg-white/90 backdrop-blur px-2 py-1 rounded text-xs font-bold text-slate-700">
+              {i * 1.2} miles away
+            </div>
+>>>>>>> aditya
           </div>
           <div className="flex items-center gap-2 bg-[#ee2b2b]/10 text-[#ee2b2b] px-4 py-2 rounded-lg border border-[#ee2b2b]/20">
             <span className="material-symbols-outlined animate-pulse">priority_high</span>
@@ -757,7 +897,11 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
             {feedPosts.map((post) => (
               <div key={post.id} className="flex gap-4 pb-6 border-b border-slate-100 last:border-0 last:pb-0">
                 <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0">
+<<<<<<< HEAD
                   <img src={`https://picsum.photos/seed/user${post.id}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+=======
+                  <img src={`https://picsum.photos/seed/user${i}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+>>>>>>> aditya
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
@@ -852,6 +996,7 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
   );
 }
 
+<<<<<<< HEAD
 function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUserTokens: (val: number) => void }) {
   const navigate = useNavigate();
   const [showAllFacilities, setShowAllFacilities] = useState(false);
@@ -864,6 +1009,13 @@ function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUse
       alert(`Not enough tokens! You need ${cost - userTokens} more tokens to redeem ${name}.`);
     }
   };
+=======
+function RewardsView({ user }: { user: any }) {
+  const xp = user?.xp_points || 0;
+  const level = user?.current_level || 1;
+  const nextTarget = level * 100;
+  const progressPercent = Math.min(100, Math.round((xp / nextTarget) * 100));
+>>>>>>> aditya
 
   return (
     <div className="space-y-8">
@@ -879,25 +1031,25 @@ function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUse
                   <span className="material-symbols-outlined text-5xl">shield</span>
                 </div>
               </div>
-              <div className="absolute -bottom-2 -right-2 bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-widest border-2 border-white">Tier 4</div>
+              <div className="absolute -bottom-2 -right-2 bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-widest border-2 border-white">Tier {level}</div>
             </div>
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
-                <h1 className="text-3xl font-extrabold text-slate-900">Guardian Level</h1>
+                <h1 className="text-3xl font-extrabold text-slate-900">{user?.name || 'Donor'}</h1>
                 <span className="material-symbols-outlined text-[#ee2b2b]">verified</span>
               </div>
               <p className="text-slate-500 text-base mb-6">You are in the top 5% of donors in Seattle. Keep it up!</p>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm font-bold">
-                  <span className="text-[#ee2b2b]">450 / 1000 XP</span>
+                  <span className="text-[#ee2b2b]">{xp} / {nextTarget} XP</span>
                   <span className="text-slate-400">Next: Life Sentinel</span>
                 </div>
                 <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200">
-                  <div className="h-full bg-[#ee2b2b] rounded-full transition-all duration-1000" style={{ width: '45%' }}></div>
+                  <div className="h-full bg-[#ee2b2b] rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
                 </div>
                 <p className="text-xs text-slate-400 flex items-center gap-1">
                   <span className="material-symbols-outlined text-xs">info</span>
-                  550 XP remaining to unlock Sentinel status and exclusive rewards.
+                  {nextTarget - xp} XP remaining to unlock Sentinel status and exclusive rewards.
                 </p>
               </div>
             </div>
@@ -1112,8 +1264,8 @@ function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUse
                   <img className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAmGCUAhVMR3Z5uQEP8UfkbMl8lgDvYah8rKZvWQnL27Bot_HUjAcoK0syZ3ECT-hAvVModhklCNJfq8b5EzHUO6_yBoToF_ZSL_1U-8tN9A0QoG_aBX1HEUdgnGRqkwM1rH2bNoxSh6rBHv57Knas2PPdArZ20LJqowRklrJ9-BlpFUZxtBUJJonEWR-DcnO-sKDEhBpT3Y76GWDrw5Jy8w2Ne1XFrRTSxLj0qdyjTnGpL6qtUZX-03S1EjZRwP25DStZYz0qdEkg" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold truncate text-slate-900">You (Guardian)</p>
-                  <p className="text-xs text-[#ee2b2b] font-bold">450 XP</p>
+                  <p className="text-sm font-bold truncate text-slate-900">{user?.name || 'You'} (Donor)</p>
+                  <p className="text-xs text-[#ee2b2b] font-bold">{user?.blood_group || 'O+'}</p>
                 </div>
               </div>
             </div>
