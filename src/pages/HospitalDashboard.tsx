@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import Chat from '../components/Chat';
+import ChatBot from '../components/ChatBot';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
@@ -225,11 +226,12 @@ export default function HospitalDashboard() {
       {/* Floating Chat */}
       <button
         onClick={() => setShowChat(!showChat)}
-        className="fixed bottom-8 right-8 w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
+        className="fixed bottom-8 right-28 w-14 h-14 bg-slate-900 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40"
       >
         <span className="material-symbols-outlined">forum</span>
       </button>
       <Chat isOpen={showChat} recipientName="Emergency Center" recipientType="hospital" onClose={() => setShowChat(false)} />
+      <ChatBot />
     </div >
   );
 }
