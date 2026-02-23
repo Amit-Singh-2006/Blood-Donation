@@ -10,6 +10,14 @@ export default function Layout() {
   const profileRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+  }, [location.pathname]); // Update when navigating in case user changes
 
   const hideNav = location.pathname === '/' || location.pathname === '/register-donor' || location.pathname === '/register-hospital' || location.pathname === '/register-admin' || location.pathname === '/how-it-works' || location.pathname === '/emergency-network' || location.pathname === '/impact-reports';
 
@@ -199,13 +207,13 @@ export default function Layout() {
                     <div className="w-8 h-8 rounded-full bg-[#ee2b2b]/10 flex items-center justify-center text-[#ee2b2b]">
                       <span className="material-symbols-outlined text-sm">person</span>
                     </div>
-                    <span className="text-xs font-bold text-slate-700 max-w-[80px] truncate">Alex J.</span>
+                    <span className="text-xs font-bold text-slate-700 max-w-[80px] truncate">{user?.name || 'User'}</span>
                   </button>
                   {showProfile && (
                     <div className="absolute right-0 top-12 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
                       <div className="p-4 border-b border-slate-50">
-                        <p className="font-bold text-sm text-slate-900">Alex Johnson</p>
-                        <p className="text-xs text-slate-500">alex.j@example.com</p>
+                        <p className="font-bold text-sm text-slate-900">{user?.name || 'User'}</p>
+                        <p className="text-xs text-slate-500">{user?.email || 'user@example.com'}</p>
                       </div>
                       <div className="p-2 space-y-1">
                         <Link to="/donor/impact" onClick={() => setShowProfile(false)} className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-50 hover:text-[#ee2b2b] transition-colors">
@@ -222,7 +230,7 @@ export default function Layout() {
                         </Link>
                       </div>
                       <div className="border-t border-slate-50 p-2">
-                        <button onClick={() => { setShowProfile(false); navigate('/'); }} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-[#ee2b2b] transition-colors">
+                        <button onClick={() => { setShowProfile(false); localStorage.removeItem('token'); localStorage.removeItem('user'); navigate('/'); }} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-[#ee2b2b] transition-colors">
                           <span className="material-symbols-outlined text-lg">logout</span>
                           Sign Out
                         </button>

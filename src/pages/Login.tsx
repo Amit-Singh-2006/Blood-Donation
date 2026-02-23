@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { apiFetch } from '../lib/api';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -10,18 +11,52 @@ export default function Login() {
   const [isEmergencyAvailable, setIsEmergencyAvailable] = useState(false);
   const [isSupportOpen, setIsSupportOpen] = useState(false);
   const [isRegistering, setIsRegistering] = useState(location.pathname === '/register-donor');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [bloodGroup, setBloodGroup] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setError('');
 
-    // Simulate auth
-    setTimeout(() => {
-      setIsLoading(false);
+    try {
+      if (isRegistering) {
+        // Register
+        const registerData = {
+          name,
+          email,
+          password,
+          role,
+          ...(role === 'donor' && { blood_group: bloodGroup }),
+        };
+        const response = await apiFetch('/auth/register', {
+          method: 'POST',
+          body: JSON.stringify(registerData),
+        });
+        localStorage.setItem('token', response.token);
+        localStorage.setItem('user', JSON.stringify(response.user));
+      } else {
+        // Login
+        const response = await apiFetch('/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ email, password }),
+        });
+        localStorage.setItem('token', response.token);
+        localStorage.setItem('user', JSON.stringify(response.user));
+      }
+
+      // Navigate based on role
       if (role === 'donor') navigate('/donor');
       else if (role === 'hospital') navigate('/hospital');
       else if (role === 'admin') navigate('/admin');
-    }, 1000);
+    } catch (err: any) {
+      setError(err.message || 'Authentication failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const toggleMode = () => {
@@ -31,6 +66,7 @@ export default function Login() {
       navigate('/register-admin');
     } else {
       setIsRegistering(!isRegistering);
+      setError(null);
       navigate(isRegistering ? '/' : '/register-donor');
     }
   };
@@ -125,6 +161,12 @@ export default function Login() {
 
           {/* Login Card */}
           <div className="bg-white rounded-xl border border-slate-200 p-8 space-y-6 shadow-[0_10px_25px_-5px_rgba(242,13,13,0.05),0_8px_10px_-6px_rgba(0,0,0,0.01)]">
+            {error && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm font-bold border border-red-100 italic">
+                {error}
+              </div>
+            )}
+
             {/* Role Selector */}
             <div className="bg-slate-100 p-1.5 rounded-xl flex">
               <button
@@ -152,6 +194,22 @@ export default function Login() {
 
             {/* Input Group */}
             <form onSubmit={handleLogin} className="space-y-4">
+              {isRegistering && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-bold text-slate-700 ml-1">Full Name</label>
+                  <div className="relative group">
+                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">badge</span>
+                    <input
+                      type="text"
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
+                      placeholder="John Doe"
+                    />
+                  </div>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <label className="text-sm font-bold text-slate-700 ml-1">Email address</label>
                 <div className="relative group">
@@ -159,12 +217,38 @@ export default function Login() {
                   <input
                     type="email"
                     required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
                     placeholder="name@example.com"
                   />
                 </div>
               </div>
 
+              {isRegistering && role === 'donor' && (
+                <div className="space-y-1.5">
+                  <label className="text-sm font-bold text-slate-700 ml-1">Blood Type</label>
+                  <div className="relative group">
+                    <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">bloodtype</span>
+                    <select
+                      required
+                      value={bloodGroup}
+                      onChange={(e) => setBloodGroup(e.target.value)}
+                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400 appearance-none"
+                    >
+                      <option value="">Select Blood Type</option>
+                      <option value="A+">A+</option>
+                      <option value="A-">A-</option>
+                      <option value="B+">B+</option>
+                      <option value="B-">B-</option>
+                      <option value="AB+">AB+</option>
+                      <option value="AB-">AB-</option>
+                      <option value="O+">O+</option>
+                      <option value="O-">O-</option>
+                    </select>
+                  </div>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
@@ -175,6 +259,8 @@ export default function Login() {
                   <input
                     type="password"
                     required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     className="w-full pl-12 pr-12 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
                     placeholder="••••••••"
                   />

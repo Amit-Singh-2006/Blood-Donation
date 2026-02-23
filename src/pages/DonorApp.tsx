@@ -3,9 +3,47 @@ import { motion } from 'framer-motion';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import ChatBot from '../components/ChatBot';
 import FeedbackModal from '../components/FeedbackModal';
+import { apiFetch } from '../lib/api';
+
+function DonorSettingsView() {
+  return (
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+          <span className="material-symbols-outlined text-[#ee2b2b]">settings</span>
+          Account Settings
+        </h2>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
+            <div>
+              <h4 className="font-bold text-slate-900">Push Notifications</h4>
+              <p className="text-sm text-slate-500">Receive alerts for emergency matches</p>
+            </div>
+            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
+              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
+            <div>
+              <h4 className="font-bold text-slate-900">Location Services</h4>
+              <p className="text-sm text-slate-500">Allow AI to find nearest hospitals for matching</p>
+            </div>
+            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
+              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
+            </div>
+          </div>
+        </div>
+        <button className="mt-8 px-6 py-3 w-full sm:w-auto bg-[#ee2b2b] text-white rounded-lg font-bold hover:bg-[#ee2b2b]/90 transition-all shadow-md">
+          Save Changes
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function DonorApp() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isAvailable, setIsAvailable] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [requestAccepted, setRequestAccepted] = useState(false);
@@ -19,6 +57,32 @@ export default function DonorApp() {
   const [feedPosts, setFeedPosts] = useState([
     { id: 1, user: "Alex Johnson", time: "2h ago", content: "Just completed my 5th donation at City General! The staff was amazing and the process was super smooth. Feeling great about helping out! 🩸💪", likes: 24, replies: [], showReplyInput: false, isLiked: false }
   ]);
+
+  const [user, setUser] = useState<any>(null);
+  const [donations, setDonations] = useState<any[]>([]);
+
+  useEffect(() => {
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+    fetchDonations();
+  }, []);
+
+  const fetchDonations = async () => {
+    try {
+      const data = await apiFetch('/donor/donations');
+      setDonations(data);
+    } catch (err) {
+      console.error('Failed to fetch donations:', err);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/');
+  };
 
   // Determine active tab based on URL
   const getActiveTab = () => {
@@ -84,43 +148,43 @@ export default function DonorApp() {
       )}
 
       {/* Tabs */}
-      {activeTab !== 'centers' && (
-        <div className="flex gap-6 mb-8 border-b border-slate-200 overflow-x-auto">
-          <Link
-            to="/donor"
-            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Dashboard
-          </Link>
-          <Link
-            to="/donor/centers"
-            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${(activeTab as string) === 'centers' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Donation Centers
-          </Link>
-          <Link
-            to="/donor/pending"
-            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'pending' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Pending Donations
-          </Link>
-          <Link
-            to="/donor/impact"
-            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'impact' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Impact Report
-          </Link>
-          <Link
-            to="/donor/community"
-            className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'community' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-          >
-            Community
-          </Link>
-        </div>
-      )}
+      <div className="flex gap-6 mb-8 border-b border-slate-200 overflow-x-auto">
+        <Link
+          to="/donor"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Dashboard
+        </Link>
+        <Link
+          to="/donor/centers"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${(activeTab as string) === 'centers' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Donation Centers
+        </Link>
+        <Link
+          to="/donor/pending"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'pending' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Pending Donations
+        </Link>
+        <Link
+          to="/donor/impact"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'impact' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Impact Report
+        </Link>
+        <Link
+          to="/donor/community"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'community' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Community
+        </Link>
+      </div>
 
       {activeTab === 'dashboard' && (
         <DashboardView
+          user={user}
+          donations={donations}
           requestAccepted={requestAccepted}
           onAccept={handleAcceptRequest}
           requestRejected={requestRejected}
@@ -138,9 +202,9 @@ export default function DonorApp() {
       )}
       {activeTab === 'centers' && <DonationCentersView onBook={(appt) => setPendingAppointments([...pendingAppointments, appt])} />}
       {activeTab === 'pending' && <PendingDonationsView userPoints={userPoints} appointments={pendingAppointments} onCancel={(id) => setPendingAppointments(pendingAppointments.filter(a => a.id !== id))} />}
-      {activeTab === 'impact' && <RewardsView userTokens={userTokens} setUserTokens={setUserTokens} />}
+      {activeTab === 'impact' && <RewardsView userTokens={userTokens} setUserTokens={setUserTokens} user={user} />}
       {activeTab === 'community' && <CommunityView feedPosts={feedPosts} setFeedPosts={setFeedPosts} />}
-      {activeTab === 'settings' && <SettingsView />}
+      {activeTab === 'settings' && <DonorSettingsView />}
 
       <ChatBot />
 
@@ -168,9 +232,9 @@ export default function DonorApp() {
 }
 
 function DashboardView({
-  requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated, userBloodType, demandBloodType, rewardTokens
+  user, donations, requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated, userBloodType, demandBloodType, rewardTokens
 }: {
-  requestAccepted: boolean; onAccept: () => void; requestRejected: boolean; onReject: () => void; onRate: () => void;
+  user: any; donations: any[]; requestAccepted: boolean; onAccept: () => void; requestRejected: boolean; onReject: () => void; onRate: () => void;
   requestExpired: boolean; timeLeft: string; isAvailable: boolean; openNavigation: () => void;
   hospitalRated: boolean; userBloodType: string; demandBloodType: string; rewardTokens: number;
 }) {
@@ -178,6 +242,7 @@ function DashboardView({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* ... existing code ... */}
       {/* Left Column: Pending Requests */}
       <div className="lg:col-span-2 space-y-6">
         <div className="flex items-center justify-between mb-4">
@@ -290,34 +355,31 @@ function DashboardView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                <tr className="group">
-                  <td className="py-4 text-sm font-medium text-slate-900">Oct 12, 2023</td>
-                  <td className="py-4 text-sm text-slate-600">Red Cross Center #4</td>
-                  <td className="py-4 text-sm text-slate-600">Whole Blood</td>
-                  <td className="py-4">
-                    <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
-                  </td>
-                  <td className="py-4 text-right">
-                    {hospitalRated ? (
-                      <span className="text-xs font-bold text-slate-400">Rated</span>
-                    ) : (
-                      <button onClick={onRate} className="text-xs font-bold text-[#ee2b2b] hover:bg-[#ee2b2b]/5 px-3 py-1.5 rounded-lg transition-colors">
-                        Rate Hospital
-                      </button>
-                    )}
-                  </td>
-                </tr>
-                <tr className="group">
-                  <td className="py-4 text-sm font-medium text-slate-900">July 04, 2023</td>
-                  <td className="py-4 text-sm text-slate-600">St. Jude Medical</td>
-                  <td className="py-4 text-sm text-slate-600">Power Red</td>
-                  <td className="py-4">
-                    <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
-                  </td>
-                  <td className="py-4 text-right">
-                    <span className="text-xs font-bold text-slate-400">Rated</span>
-                  </td>
-                </tr>
+                {donations.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-10 text-center text-slate-400 italic">No donations found. Start donating today!</td>
+                  </tr>
+                ) : (
+                  donations.map((donation) => (
+                    <tr key={donation.id} className="group">
+                      <td className="py-4 text-sm font-medium text-slate-900">{new Date(donation.donation_date).toLocaleDateString()}</td>
+                      <td className="py-4 text-sm text-slate-600">{donation.hospital_name || 'Hospital'}</td>
+                      <td className="py-4 text-sm text-slate-600">{donation.units} Units</td>
+                      <td className="py-4">
+                        <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
+                      </td>
+                      <td className="py-4 text-right">
+                        {hospitalRated ? (
+                          <span className="text-xs font-bold text-slate-400">Rated</span>
+                        ) : (
+                          <button onClick={onRate} className="text-xs font-bold text-[#ee2b2b] hover:bg-[#ee2b2b]/5 px-3 py-1.5 rounded-lg transition-colors">
+                            Rate Hospital
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -714,7 +776,7 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
   const [replyText, setReplyText] = useState("");
 
   const handleToggleLike = (postId: number) => {
-    setFeedPosts(posts => posts.map(post => {
+    setFeedPosts((posts: any[]) => posts.map(post => {
       if (post.id === postId) {
         return {
           ...post,
@@ -732,14 +794,14 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
   };
 
   const handleToggleReply = (postId: number) => {
-    setFeedPosts(posts => posts.map(post =>
+    setFeedPosts((posts: any[]) => posts.map(post =>
       post.id === postId ? { ...post, showReplyInput: !post.showReplyInput } : post
     ));
   };
 
   const submitReply = (postId: number) => {
     if (!replyText.trim()) return;
-    setFeedPosts(posts => posts.map(post => {
+    setFeedPosts((posts: any[]) => posts.map(post => {
       if (post.id === postId) {
         return { ...post, showReplyInput: false, replies: [...post.replies, replyText] };
       }
@@ -754,10 +816,10 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
         <div className="bg-white rounded-xl p-6 border border-slate-200">
           <h3 className="font-bold text-lg mb-4">Community Feed</h3>
           <div className="space-y-6">
-            {feedPosts.map((post) => (
+            {feedPosts.map((post: any, i: number) => (
               <div key={post.id} className="flex gap-4 pb-6 border-b border-slate-100 last:border-0 last:pb-0">
                 <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0">
-                  <img src={`https://picsum.photos/seed/user${post.id}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  <img src={`https://picsum.photos/seed/user${post.id || i}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
@@ -817,6 +879,7 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
           </div>
         </div>
       </div>
+
       <div className="space-y-6">
         <div className="bg-[#ee2b2b] text-white rounded-xl p-6 relative overflow-hidden">
           <div className="relative z-10">
@@ -852,9 +915,14 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
   );
 }
 
-function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUserTokens: (val: number) => void }) {
+function RewardsView({ userTokens, setUserTokens, user }: { userTokens: number, setUserTokens: (val: number) => void, user: any }) {
   const navigate = useNavigate();
   const [showAllFacilities, setShowAllFacilities] = useState(false);
+
+  const xp = user?.xp_points || 0;
+  const level = user?.current_level || 1;
+  const nextTarget = level * 100;
+  const progressPercent = Math.min(100, Math.round((xp / nextTarget) * 100));
 
   const handleRedeem = (cost: number, name: string) => {
     if (userTokens >= cost) {
@@ -879,25 +947,25 @@ function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUse
                   <span className="material-symbols-outlined text-5xl">shield</span>
                 </div>
               </div>
-              <div className="absolute -bottom-2 -right-2 bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-widest border-2 border-white">Tier 4</div>
+              <div className="absolute -bottom-2 -right-2 bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-widest border-2 border-white">Tier {level}</div>
             </div>
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
-                <h1 className="text-3xl font-extrabold text-slate-900">Guardian Level</h1>
+                <h1 className="text-3xl font-extrabold text-slate-900">{user?.name || 'Donor'}</h1>
                 <span className="material-symbols-outlined text-[#ee2b2b]">verified</span>
               </div>
               <p className="text-slate-500 text-base mb-6">You are in the top 5% of donors in Seattle. Keep it up!</p>
               <div className="space-y-3">
                 <div className="flex justify-between text-sm font-bold">
-                  <span className="text-[#ee2b2b]">450 / 1000 XP</span>
+                  <span className="text-[#ee2b2b]">{xp} / {nextTarget} XP</span>
                   <span className="text-slate-400">Next: Life Sentinel</span>
                 </div>
                 <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200">
-                  <div className="h-full bg-[#ee2b2b] rounded-full transition-all duration-1000" style={{ width: '45%' }}></div>
+                  <div className="h-full bg-[#ee2b2b] rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
                 </div>
                 <p className="text-xs text-slate-400 flex items-center gap-1">
                   <span className="material-symbols-outlined text-xs">info</span>
-                  550 XP remaining to unlock Sentinel status and exclusive rewards.
+                  {nextTarget - xp} XP remaining to unlock Sentinel status and exclusive rewards.
                 </p>
               </div>
             </div>
@@ -1112,8 +1180,8 @@ function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUse
                   <img className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAmGCUAhVMR3Z5uQEP8UfkbMl8lgDvYah8rKZvWQnL27Bot_HUjAcoK0syZ3ECT-hAvVModhklCNJfq8b5EzHUO6_yBoToF_ZSL_1U-8tN9A0QoG_aBX1HEUdgnGRqkwM1rH2bNoxSh6rBHv57Knas2PPdArZ20LJqowRklrJ9-BlpFUZxtBUJJonEWR-DcnO-sKDEhBpT3Y76GWDrw5Jy8w2Ne1XFrRTSxLj0qdyjTnGpL6qtUZX-03S1EjZRwP25DStZYz0qdEkg" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold truncate text-slate-900">You (Guardian)</p>
-                  <p className="text-xs text-[#ee2b2b] font-bold">450 XP</p>
+                  <p className="text-sm font-bold truncate text-slate-900">{user?.name || 'You'} (Donor)</p>
+                  <p className="text-xs text-[#ee2b2b] font-bold">{user?.blood_group || 'O+'}</p>
                 </div>
               </div>
             </div>
@@ -1124,38 +1192,5 @@ function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUse
   );
 }
 
-function SettingsView() {
-  return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm">
-        <h2 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-          <span className="material-symbols-outlined text-[#ee2b2b]">settings</span>
-          Account Settings
-        </h2>
-        <div className="space-y-6">
-          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
-            <div>
-              <h4 className="font-bold text-slate-900">Push Notifications</h4>
-              <p className="text-sm text-slate-500">Receive alerts for emergency matches</p>
-            </div>
-            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
-              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
-            </div>
-          </div>
-          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
-            <div>
-              <h4 className="font-bold text-slate-900">Location Services</h4>
-              <p className="text-sm text-slate-500">Allow AI to find nearest hospitals for matching</p>
-            </div>
-            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
-              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
-            </div>
-          </div>
-        </div>
-        <button className="mt-8 px-6 py-3 w-full sm:w-auto bg-[#ee2b2b] text-white rounded-lg font-bold hover:bg-[#ee2b2b]/90 transition-all shadow-md">
-          Save Changes
-        </button>
-      </div>
-    </div>
-  );
-}
+
+

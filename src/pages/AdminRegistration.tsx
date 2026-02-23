@@ -1,15 +1,26 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { User, Shield, Briefcase, Mail, Building, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Shield, Mail, CheckCircle2, ArrowRight, Lock } from 'lucide-react';
 
 export default function AdminRegistration() {
     const navigate = useNavigate();
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [error, setError] = useState('');
+    const [specialId, setSpecialId] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        setError('');
+
+        if (specialId !== '7291admin') {
+            setError('Invalid Admin Special ID. Unauthorized registration attempt.');
+            return;
+        }
+
         setIsSubmitting(true);
 
         // Simulate API call
@@ -47,72 +58,64 @@ export default function AdminRegistration() {
         <div className="max-w-2xl mx-auto py-10">
             <div className="text-center mb-10">
                 <h1 className="text-3xl font-bold text-slate-900">Admin Registration</h1>
-                <p className="text-slate-600 mt-2">Create an administrative account to oversee network operations.</p>
+                <p className="text-slate-600 mt-2">Create an administrative account to oversee network operations using your special ID.</p>
             </div>
 
             <motion.form
                 initial={{ y: 20, opacity: 0 }}
                 animate={{ y: 0, opacity: 1 }}
                 onSubmit={handleSubmit}
-                className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-6"
+                className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-6 max-w-lg mx-auto"
             >
-                <div className="grid md:grid-cols-2 gap-6">
+                <div className="grid gap-6">
+                    {error && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="p-4 bg-red-50 text-red-600 border border-red-100 rounded-lg text-sm font-medium text-center"
+                        >
+                            {error}
+                        </motion.div>
+                    )}
+
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                            <User className="w-4 h-4" /> Full Name
+                            <Shield className="w-4 h-4" /> Admin Special ID
                         </label>
                         <input
                             required
                             type="text"
-                            placeholder="Jane Doe"
+                            value={specialId}
+                            onChange={(e) => setSpecialId(e.target.value)}
+                            placeholder="Enter your special key (e.g., 7291admin)"
                             className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
                         />
                     </div>
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                            <Briefcase className="w-4 h-4" /> Role/Title
-                        </label>
-                        <input
-                            required
-                            type="text"
-                            placeholder="System Administrator"
-                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                            <Building className="w-4 h-4" /> Organization
-                        </label>
-                        <input
-                            required
-                            type="text"
-                            placeholder="LifeLink Regional Office"
-                            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                            <Mail className="w-4 h-4" /> Official Email
+                            <Mail className="w-4 h-4" /> Gmail Address
                         </label>
                         <input
                             required
                             type="email"
-                            placeholder="jane.doe@lifelink.ai"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            placeholder="admin@gmail.com"
                             className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
                         />
                     </div>
 
-                    <div className="space-y-2 lg:col-span-2">
+                    <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
-                            <Shield className="w-4 h-4" /> Security Clearance Code
+                            <Lock className="w-4 h-4" /> Password
                         </label>
                         <input
                             required
                             type="password"
-                            placeholder="Required for admin privileges..."
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Create a strong password"
                             className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
                         />
                     </div>
@@ -135,7 +138,7 @@ export default function AdminRegistration() {
                     {isSubmitting ? (
                         <>
                             <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                            Registering...
+                            Authorizing...
                         </>
                     ) : (
                         <>

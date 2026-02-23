@@ -19,7 +19,7 @@ export default function ChatBot() {
     setInput('');
 
     try {
-      const apiKey = "AIzaSyCogV-hvaViJRQZohBNo50nHam6KwKXeTQ";
+      const apiKey = "";
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -69,8 +69,8 @@ export default function ChatBot() {
                 >
                   <div
                     className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.sender === 'user'
-                        ? 'bg-red-600 text-white rounded-tr-none'
-                        : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
+                      ? 'bg-red-600 text-white rounded-tr-none'
+                      : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
                       }`}
                   >
                     {msg.text}
