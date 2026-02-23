@@ -11,6 +11,7 @@ export default function DonorApp() {
   const [requestAccepted, setRequestAccepted] = useState(false);
   const [requestRejected, setRequestRejected] = useState(false);
   const [userPoints, setUserPoints] = useState(location.state?.initialPoints || 450);
+  const [userTokens, setUserTokens] = useState(24000);
   const [requestExpired, setRequestExpired] = useState(false);
   const [timeLeft, setTimeLeft] = useState(3 * 60 * 60); // 3 hours in seconds
   const [pendingAppointments, setPendingAppointments] = useState<{ date: string, time: string, hospital: string, id: number }[]>([]);
@@ -26,6 +27,7 @@ export default function DonorApp() {
     if (path.includes('/impact')) return 'impact';
     if (path.includes('/community')) return 'community';
     if (path.includes('/pending')) return 'pending';
+    if (path.includes('/settings')) return 'settings';
     return 'dashboard';
   };
 
@@ -129,12 +131,16 @@ export default function DonorApp() {
           isAvailable={isAvailable}
           openNavigation={openNavigation}
           hospitalRated={hospitalRated}
+          userBloodType="O-"
+          demandBloodType="O-"
+          rewardTokens={2000}
         />
       )}
       {activeTab === 'centers' && <DonationCentersView onBook={(appt) => setPendingAppointments([...pendingAppointments, appt])} />}
       {activeTab === 'pending' && <PendingDonationsView userPoints={userPoints} appointments={pendingAppointments} onCancel={(id) => setPendingAppointments(pendingAppointments.filter(a => a.id !== id))} />}
-      {activeTab === 'impact' && <RewardsView />}
+      {activeTab === 'impact' && <RewardsView userTokens={userTokens} setUserTokens={setUserTokens} />}
       {activeTab === 'community' && <CommunityView feedPosts={feedPosts} setFeedPosts={setFeedPosts} />}
+      {activeTab === 'settings' && <SettingsView />}
 
       <ChatBot />
 
@@ -162,12 +168,14 @@ export default function DonorApp() {
 }
 
 function DashboardView({
-  requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated
+  requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated, userBloodType, demandBloodType, rewardTokens
 }: {
   requestAccepted: boolean; onAccept: () => void; requestRejected: boolean; onReject: () => void; onRate: () => void;
   requestExpired: boolean; timeLeft: string; isAvailable: boolean; openNavigation: () => void;
-  hospitalRated: boolean;
+  hospitalRated: boolean; userBloodType: string; demandBloodType: string; rewardTokens: number;
 }) {
+  const isMatch = userBloodType === demandBloodType;
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Left Column: Pending Requests */}
@@ -177,10 +185,26 @@ function DashboardView({
             <span className="material-symbols-outlined text-[#ee2b2b]">emergency</span>
             Pending Requests
           </h3>
-          {isAvailable && !requestRejected && !requestAccepted && (
+          {isAvailable && !requestRejected && !requestAccepted && isMatch && (
             <span className="text-xs font-bold bg-[#ee2b2b]/10 text-[#ee2b2b] px-3 py-1 rounded-full uppercase">1 Live Match</span>
           )}
         </div>
+
+        {/* Donation Timeline Info */}
+        <div className="bg-white rounded-xl p-4 border border-blue-100 flex items-start gap-4 mb-6 shadow-sm">
+          <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+            <span className="material-symbols-outlined">calendar_clock</span>
+          </div>
+          <div>
+            <h4 className="font-bold text-slate-900 text-sm">Donation Eligibility</h4>
+            <p className="text-sm text-slate-600 mt-1">
+              Your last donation was on <strong className="text-slate-900">Oct 12, 2023</strong>.
+              You are currently <span className="font-bold text-green-600 uppercase text-xs tracking-wider">Eligible</span> to donate.
+              <br /><span className="text-xs text-slate-400 mt-1 block">(Usually, you must wait 56 days between whole blood donations.)</span>
+            </p>
+          </div>
+        </div>
+
         {requestAccepted ? (
           <div className="bg-green-50 rounded-xl p-6 border border-green-200 flex flex-col items-center justify-center text-center space-y-4">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600">
@@ -209,6 +233,7 @@ function DashboardView({
                   <div className="flex items-center gap-4 text-sm text-slate-500 mb-4">
                     <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">near_me</span> 2.4 miles</span>
                     <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">schedule</span> Needs by 4:00 PM</span>
+                    <span className="flex items-center gap-1 text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded"><span className="material-symbols-outlined text-sm">toll</span> +{rewardTokens.toLocaleString()} Tokens</span>
                   </div>
                   <div className="bg-[#ee2b2b]/5 p-3 rounded-lg border border-[#ee2b2b]/10 mb-6">
                     <p className="text-sm text-slate-700">
@@ -335,7 +360,7 @@ function DashboardView({
         <div className="bg-white rounded-xl border border-slate-200 p-6">
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-bold text-slate-900">Earned Badges</h3>
-            <a href="#" className="text-[#ee2b2b] text-xs font-bold hover:underline">View All</a>
+            <Link to="/donor/impact" className="text-[#ee2b2b] text-xs font-bold hover:underline">View All</Link>
           </div>
           <div className="grid grid-cols-3 gap-4">
             <div className="flex flex-col items-center text-center gap-2">
@@ -388,7 +413,10 @@ function DashboardView({
 
 function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
   const navigate = useNavigate();
-  const [selectedDate, setSelectedDate] = useState<number | null>(5);
+  const today = new Date();
+
+  const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [selectedDate, setSelectedDate] = useState<number | null>(today.getDate());
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedHospital, setSelectedHospital] = useState("City Central Medical Center");
 
@@ -398,7 +426,7 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
       return;
     }
     alert(`Appointment successfully scheduled at ${selectedHospital}!`);
-    onBook({ date: `Nov ${selectedDate}`, time: selectedTime, hospital: selectedHospital, id: Date.now() });
+    onBook({ date: `${currentMonth.toLocaleString('default', { month: 'short' })} ${selectedDate}`, time: selectedTime, hospital: selectedHospital, id: Date.now() });
     navigate('/donor/pending');
   };
 
@@ -430,11 +458,13 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
           <div className="p-6 border-b border-slate-100 flex items-center justify-between">
             <div className="flex flex-col">
               <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Date</span>
-              <h3 className="text-xl font-bold text-slate-900">November 2023</h3>
+              <h3 className="text-xl font-bold text-slate-900">
+                {currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
+              </h3>
             </div>
             <div className="flex gap-2">
-              <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><span className="material-symbols-outlined">chevron_left</span></button>
-              <button className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><span className="material-symbols-outlined">chevron_right</span></button>
+              <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><span className="material-symbols-outlined">chevron_left</span></button>
+              <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><span className="material-symbols-outlined">chevron_right</span></button>
             </div>
           </div>
           <div className="p-6">
@@ -444,24 +474,36 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
               ))}
             </div>
             <div className="grid grid-cols-7 gap-1">
-              <div className="aspect-square"></div>
-              <div className="aspect-square"></div>
-              <div className="aspect-square"></div>
-              {Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
+              {Array.from({ length: new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay() }).map((_, i) => (
+                <div key={`empty-${i}`} className="aspect-square"></div>
+              ))}
+              {Array.from({ length: new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate() }, (_, i) => i + 1).map(day => {
                 const isSelected = selectedDate === day;
-                const hasSpots = [6, 11].includes(day);
+                const hasSpots = [today.getDate() + 1, today.getDate() + 2].includes(day);
+
+                const dateOfThisButton = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
+                const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+                const maxDate = new Date(todayMidnight);
+                maxDate.setDate(todayMidnight.getDate() + 21);
+
+                const isPast = dateOfThisButton < todayMidnight;
+                const isTooFar = dateOfThisButton > maxDate;
+                const isDisabled = isPast || isTooFar;
+
                 return (
                   <button
                     key={day}
+                    disabled={isDisabled}
                     onClick={() => setSelectedDate(day)}
-                    className={`aspect-square flex flex-col items-center justify-center rounded-lg text-sm font-semibold transition-all relative ${isSelected
-                      ? "bg-[#ee2b2b] text-white font-bold shadow-lg shadow-[#ee2b2b]/20 scale-110 z-10"
-                      : "hover:bg-slate-100 text-slate-900"
+                    title={isDisabled ? "Appointments can only be booked within a 3-week window." : ""}
+                    className={`aspect-square flex flex-col items-center justify-center rounded-lg text-sm transition-all relative ${isDisabled ? 'text-slate-300 cursor-not-allowed bg-transparent' : 'font-semibold hover:bg-slate-100 text-slate-900'} ${isSelected && !isDisabled
+                      ? "bg-[#ee2b2b] text-white font-bold shadow-lg shadow-[#ee2b2b]/20 scale-110 z-10 hover:bg-[#ee2b2b]"
+                      : ""
                       }`}
                   >
                     {day}
-                    {isSelected && <span className="w-1 h-1 bg-white rounded-full mt-1"></span>}
-                    {!isSelected && hasSpots && <span className="absolute bottom-2 w-1 h-1 bg-[#ee2b2b]/40 rounded-full"></span>}
+                    {isSelected && !isDisabled && <span className="w-1 h-1 bg-white rounded-full mt-1"></span>}
+                    {!isSelected && hasSpots && !isDisabled && <span className="absolute bottom-2 w-1 h-1 bg-[#ee2b2b]/40 rounded-full"></span>}
                   </button>
                 );
               })}
@@ -810,8 +852,19 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
   );
 }
 
-function RewardsView() {
+function RewardsView({ userTokens, setUserTokens }: { userTokens: number, setUserTokens: (val: number) => void }) {
   const navigate = useNavigate();
+  const [showAllFacilities, setShowAllFacilities] = useState(false);
+
+  const handleRedeem = (cost: number, name: string) => {
+    if (userTokens >= cost) {
+      setUserTokens(userTokens - cost);
+      alert(`🎉 Successfully redeemed: ${name}! Instructions have been sent to your email.`);
+    } else {
+      alert(`Not enough tokens! You need ${cost - userTokens} more tokens to redeem ${name}.`);
+    }
+  };
+
   return (
     <div className="space-y-8">
       {/* Hero Section: Rank Progress */}
@@ -907,6 +960,126 @@ function RewardsView() {
               <p className="text-[10px] text-center text-slate-500 uppercase font-bold">Community Leader</p>
             </div>
           </div>
+
+          {/* Tokens & Hospital Facilities */}
+          <div className="mt-10">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold flex items-center gap-2 text-slate-900">
+                <span className="material-symbols-outlined text-green-500">toll</span>
+                Reward Tokens & Facilities
+              </h2>
+              <div className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-xl border border-green-200 shadow-sm">
+                <span className="font-black text-xl">{userTokens.toLocaleString()}</span>
+                <span className="text-[10px] font-bold uppercase tracking-widest mt-1">Available</span>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-500 mb-6 font-medium">
+              You earn <span className="font-bold text-[#ee2b2b]">2,000 tokens</span> for each successful donation! Redeem your tokens for free checkups and facilities at our partner hospitals.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
+                <div>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center">
+                      <span className="material-symbols-outlined">health_and_safety</span>
+                    </div>
+                    <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">City General</span>
+                  </div>
+                  <h4 className="font-bold text-slate-900 leading-tight">Comprehensive Health Checkup</h4>
+                  <p className="text-xs text-slate-500 mt-2 line-clamp-2">Full body screening including vitals, blood profile, and doctor consultation.</p>
+                </div>
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-sm font-black text-green-600">10,000 <span className="text-[10px]">Tokens</span></span>
+                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(10000, 'Comprehensive Health Checkup')} disabled={userTokens < 10000}>Redeem</button>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
+                <div>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center">
+                      <span className="material-symbols-outlined">dentistry</span>
+                    </div>
+                    <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">St. Jude Medical</span>
+                  </div>
+                  <h4 className="font-bold text-slate-900 leading-tight">Dental Cleaning & Scaling</h4>
+                  <p className="text-xs text-slate-500 mt-2 line-clamp-2">Professional dental cleaning and regular maintenance consultation.</p>
+                </div>
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-sm font-black text-green-600">8,000 <span className="text-[10px]">Tokens</span></span>
+                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(8000, 'Dental Cleaning & Scaling')} disabled={userTokens < 8000}>Redeem</button>
+                </div>
+              </div>
+
+              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
+                <div>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="w-10 h-10 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center">
+                      <span className="material-symbols-outlined">visibility</span>
+                    </div>
+                    <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">North Valley</span>
+                  </div>
+                  <h4 className="font-bold text-slate-900 leading-tight">Vision Diagnostic Test</h4>
+                  <p className="text-xs text-slate-500 mt-2 line-clamp-2">Complete eye checkup, prescription update, and retina scanning.</p>
+                </div>
+                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                  <span className="text-sm font-black text-green-600">5,000 <span className="text-[10px]">Tokens</span></span>
+                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(5000, 'Vision Diagnostic Test')} disabled={userTokens < 5000}>Redeem</button>
+                </div>
+              </div>
+
+              {!showAllFacilities ? (
+                <div onClick={() => setShowAllFacilities(true)} className="bg-slate-50 p-5 rounded-xl border border-slate-200 border-dashed flex flex-col justify-center items-center group hover:bg-[#ee2b2b]/5 transition-all outline-none cursor-pointer">
+                  <span className="material-symbols-outlined text-4xl text-slate-400 group-hover:text-[#ee2b2b] mb-2 transition-colors">dataset</span>
+                  <h4 className="font-bold text-slate-700 group-hover:text-[#ee2b2b] transition-colors">View All Facilities</h4>
+                  <p className="text-xs text-slate-500 mt-1">20+ hospital partners</p>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
+                    <div>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="w-10 h-10 bg-teal-100 text-teal-600 rounded-lg flex items-center justify-center">
+                          <span className="material-symbols-outlined">psychology</span>
+                        </div>
+                        <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Lakeside Care</span>
+                      </div>
+                      <h4 className="font-bold text-slate-900 leading-tight">Mental Health Consultation</h4>
+                      <p className="text-xs text-slate-500 mt-2 line-clamp-2">1-hour confidential session with a certified therapist.</p>
+                    </div>
+                    <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-sm font-black text-green-600">6,000 <span className="text-[10px]">Tokens</span></span>
+                      <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(6000, 'Mental Health Consultation')} disabled={userTokens < 6000}>Redeem</button>
+                    </div>
+                  </div>
+
+                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
+                    <div>
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-lg flex items-center justify-center">
+                          <span className="material-symbols-outlined">favorite</span>
+                        </div>
+                        <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Heart Center</span>
+                      </div>
+                      <h4 className="font-bold text-slate-900 leading-tight">ECG & Heart Screening</h4>
+                      <p className="text-xs text-slate-500 mt-2 line-clamp-2">Basic cardiovascular screening for early detection.</p>
+                    </div>
+                    <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-sm font-black text-green-600">12,000 <span className="text-[10px]">Tokens</span></span>
+                      <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(12000, 'ECG & Heart Screening')} disabled={userTokens < 12000}>Redeem</button>
+                    </div>
+                  </div>
+
+                  <div onClick={() => setShowAllFacilities(false)} className="bg-slate-50 p-5 rounded-xl border border-slate-200 border-dashed flex flex-col justify-center items-center group hover:bg-[#ee2b2b]/5 transition-all outline-none cursor-pointer">
+                    <span className="material-symbols-outlined text-4xl text-slate-400 group-hover:text-[#ee2b2b] mb-2 transition-colors">unfold_less</span>
+                    <h4 className="font-bold text-slate-700 group-hover:text-[#ee2b2b] transition-colors">Show Less</h4>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Leaderboard Sidebar */}
@@ -946,6 +1119,42 @@ function RewardsView() {
             </div>
           </div>
         </aside>
+      </div>
+    </div>
+  );
+}
+
+function SettingsView() {
+  return (
+    <div className="max-w-3xl mx-auto space-y-6">
+      <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm">
+        <h2 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+          <span className="material-symbols-outlined text-[#ee2b2b]">settings</span>
+          Account Settings
+        </h2>
+        <div className="space-y-6">
+          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
+            <div>
+              <h4 className="font-bold text-slate-900">Push Notifications</h4>
+              <p className="text-sm text-slate-500">Receive alerts for emergency matches</p>
+            </div>
+            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
+              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
+            </div>
+          </div>
+          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
+            <div>
+              <h4 className="font-bold text-slate-900">Location Services</h4>
+              <p className="text-sm text-slate-500">Allow AI to find nearest hospitals for matching</p>
+            </div>
+            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
+              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
+            </div>
+          </div>
+        </div>
+        <button className="mt-8 px-6 py-3 w-full sm:w-auto bg-[#ee2b2b] text-white rounded-lg font-bold hover:bg-[#ee2b2b]/90 transition-all shadow-md">
+          Save Changes
+        </button>
       </div>
     </div>
   );

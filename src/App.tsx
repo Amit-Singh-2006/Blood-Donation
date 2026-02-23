@@ -4,6 +4,10 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import HospitalRegistration from './pages/HospitalRegistration';
 import DonorRegistration from './pages/DonorRegistration';
+import AdminRegistration from './pages/AdminRegistration';
+import HowItWorks from './pages/HowItWorks';
+import EmergencyNetwork from './pages/EmergencyNetwork';
+import ImpactReports from './pages/ImpactReports';
 import AdminDashboard from './pages/AdminDashboard';
 import HospitalDashboard from './pages/HospitalDashboard';
 import DonorApp from './pages/DonorApp';
@@ -17,6 +21,10 @@ export default function App() {
         <Route index element={<Login />} />
         <Route path="register-donor" element={<DonorRegistration />} />
         <Route path="register-hospital" element={<HospitalRegistration />} />
+        <Route path="register-admin" element={<AdminRegistration />} />
+        <Route path="how-it-works" element={<HowItWorks />} />
+        <Route path="emergency-network" element={<EmergencyNetwork />} />
+        <Route path="impact-reports" element={<ImpactReports />} />
 
         {/* Admin Routes */}
         <Route path="admin" element={<AdminDashboard />} />
@@ -33,6 +41,7 @@ export default function App() {
         <Route path="donor" element={<DonorApp />} />
         <Route path="donor/centers" element={<DonorApp />} />
         <Route path="donor/pending" element={<DonorApp />} />
+        <Route path="donor/settings" element={<DonorApp />} />
         <Route path="donor/impact" element={<DonorApp />} />
         <Route path="donor/community" element={<DonorApp />} />
 

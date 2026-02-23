@@ -11,7 +11,7 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const hideNav = location.pathname === '/' || location.pathname === '/register-donor';
+  const hideNav = location.pathname === '/' || location.pathname === '/register-donor' || location.pathname === '/register-hospital' || location.pathname === '/register-admin' || location.pathname === '/how-it-works' || location.pathname === '/emergency-network' || location.pathname === '/impact-reports';
 
   // Determine layout type based on path
   const isSidebarLayout = location.pathname.startsWith('/admin') || location.pathname.startsWith('/hospital') || location.pathname.startsWith('/analytics') || location.pathname.startsWith('/tracking');
@@ -34,9 +34,9 @@ export default function Layout() {
   }, []);
 
   const handleSearch = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      alert(`Searching for: ${searchQuery}`);
-      // In a real app, this would navigate to a search results page
+    if (e.key === 'Enter' && searchQuery.trim() !== '') {
+      navigate('/donor/centers');
+      setSearchQuery('');
     }
   };
 
@@ -216,10 +216,10 @@ export default function Layout() {
                           <span className="material-symbols-outlined text-lg">monitoring</span>
                           Impact History
                         </Link>
-                        <button onClick={() => setShowProfile(false)} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-50 hover:text-[#ee2b2b] transition-colors">
+                        <Link to="/donor/settings" onClick={() => setShowProfile(false)} className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-50 hover:text-[#ee2b2b] transition-colors">
                           <span className="material-symbols-outlined text-lg">settings</span>
                           Settings
-                        </button>
+                        </Link>
                       </div>
                       <div className="border-t border-slate-50 p-2">
                         <button onClick={() => { setShowProfile(false); navigate('/'); }} className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-bold text-slate-700 hover:bg-slate-50 hover:text-[#ee2b2b] transition-colors">

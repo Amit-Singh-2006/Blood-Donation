@@ -9,31 +9,28 @@ export default function ChatBot() {
   ]);
   const [input, setInput] = useState('');
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
 
     const userMsg = { id: Date.now().toString(), sender: 'user', text: input };
     setMessages(prev => [...prev, userMsg]);
+    const userInput = input;
     setInput('');
 
-    // Simulate AI response
-    setTimeout(() => {
-      let responseText = "I'm not sure about that. Can you try asking differently?";
-      const lowerInput = input.toLowerCase();
-      
-      if (lowerInput.includes('tattoo')) {
-        responseText = "Generally, you need to wait 6-12 months after getting a tattoo to donate blood, depending on local regulations and if it was done at a licensed facility.";
-      } else if (lowerInput.includes('alcohol') || lowerInput.includes('drink')) {
-        responseText = "You should avoid alcohol for 24 hours before donating. Hydrate well with water instead!";
-      } else if (lowerInput.includes('weight') || lowerInput.includes('heavy')) {
-        responseText = "Donors typically need to weigh at least 50kg (110lbs) to donate whole blood safely.";
-      } else if (lowerInput.includes('pain') || lowerInput.includes('hurt')) {
-        responseText = "You might feel a small pinch, but the donation process is generally painless. Saving a life feels great though!";
-      }
-
+    try {
+      const apiKey = "AIzaSyCogV-hvaViJRQZohBNo50nHam6KwKXeTQ";
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: userInput }] }] })
+      });
+      const data = await res.json();
+      const responseText = data.candidates?.[0]?.content?.parts?.[0]?.text || "I'm not sure about that. Could you ask differently?";
       setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), sender: 'bot', text: responseText }]);
-    }, 1000);
+    } catch (err) {
+      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), sender: 'bot', text: "Sorry, I am having trouble connecting to the network right now." }]);
+    }
   };
 
   return (
@@ -71,11 +68,10 @@ export default function ChatBot() {
                   className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[80%] p-3 rounded-2xl text-sm ${
-                      msg.sender === 'user'
+                    className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.sender === 'user'
                         ? 'bg-red-600 text-white rounded-tr-none'
                         : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none'
-                    }`}
+                      }`}
                   >
                     {msg.text}
                   </div>
