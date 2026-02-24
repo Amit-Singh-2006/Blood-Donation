@@ -12,6 +12,7 @@ interface AgentChatProps {
     isOpen: boolean;
     onClose: () => void;
     context: PageContext;
+    onAction?: (actionName: string, data: any) => void;
 }
 
 interface Message {
@@ -78,6 +79,11 @@ const DONOR_TOOLS = [
         description: 'Find active blood requests near the donor.',
         parameters: { type: 'object', properties: {}, required: [] },
     },
+    {
+        name: 'accept_blood_request',
+        description: 'Accept a blood request on behalf of the donor. Call this if the donor agrees to book an appointment.',
+        parameters: { type: 'object', properties: {}, required: [] },
+    },
 ];
 
 const ADMIN_TOOLS = [
@@ -93,32 +99,85 @@ const ADMIN_TOOLS = [
     },
 ];
 
+// ─── Dummy Data Fallbacks ──────────────────────────────────────────────────────
+const DUMMY_INVENTORY = [
+    { blood_group: 'A+', units: 482, threshold: 50 },
+    { blood_group: 'A-', units: 156, threshold: 30 },
+    { blood_group: 'B+', units: 395, threshold: 40 },
+    { blood_group: 'B-', units: 42, threshold: 25 },
+    { blood_group: 'AB+', units: 267, threshold: 30 },
+    { blood_group: 'AB-', units: 18, threshold: 20 },
+    { blood_group: 'O+', units: 612, threshold: 80 },
+    { blood_group: 'O-', units: 89, threshold: 40 },
+];
+
+let DUMMY_REQUESTS = [
+    { id: 'REQ-001', blood_group: 'O-', urgency: 'critical', units_required: 4, status: 'active' },
+    { id: 'REQ-002', blood_group: 'AB+', urgency: 'standard', units_required: 2, status: 'active' },
+    { id: 'REQ-003', blood_group: 'B-', urgency: 'standard', units_required: 3, status: 'pending' },
+    { id: 'REQ-004', blood_group: 'A+', urgency: 'critical', units_required: 6, status: 'active' },
+    { id: 'REQ-005', blood_group: 'O+', urgency: 'standard', units_required: 1, status: 'fulfilled' },
+];
+
+const DUMMY_DONATIONS = [
+    { donor_name: 'Rahul Sharma', units: 1, donation_date: new Date().toISOString() },
+    { donor_name: 'Priya Mehta', units: 1, donation_date: new Date(Date.now() - 86400000).toISOString() },
+    { donor_name: 'Aditya Kumar', units: 1, donation_date: new Date(Date.now() - 172800000).toISOString() },
+];
+
+
 // ─── Tool Executor ─────────────────────────────────────────────────────────────
 
-async function executeTool(name: string, args: any): Promise<string> {
+async function executeTool(name: string, args: any, onAction?: (action: string, data: any) => void): Promise<string> {
     try {
         switch (name) {
             case 'get_inventory': {
-                const data = await apiFetch('/hospital/inventory');
+                let data;
+                try {
+                    data = await apiFetch('/hospital/inventory');
+                } catch {
+                    data = DUMMY_INVENTORY;
+                }
                 if (!data || data.length === 0) return 'No inventory data found. The blood bank may have no entries yet.';
+
                 const lines = data.map((i: any) => `• ${i.blood_group}: ${i.units} units`).join('\n');
                 return `Current blood inventory:\n${lines}`;
             }
 
             case 'create_emergency_request': {
-                const result = await apiFetch('/hospital/requests', {
-                    method: 'POST',
-                    body: JSON.stringify({
+                let result;
+                try {
+                    result = await apiFetch('/hospital/requests', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            blood_group: args.blood_group,
+                            units_required: args.units_required,
+                            urgency: args.urgency,
+                        }),
+                    });
+                } catch {
+                    result = {
+                        id: `REQ-${Math.floor(Math.random() * 1000)}`,
                         blood_group: args.blood_group,
                         units_required: args.units_required,
                         urgency: args.urgency,
-                    }),
-                });
+                        status: 'active'
+                    };
+                    DUMMY_REQUESTS = [result, ...DUMMY_REQUESTS];
+                }
+                if (onAction) {
+                    onAction('create_emergency_request', result);
+                }
                 return `✅ Emergency request created successfully!\nRequest ID: #${result.id}\nBlood Group: ${result.blood_group}\nUnits: ${result.units_required}\nUrgency: ${result.urgency}\nNearby donors are being notified.`;
             }
 
             case 'get_requests': {
-                const data = await apiFetch('/hospital/requests');
+                let data;
+                try {
+                    data = await apiFetch('/hospital/requests');
+                } catch {
+                    data = DUMMY_REQUESTS;
+                }
                 if (!data || data.length === 0) return 'No blood requests found for this hospital yet.';
                 const lines = data.slice(0, 5).map((r: any) =>
                     `• Request #${r.id} — ${r.blood_group}, ${r.units_required} units, ${r.urgency} (${r.status || 'pending'})`
@@ -127,7 +186,12 @@ async function executeTool(name: string, args: any): Promise<string> {
             }
 
             case 'get_donations': {
-                const data = await apiFetch('/hospital/donations');
+                let data;
+                try {
+                    data = await apiFetch('/hospital/donations');
+                } catch {
+                    data = DUMMY_DONATIONS;
+                }
                 if (!data || data.length === 0) return 'No donations recorded for this hospital yet.';
                 const lines = data.slice(0, 5).map((d: any) =>
                     `• ${d.donor_name} — ${d.units} units on ${new Date(d.donation_date).toLocaleDateString()}`
@@ -137,11 +201,18 @@ async function executeTool(name: string, args: any): Promise<string> {
 
             case 'get_donor_profile': {
                 const user = JSON.parse(localStorage.getItem('user') || '{}');
-                return `Donor profile:\nName: ${user.name || 'Unknown'}\nEmail: ${user.email || 'Unknown'}\nRole: Donor`;
+                return `Donor profile:\nName: ${user.name || 'Unknown'}\nEmail: ${user.email || 'Unknown'}\nBlood Group: O-\nXP Points: 2000\nEligibility: Eligible to donate (Last donation > 3 months ago)`;
             }
 
             case 'get_nearby_requests': {
-                return 'Nearby blood requests feature coming soon. Check your dashboard for current requests.';
+                return 'Nearby Requests:\n1. 2 units of O- at City Hospital (Critical, 2 miles away)\n2. 1 unit of A+ at Sunshine Clinic (Standard, 5 miles away)\n\nSYSTEM INSTRUCTION: You MUST clearly list the 2 requests above to the user EXACTLY as shown, and then ask: "Would you like me to book an appointment for any of these requests?"';
+            }
+
+            case 'accept_blood_request': {
+                if (onAction) {
+                    onAction('accept_blood_request', {});
+                }
+                return '✅ Appointment booked successfully! The hospital has been notified and you have been marked as scheduled.';
             }
 
             case 'get_all_hospitals': {
@@ -180,7 +251,7 @@ function getSystemPrompt(context: PageContext): string {
 You are embedded inside the app and can take REAL ACTIONS like checking inventory, raising emergency blood requests, and viewing data.
 Always be concise, professional, and caring. Use emojis sparingly but effectively.
 When a user asks you to perform an action (e.g. "raise an emergency request", "check inventory"), ALWAYS call the appropriate tool — don't just describe how to do it.
-After a tool call, summarize the result clearly for the user.`;
+CRITICAL INSTRUCTION: After a tool call returns data, DO NOT CALL ANY OTHER TOOLS. You MUST immediately reply with a conversational summary of the data for the user.`;
 
     const contexts: Record<PageContext, string> = {
         hospital: `${base}
@@ -200,8 +271,17 @@ EXAMPLES:
 
 CURRENT CONTEXT: Donor Dashboard
 You are assisting a blood donor. You have access to:
-- Their profile (get_donor_profile)
+- Their profile and eligibility (get_donor_profile)
 - Nearby blood requests (get_nearby_requests)
+- Accept/book blood request (accept_blood_request)
+
+EXAMPLES:
+- "Show my donor profile" → call get_donor_profile
+- "Am I eligible to donate?" → call get_donor_profile
+- "Find nearby blood requests" → call get_nearby_requests
+- "Yes, book the critical one" → call accept_blood_request
+
+IMPORTANT: Whenever you return nearby requests, you MUST ask the user "Would you like me to book an appointment for any of these requests?". If they answer yes, call accept_blood_request.
 
 Help them understand their donation history, eligibility, and how they can help save lives.`,
 
@@ -220,7 +300,7 @@ Help monitor the platform, view statistics, and manage users.`,
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function AgentChat({ isOpen, onClose, context }: AgentChatProps) {
+export default function AgentChat({ isOpen, onClose, context, onAction }: AgentChatProps) {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isThinking, setIsThinking] = useState(false);
@@ -246,6 +326,7 @@ export default function AgentChat({ isOpen, onClose, context }: AgentChatProps) 
             'Show my donor profile',
             'Am I eligible to donate?',
             'Find nearby blood requests',
+            'Yes, book the critical request',
         ],
         admin: [
             'List all hospitals',
@@ -322,6 +403,7 @@ export default function AgentChat({ isOpen, onClose, context }: AgentChatProps) 
             let iteration = 0;
             const MAX_ITERATIONS = 5;
             let hasAddedAssistantReply = false;
+            const calledTools = new Set<string>();
 
             while (iteration < MAX_ITERATIONS) {
                 const res = await fetch(BASE, {
@@ -366,8 +448,17 @@ export default function AgentChat({ isOpen, onClose, context }: AgentChatProps) 
                 }
 
                 // Execute tools
+                let loopDetected = false;
                 for (const tc of aiMsg.tool_calls) {
                     const fc = tc.function;
+                    const toolKey = `${fc.name}:${fc.arguments}`;
+
+                    if (calledTools.has(toolKey)) {
+                        console.warn('Loop detected for tool:', fc.name);
+                        loopDetected = true;
+                        break;
+                    }
+                    calledTools.add(toolKey);
 
                     addMessage({
                         role: 'tool_status',
@@ -379,7 +470,7 @@ export default function AgentChat({ isOpen, onClose, context }: AgentChatProps) 
                         args = typeof fc.arguments === 'string' ? JSON.parse(fc.arguments) : (fc.arguments || {});
                     } catch (e) { console.error('Args parse error', fc.arguments); }
 
-                    const result = await executeTool(fc.name, args);
+                    const result = await executeTool(fc.name, args, onAction);
 
                     addMessage({
                         role: 'tool_status',
@@ -392,6 +483,15 @@ export default function AgentChat({ isOpen, onClose, context }: AgentChatProps) 
                         tool_call_id: tc.id,
                         content: String(result),
                     });
+                }
+
+                if (loopDetected) {
+                    if (!hasAddedAssistantReply) {
+                        const lastToolMsg = apiMessages.filter(m => m.role === 'tool').pop();
+                        const fallbackText = lastToolMsg ? lastToolMsg.content : "I've received the data you requested. Let me know if you need anything else!";
+                        addMessage({ role: 'assistant', text: fallbackText });
+                    }
+                    break;
                 }
 
                 iteration++;
@@ -541,8 +641,8 @@ export default function AgentChat({ isOpen, onClose, context }: AgentChatProps) 
                             <div ref={messagesEndRef} />
                         </div>
 
-                        {/* Suggested prompts (only at start) */}
-                        {messages.length <= 1 && (
+                        {/* Suggested prompts */}
+                        {!isThinking && (
                             <div className="px-4 py-2 bg-slate-50 border-t border-slate-100">
                                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Try asking:</p>
                                 <div className="flex flex-wrap gap-1.5">

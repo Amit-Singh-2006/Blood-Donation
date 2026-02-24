@@ -220,7 +220,16 @@ export default function DonorApp() {
       >
         <span className="material-symbols-outlined">psychology</span>
       </button>
-      <AgentChat isOpen={showChat} context="donor" onClose={() => setShowChat(false)} />
+      <AgentChat
+        isOpen={showChat}
+        context="donor"
+        onClose={() => setShowChat(false)}
+        onAction={(actionName) => {
+          if (actionName === 'accept_blood_request') {
+            handleAcceptRequest();
+          }
+        }}
+      />
 
       <FeedbackModal
         isOpen={showFeedback}

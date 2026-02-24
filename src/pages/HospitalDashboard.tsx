@@ -302,7 +302,28 @@ export default function HospitalDashboard() {
       >
         <span className="material-symbols-outlined">psychology</span>
       </button>
-      <AgentChat isOpen={showChat} context="hospital" onClose={() => setShowChat(false)} />
+      <AgentChat
+        isOpen={showChat}
+        context="hospital"
+        onClose={() => setShowChat(false)}
+        onAction={(actionName, data) => {
+          if (actionName === 'create_emergency_request') {
+            const newReq = {
+              id: data.id,
+              blood_group: data.blood_group,
+              units_required: data.units_required,
+              urgency: data.urgency === 'critical' ? 'critical' : 'high',
+              status: 'active',
+              time: 'Just now',
+              patient: 'AI Prompted Request',
+              expires_in_days: '3',
+              matchedDonors: 0,
+            };
+            setLocalRequests(prev => [newReq, ...prev]);
+            setActiveTab('requests');
+          }
+        }}
+      />
     </div>
   );
 }
