@@ -105,6 +105,46 @@ export default function DonorApp() {
 
   const activeTab = getActiveTab();
 
+  const [claimingId, setClaimingId] = useState<string | null>(null);
+
+  const handleClaimCertificate = async (donation: any) => {
+    // Prompt the user for the email they want the certificate sent to
+    const defaultEmail = user?.email || "chayankhatua2006@gmail.com";
+    const userEmail = window.prompt("Where should we email your Certificate of Appreciation?", defaultEmail);
+
+    // If user clicks Cancel on the prompt, abort.
+    if (!userEmail) {
+      return;
+    }
+
+    setClaimingId(donation.id);
+    try {
+      const scriptUrl = import.meta.env.VITE_GOOGLE_SCRIPT_CERTIFICATE_URL;
+      if (scriptUrl) {
+        await fetch(scriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: JSON.stringify({
+            name: user?.name || "LifeLink Hero",
+            email: userEmail,
+            bloodGroup: user?.blood_group || "O-",
+          }),
+        });
+        alert('Certificate generation request sent! Please check your email inbox in a few moments. (It will also be logged in the spreadsheet)');
+      } else {
+        alert("Certificate URL not configured.");
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error generating certificate.');
+    } finally {
+      setClaimingId(null);
+    }
+  };
+
   const handleAcceptRequest = () => {
     setRequestAccepted(true);
     alert("Thank you! The hospital has been notified. Please proceed to the location.");
@@ -206,6 +246,8 @@ export default function DonorApp() {
           userBloodType="O-"
           demandBloodType="O-"
           rewardTokens={2000}
+          onClaimCertificate={handleClaimCertificate}
+          claimingId={claimingId}
         />
       )}
       {activeTab === 'centers' && <DonationCentersView onBook={(appt) => setPendingAppointments([...pendingAppointments, appt])} />}
@@ -258,11 +300,12 @@ export default function DonorApp() {
 }
 
 function DashboardView({
-  user, donations, requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated, userBloodType, demandBloodType, rewardTokens
+  user, donations, requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated, userBloodType, demandBloodType, rewardTokens, onClaimCertificate, claimingId
 }: {
   user: any; donations: any[]; requestAccepted: boolean; onAccept: () => void; requestRejected: boolean; onReject: () => void; onRate: () => void;
   requestExpired: boolean; timeLeft: string; isAvailable: boolean; openNavigation: () => void;
   hospitalRated: boolean; userBloodType: string; demandBloodType: string; rewardTokens: number;
+  onClaimCertificate: (donation: any) => void; claimingId: string | null;
 }) {
   const isMatch = userBloodType === demandBloodType;
 
@@ -394,7 +437,7 @@ function DashboardView({
                       <td className="py-4">
                         <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
                       </td>
-                      <td className="py-4 text-right">
+                      <td className="py-4 text-right flex flex-col items-end gap-2">
                         {donation.rated ? (
                           <span className="text-xs font-bold text-slate-400">Rated</span>
                         ) : (
@@ -402,6 +445,14 @@ function DashboardView({
                             Rate Hospital
                           </button>
                         )}
+                        <button
+                          onClick={() => onClaimCertificate(donation)}
+                          disabled={claimingId === donation.id}
+                          className="text-xs font-bold bg-[#ee2b2b] text-white px-3 py-1.5 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-1 disabled:opacity-50"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">workspace_premium</span>
+                          {claimingId === donation.id ? "Sending..." : "Get Certificate"}
+                        </button>
                       </td>
                     </tr>
                   ))
