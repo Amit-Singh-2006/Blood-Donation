@@ -823,6 +823,33 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
 
   const handleCampaignSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Send Google Automation Email using Google Apps Script
+    try {
+      const scriptUrl = import.meta.env.VITE_GOOGLE_SCRIPT_URL;
+      if (scriptUrl) {
+        const ticketId = 'DRIVE-' + Math.random().toString(36).substr(2, 6).toUpperCase();
+        fetch(scriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'text/plain;charset=utf-8',
+          },
+          body: JSON.stringify({
+            name: campaignForm.name,
+            email: campaignForm.email,
+            ticketId: ticketId,
+            subject: '🎟️ Confirmed: Your Official Blood Drive Ticket',
+            message: 'Your registration for the upcoming blood drive at the Community Center this Saturday (9AM - 4PM) is confirmed. Your venue details and time slots will be updated soon. Thank you for saving lives!',
+          }),
+        }).catch(err => console.error("Google Script fetch error:", err));
+      } else {
+        console.warn("VITE_GOOGLE_SCRIPT_URL is not set.");
+      }
+    } catch (err) {
+      console.error("Google Automation error:", err);
+    }
+
     setCampaignSubmitted(true);
     setIsRegistered(true);
     setTimeout(() => setShowCampaignModal(false), 2500);
