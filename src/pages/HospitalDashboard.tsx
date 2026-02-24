@@ -478,6 +478,33 @@ function RequestsTab({ requests, localRequests, setLocalRequests, onRefresh }: {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [form, setForm] = useState({ blood_group: 'O+', units_required: '', urgency: 'standard', expires_in_days: '3' });
+  const [showDonorsList, setShowDonorsList] = useState(false);
+  const [notifiedDonor, setNotifiedDonor] = useState<string | null>(null);
+  const [requestedType, setRequestedType] = useState<string>('');
+
+  const REGULAR_DONORS = [
+    { id: 1, name: "Rahul Sharma", blood_type: "O-", last_donation: "Jan 12, 2024", phone: "+91 9876543210", is_eligible: true },
+    { id: 2, name: "Priya Mehta", blood_type: "A+", last_donation: "Feb 05, 2024", phone: "+91 8765432109", is_eligible: true },
+    { id: 3, name: "Aditya Kumar", blood_type: "B+", last_donation: "Dec 20, 2023", phone: "+91 7654321098", is_eligible: false },
+    { id: 4, name: "Sneha Iyer", blood_type: "AB+", last_donation: "Jan 25, 2024", phone: "+91 6543210987", is_eligible: true },
+    { id: 5, name: "Vikram Singh", blood_type: "O+", last_donation: "Feb 10, 2024", phone: "+91 5432109876", is_eligible: true },
+    { id: 6, name: "Ananya Reddy", blood_type: "A-", last_donation: "Jan 05, 2024", phone: "+91 4321098765", is_eligible: true },
+    { id: 11, name: "Arjun Verma", blood_type: "A-", last_donation: "Feb 15, 2024", phone: "+91 9988776655", is_eligible: true },
+    { id: 12, name: "Karan Johar", blood_type: "A-", last_donation: "Dec 10, 2023", phone: "+91 9123456780", is_eligible: true },
+    { id: 13, name: "Saira Banu", blood_type: "A-", last_donation: "Jan 20, 2024", phone: "+91 9234567891", is_eligible: false },
+    { id: 14, name: "Meera Bai", blood_type: "A-", last_donation: "Feb 22, 2024", phone: "+91 9345678912", is_eligible: true },
+    { id: 15, name: "Kabir Khan", blood_type: "A-", last_donation: "Nov 15, 2023", phone: "+91 9456789123", is_eligible: true },
+    { id: 16, name: "Zara Sheikh", blood_type: "A-", last_donation: "Jan 12, 2024", phone: "+91 9567891234", is_eligible: true },
+    { id: 7, name: "Siddharth M.", blood_type: "B-", last_donation: "Feb 18, 2024", phone: "+91 3210987654", is_eligible: true },
+    { id: 8, name: "Neha Kapoor", blood_type: "O-", last_donation: "Dec 30, 2023", phone: "+91 2109876543", is_eligible: true },
+    { id: 9, name: "Rohan Gupta", blood_type: "A+", last_donation: "Jan 15, 2024", phone: "+91 1098765432", is_eligible: false },
+    { id: 10, name: "Ishita S.", blood_type: "AB-", last_donation: "Feb 22, 2024", phone: "+91 0123456789", is_eligible: true }
+  ];
+
+  const handleNotify = (name: string) => {
+    setNotifiedDonor(name);
+    setTimeout(() => setNotifiedDonor(null), 3000);
+  };
 
   const allRequests = [...localRequests, ...requests];
 
@@ -491,10 +518,12 @@ function RequestsTab({ requests, localRequests, setLocalRequests, onRefresh }: {
         method: 'POST',
         body: JSON.stringify(form),
       });
+      setRequestedType(form.blood_group);
       setSuccess('Emergency request broadcast successfully!');
       setShowForm(false);
       setForm({ blood_group: 'O+', units_required: '', urgency: 'standard', expires_in_days: '3' });
       onRefresh();
+      setShowDonorsList(true);
     } catch (err: any) {
       // If backend auth fails, save locally so the UI still works
       const newReq = {
@@ -509,9 +538,11 @@ function RequestsTab({ requests, localRequests, setLocalRequests, onRefresh }: {
         matchedDonors: 0,
       };
       setLocalRequests(prev => [newReq, ...prev]);
+      setRequestedType(form.blood_group);
       setSuccess(`Request broadcast locally (expires in ${form.expires_in_days} day${form.expires_in_days === '1' ? '' : 's'})`);
       setShowForm(false);
       setForm({ blood_group: 'O+', units_required: '', urgency: 'standard', expires_in_days: '3' });
+      setShowDonorsList(true);
     } finally {
       setIsSubmitting(false);
       setTimeout(() => setSuccess(''), 4000);
@@ -636,6 +667,89 @@ function RequestsTab({ requests, localRequests, setLocalRequests, onRefresh }: {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Potential Donors List */}
+      <AnimatePresence>
+        {showDonorsList && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="space-y-4"
+          >
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">Recommended Potential Donors</h3>
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Direct follow-up options for recent & regular donors</p>
+                </div>
+                <button onClick={() => setShowDonorsList(false)} className="text-slate-400 hover:text-slate-600 transition-colors">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              {notifiedDonor && (
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="mb-6 p-4 bg-green-50 text-green-700 rounded-xl font-bold border border-green-100 flex items-center gap-2"
+                >
+                  <span className="material-symbols-outlined text-sm">check_circle</span>
+                  {notifiedDonor} has been successfully notified!
+                </motion.div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {REGULAR_DONORS.filter(d => !requestedType || d.blood_type === requestedType).length > 0 ? (
+                  REGULAR_DONORS.filter(d => !requestedType || d.blood_type === requestedType).map(donor => (
+                    <div key={donor.id} className="flex items-center justify-between p-4 bg-slate-50/50 rounded-2xl border border-slate-100 hover:bg-white hover:shadow-lg transition-all group">
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center font-black text-slate-900 group-hover:bg-[#ee2b2b] group-hover:text-white transition-colors">
+                          {donor.name[0]}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-sm font-black text-slate-900">{donor.name}</h4>
+                            <span className={cn(
+                              "text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md",
+                              donor.is_eligible ? "bg-green-100 text-green-600" : "bg-red-100 text-red-600"
+                            )}>
+                              {donor.is_eligible ? 'Eligible' : 'Ineligible'}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">
+                            Type: <span className="text-[#ee2b2b]">{donor.blood_type}</span> • Last Donation: {donor.last_donation}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleNotify(donor.name)}
+                          className="w-8 h-8 rounded-lg bg-green-500 text-white flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-md shadow-green-500/20"
+                          title="Notify via SMS/Email"
+                        >
+                          <span className="material-symbols-outlined text-sm">send</span>
+                        </button>
+                        <a
+                          href={`tel:${donor.phone}`}
+                          className="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center hover:scale-110 active:scale-95 transition-all shadow-md shadow-slate-900/20"
+                          title="Call Now"
+                        >
+                          <span className="material-symbols-outlined text-sm">call</span>
+                        </a>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-span-full py-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <p className="text-sm font-bold text-slate-400">No regular {requestedType} donors found in your area.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Requests List */}
       <div className="space-y-4">
