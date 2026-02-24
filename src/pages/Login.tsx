@@ -19,6 +19,8 @@ export default function Login() {
   const [adminKey, setAdminKey] = useState('');
   const [hospitalKey, setHospitalKey] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [showAdminKey, setShowAdminKey] = useState(false);
+  const [showHospitalKey, setShowHospitalKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
 
@@ -304,13 +306,16 @@ export default function Login() {
                   <div className="relative group">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#ee2b2b]/60 group-focus-within:text-[#ee2b2b] transition-colors">key</span>
                     <input
-                      type="password"
+                      type={showAdminKey ? 'text' : 'password'}
                       required={role === 'admin'}
                       value={adminKey}
                       onChange={(e) => setAdminKey(e.target.value)}
-                      className="w-full pl-12 pr-4 py-3.5 bg-red-50 border border-[#ee2b2b]/20 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400 font-mono tracking-widest"
+                      className="w-full pl-12 pr-12 py-3.5 bg-red-50 border border-[#ee2b2b]/20 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400 font-mono tracking-widest"
                       placeholder="LIFELINK-ADMIN-••••"
                     />
+                    <button type="button" onClick={() => setShowAdminKey(!showAdminKey)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#ee2b2b] transition-colors">
+                      <span className="material-symbols-outlined text-lg">{showAdminKey ? 'visibility_off' : 'visibility'}</span>
+                    </button>
                   </div>
                   <p className="text-[10px] text-slate-400 ml-1 font-medium">🔐 This key is issued by LifeLink AI system administrators only.</p>
                 </motion.div>
@@ -330,13 +335,16 @@ export default function Login() {
                   <div className="relative group">
                     <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">domain_verification</span>
                     <input
-                      type="text"
+                      type={showHospitalKey ? 'text' : 'password'}
                       required={role === 'hospital'}
                       value={hospitalKey}
                       onChange={(e) => setHospitalKey(e.target.value)}
-                      className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400 font-bold"
+                      className={`w-full pl-12 pr-12 py-3.5 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400 font-bold ${!showHospitalKey ? 'font-mono tracking-widest' : ''}`}
                       placeholder="HOSP-••••"
                     />
+                    <button type="button" onClick={() => setShowHospitalKey(!showHospitalKey)} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#ee2b2b] transition-colors">
+                      <span className="material-symbols-outlined text-lg">{showHospitalKey ? 'visibility_off' : 'visibility'}</span>
+                    </button>
                   </div>
                   <p className="text-[10px] text-slate-400 ml-1 font-medium italic">Required for verified medical facility access.</p>
                 </motion.div>

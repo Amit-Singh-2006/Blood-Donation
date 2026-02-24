@@ -141,7 +141,7 @@ async function executeTool(name: string, args: any, onAction?: (action: string, 
                 if (!data || data.length === 0) return 'No inventory data found. The blood bank may have no entries yet.';
 
                 const lines = data.map((i: any) => `• ${i.blood_group}: ${i.units} units`).join('\n');
-                return `Current blood inventory:\n${lines}`;
+                return `Current blood inventory for your hospital:\n${lines}\n\nSYSTEM: You MUST list these units in your final response to the user.`;
             }
 
             case 'create_emergency_request': {
@@ -182,7 +182,7 @@ async function executeTool(name: string, args: any, onAction?: (action: string, 
                 const lines = data.slice(0, 5).map((r: any) =>
                     `• Request #${r.id} — ${r.blood_group}, ${r.units_required} units, ${r.urgency} (${r.status || 'pending'})`
                 ).join('\n');
-                return `Your recent blood requests:\n${lines}${data.length > 5 ? `\n...and ${data.length - 5} more.` : ''}`;
+                return `Your recent blood requests:\n${lines}${data.length > 5 ? `\n...and ${data.length - 5} more.` : ''}\n\nSYSTEM: You MUST repeat these request details to the user.`;
             }
 
             case 'get_donations': {
@@ -196,7 +196,7 @@ async function executeTool(name: string, args: any, onAction?: (action: string, 
                 const lines = data.slice(0, 5).map((d: any) =>
                     `• ${d.donor_name} — ${d.units} units on ${new Date(d.donation_date).toLocaleDateString()}`
                 ).join('\n');
-                return `Recent donations:\n${lines}`;
+                return `Recent donations received by your hospital:\n${lines}\n\nSYSTEM: You MUST list these donors and their donation dates in your final response.`;
             }
 
             case 'get_donor_profile': {
@@ -250,8 +250,12 @@ function getSystemPrompt(context: PageContext): string {
     const base = `You are LifeLink AI, an intelligent agentic assistant for the LifeLink AI Blood Donation platform.
 You are embedded inside the app and can take REAL ACTIONS like checking inventory, raising emergency blood requests, and viewing data.
 Always be concise, professional, and caring. Use emojis sparingly but effectively.
-When a user asks you to perform an action (e.g. "raise an emergency request", "check inventory"), ALWAYS call the appropriate tool — don't just describe how to do it.
-CRITICAL INSTRUCTION: After a tool call returns data, DO NOT CALL ANY OTHER TOOLS. You MUST immediately reply with a conversational summary of the data for the user.`;
+
+CRITICAL INSTRUCTIONS:
+1. TOOL SYNTHESIS: After a tool call returns data, you MUST immediately reply with a conversational summary of that data. The user CANNOT see the raw tool output; they only see your messages. You MUST repeat important details (counts, names, dates) in your text response.
+2. DO NOT BE REDUNDANT: If you just called a tool that returned specific data (like 'create_emergency_request'), DO NOT immediately call another tool (like 'get_requests') to see the same thing. One tool call is enough to satisfy the user's request.
+3. NO GENERIC REPLIES: Never say "I've already provided the information" if the data has not been described in your previous assistant message in this turn.
+4. SINGLE ACTION: Try to call only the MOST RELEVANT tool for the user's question.`;
 
     const contexts: Record<PageContext, string> = {
         hospital: `${base}
@@ -263,8 +267,8 @@ You are assisting hospital staff. You have access to:
 - Donation history (get_donations)
 
 EXAMPLES:
-- "How many O+ units do we have?" → call get_inventory
-- "Raise an emergency for B- blood, 2 units" → call create_emergency_request
+- "How many O+ units do we have?" → call get_inventory, then say: "We currently have [X] units of O+ in stock."
+- "Raise an emergency for B- blood, 2 units" → call create_emergency_request only. DO NOT call get_requests after. Just confirm the creation including the Request ID.
 - "Show our pending requests" → call get_requests`,
 
         donor: `${base}
