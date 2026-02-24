@@ -46,6 +46,15 @@ export const register = async (req: Request, res: Response) => {
         });
     } catch (err: any) {
         console.error('Registration error:', err);
+
+        // Handle PostgreSQL unique constraint violation (duplicate email)
+        if (err.code === '23505') {
+            return res.status(400).json({
+                message: 'This email is already registered. Please login instead or use a different email.',
+                error: 'duplicate_email'
+            });
+        }
+
         res.status(500).json({
             message: err.message || 'Unknown registration error',
             error: err

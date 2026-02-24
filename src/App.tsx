@@ -19,6 +19,7 @@ import TermsOfService from './pages/TermsOfService';
 import HospitalPartnership from './pages/HospitalPartnership';
 import Support from './pages/Support';
 import ProtectedRoute from './components/ProtectedRoute';
+import FacilityRedeemPage from './pages/FacilityRedeemPage';
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="support" element={<Support />} />
         <Route path="analytics" element={<Analytics />} />
         <Route path="tracking" element={<LiveTracking />} />
+        <Route path="redeem/:id" element={<FacilityRedeemPage />} />
 
         {/* Donor Routes - inside Layout so the topbar renders */}
         <Route element={<ProtectedRoute allowedRoles={['donor']} />}>

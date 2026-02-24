@@ -108,8 +108,18 @@ export default function DonorRegistration() {
           className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200 space-y-6"
         >
           {error && (
-            <div className="p-3 bg-red-50 text-red-600 rounded-lg text-sm font-bold border border-red-100 italic">
-              {error}
+            <div className="p-4 bg-red-50 text-red-600 rounded-xl text-sm font-bold border border-red-100 italic space-y-2">
+              <p>{error}</p>
+              {error.toLowerCase().includes('already registered') && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/login')}
+                  className="text-[#ee2b2b] hover:underline flex items-center gap-1 mt-1 not-italic font-black uppercase text-[10px] tracking-widest"
+                >
+                  <span className="material-symbols-outlined text-sm">login</span>
+                  Login to your account
+                </button>
+              )}
             </div>
           )}
 

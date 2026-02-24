@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
+import { QRCodeSVG } from 'qrcode.react';
 import AgentChat from '../components/AgentChat';
 import FeedbackModal from '../components/FeedbackModal';
 import { apiFetch } from '../lib/api';
@@ -507,15 +508,67 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
   const [selectedHospital, setSelectedHospital] = useState("City Central Medical Center");
 
+  // Per-hospital slot pools — each has a distinct character
+  const hospitals = [
+    {
+      name: "City Central Medical Center",
+      distance: "1.2 miles away",
+      address: "450 Main St.",
+      demand: "Urgent: O-",
+      style: "text-[#ee2b2b] bg-[#ee2b2b]/10",
+      allSlots: ["08:00 AM", "09:00 AM", "09:30 AM", "10:30 AM", "11:00 AM", "11:30 AM", "01:00 PM", "02:00 PM", "03:30 PM"],
+      maxAvailable: 6,
+    },
+    {
+      name: "St. Jude Community Clinic",
+      distance: "2.8 miles away",
+      address: "89 Hope Blvd.",
+      demand: "Demand: A+",
+      style: "text-slate-500 bg-slate-100",
+      allSlots: ["09:00 AM", "10:00 AM", "12:00 PM", "01:30 PM", "02:30 PM", "04:00 PM", "04:30 PM", "05:00 PM"],
+      maxAvailable: 5,
+    },
+    {
+      name: "North Valley Blood Bank",
+      distance: "5.1 miles away",
+      address: "12 Oak Ridge Rd.",
+      demand: "Limited Slots",
+      style: "text-slate-500 bg-slate-100",
+      allSlots: ["01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM"],
+      maxAvailable: 3,
+    },
+  ];
+
+  // Deterministic slot generator: same hospital + day + month → same slots every time
+  const getSlotsForHospital = (hospIdx: number, day: number | null, month: number) => {
+    if (!day) return { available: [], booked: [] };
+    const seed = hospIdx * 97 + day * 31 + month * 7;
+    const hosp = hospitals[hospIdx];
+    const shuffled = [...hosp.allSlots].sort((a, b) => {
+      const hashA = (seed + a.charCodeAt(0) * 13 + a.charCodeAt(1) * 7) % 100;
+      const hashB = (seed + b.charCodeAt(0) * 13 + b.charCodeAt(1) * 7) % 100;
+      return hashA - hashB;
+    });
+    const dayOfWeek = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day).getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const count = isWeekend ? Math.max(2, hosp.maxAvailable - 2) : hosp.maxAvailable;
+    const available = shuffled.slice(0, count).sort();
+    const booked = shuffled.slice(count, count + Math.max(1, seed % 3));
+    return { available, booked };
+  };
+
+  const selectedMonthLabel = currentMonth.toLocaleString('default', { month: 'short' });
+
   const handleSchedule = () => {
     if (!selectedDate || !selectedTime) {
       alert("Please select a date and time slot first.");
       return;
     }
     alert(`Appointment successfully scheduled at ${selectedHospital}!`);
-    onBook({ date: `${currentMonth.toLocaleString('default', { month: 'short' })} ${selectedDate}`, time: selectedTime, hospital: selectedHospital, id: Date.now() });
+    onBook({ date: `${selectedMonthLabel} ${selectedDate}`, time: selectedTime, hospital: selectedHospital, id: Date.now() });
     navigate('/donor/pending');
   };
+
 
   return (
     <div className="flex flex-col gap-8 -mt-2 pb-24">
@@ -611,12 +664,14 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
               <span className="text-sm font-bold text-[#ee2b2b]">3 centers nearby</span>
             </div>
             <div className="flex flex-col gap-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar">
-              {[
-                { name: "City Central Medical Center", distance: "1.2 miles away", address: "450 Main St.", demand: "Urgent: O-", style: "text-[#ee2b2b] bg-[#ee2b2b]/10" },
-                { name: "St. Jude Community Clinic", distance: "2.8 miles away", address: "89 Hope Blvd.", demand: "Demand: A+", style: "text-slate-500 bg-slate-100" },
-                { name: "North Valley Blood Bank", distance: "5.1 miles away", address: "12 Oak Ridge Rd.", demand: "Limited Slots", style: "text-slate-500 bg-slate-100" }
-              ].map(hosp => {
+              {hospitals.map((hosp, hospIdx) => {
                 const isSelected = selectedHospital === hosp.name;
+                const { available, booked } = getSlotsForHospital(hospIdx, selectedDate, currentMonth.getMonth());
+                const dayOfWeek = selectedDate
+                  ? new Date(currentMonth.getFullYear(), currentMonth.getMonth(), selectedDate).getDay()
+                  : -1;
+                const isClosed = dayOfWeek === 0;
+
                 return (
                   <div
                     key={hosp.name}
@@ -637,25 +692,75 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
                       </div>
                       <div className={`${hosp.style} text-[10px] font-black px-2 py-1 rounded uppercase tracking-tighter`}>{hosp.demand}</div>
                     </div>
+
                     {isSelected ? (
                       <div className="space-y-3">
-                        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">Available Slots (Nov {selectedDate})</p>
-                        <div className="grid grid-cols-3 gap-2">
-                          {["09:00 AM", "10:30 AM", "11:00 AM", "01:30 PM", "03:30 PM"].map(time => (
-                            <button
-                              key={time}
-                              onClick={(e) => { e.stopPropagation(); setSelectedTime(time); }}
-                              className={`py-2 px-1 text-xs font-bold rounded-lg transition-colors ${selectedTime === time ? "border-2 border-[#ee2b2b] bg-[#ee2b2b] text-white shadow-md" : "border border-slate-200 hover:border-[#ee2b2b]/50 hover:bg-[#ee2b2b]/5"}`}
-                            >
-                              {time}
-                            </button>
-                          ))}
-                          <button className="py-2 px-1 text-xs font-bold border border-slate-200 rounded-lg opacity-40 cursor-not-allowed line-through">02:00 PM</button>
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                            Available Slots · {selectedMonthLabel} {selectedDate}
+                          </p>
+                          {!isClosed && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${available.length === 0 ? 'bg-red-50 text-red-500'
+                                : available.length <= 2 ? 'bg-amber-50 text-amber-600'
+                                  : 'bg-green-50 text-green-600'
+                              }`}>
+                              {available.length === 0 ? 'Full' : `${available.length} left`}
+                            </span>
+                          )}
                         </div>
+
+                        {isClosed ? (
+                          <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg border border-slate-100">
+                            <span className="material-symbols-outlined text-slate-400 text-sm">event_busy</span>
+                            <p className="text-xs font-bold text-slate-500">Closed on Sundays. Please select another day.</p>
+                          </div>
+                        ) : available.length === 0 ? (
+                          <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg border border-red-100">
+                            <span className="material-symbols-outlined text-red-400 text-sm">block</span>
+                            <p className="text-xs font-bold text-red-500">Fully booked on this day. Try another date.</p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-3 gap-2">
+                            {available.map(time => (
+                              <button
+                                key={time}
+                                onClick={(e) => { e.stopPropagation(); setSelectedTime(time); }}
+                                className={`py-2 px-1 text-xs font-bold rounded-lg transition-all ${selectedTime === time
+                                    ? 'border-2 border-[#ee2b2b] bg-[#ee2b2b] text-white shadow-md'
+                                    : 'border border-slate-200 hover:border-[#ee2b2b]/50 hover:bg-[#ee2b2b]/5'
+                                  }`}
+                              >
+                                {time}
+                              </button>
+                            ))}
+                            {booked.map(time => (
+                              <button key={time} disabled
+                                className="py-2 px-1 text-xs font-bold border border-slate-200 rounded-lg opacity-35 cursor-not-allowed line-through text-slate-400">
+                                {time}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     ) : (
-                      <div className="flex gap-2 text-xs font-bold text-slate-400">
-                        <span>Click to view slots</span>
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-400">
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-sm">schedule</span>
+                          Click to view slots
+                        </span>
+                        {selectedDate && (() => {
+                          const { available: av } = getSlotsForHospital(hospIdx, selectedDate, currentMonth.getMonth());
+                          const dOW = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), selectedDate!).getDay();
+                          if (dOW === 0) return <span className="text-slate-400">Closed Sun</span>;
+                          return (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${av.length === 0 ? 'bg-red-50 text-red-500'
+                                : av.length <= 2 ? 'bg-amber-50 text-amber-600'
+                                  : 'bg-green-50 text-green-600'
+                              }`}>
+                              {av.length === 0 ? 'Full' : `${av.length} slots`}
+                            </span>
+                          );
+                        })()}
                       </div>
                     )}
                   </div>
@@ -673,7 +778,7 @@ function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
             <div className="flex items-center gap-6 divide-x divide-slate-200 w-full sm:w-auto overflow-x-auto">
               <div className="flex flex-col min-w-max">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date & Time</span>
-                <p className="font-bold text-slate-900">Sunday, Nov {selectedDate} {selectedTime ? `@ ${selectedTime}` : ''}</p>
+                <p className="font-bold text-slate-900">{selectedMonthLabel} {selectedDate}{selectedTime ? ` @ ${selectedTime}` : ''}</p>
               </div>
               <div className="flex flex-col pl-6 min-w-max">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location</span>
@@ -1102,16 +1207,38 @@ function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedP
 function RewardsView({ userTokens, setUserTokens, user }: { userTokens: number, setUserTokens: (val: number) => void, user: any }) {
   const navigate = useNavigate();
   const [showAllFacilities, setShowAllFacilities] = useState(false);
+  const [appointment, setAppointment] = useState<any>(null);
+  const [redeemedList, setRedeemedList] = useState<any[]>([]);
 
   const xp = user?.xp_points || 0;
   const level = user?.current_level || 1;
   const nextTarget = level * 100;
   const progressPercent = Math.min(100, Math.round((xp / nextTarget) * 100));
 
-  const handleRedeem = (cost: number, name: string) => {
+  // Load redeemed facilities + poll for QR scan confirmations
+  useEffect(() => {
+    const stored = JSON.parse(localStorage.getItem('redeemedFacilities') || '[]');
+    setRedeemedList(stored);
+    const interval = setInterval(() => {
+      const updated = JSON.parse(localStorage.getItem('redeemedFacilities') || '[]');
+      setRedeemedList(updated);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleRedeem = (cost: number, name: string, hospital: string, address: string) => {
     if (userTokens >= cost) {
+      const uniqueId = 'APT-' + Math.random().toString(36).substr(2, 6).toUpperCase();
       setUserTokens(userTokens - cost);
-      alert(`🎉 Successfully redeemed: ${name}! Instructions have been sent to your email.`);
+      const date = new Date(Date.now() + 86400000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+      const time = '10:30 AM';
+      const appt = { id: uniqueId, name, hospital, address, date, time };
+      setAppointment(appt);
+      // Also save into redeemedFacilities list immediately
+      const stored = JSON.parse(localStorage.getItem('redeemedFacilities') || '[]');
+      stored.push(appt);
+      localStorage.setItem('redeemedFacilities', JSON.stringify(stored));
+      setRedeemedList(stored);
     } else {
       alert(`Not enough tokens! You need ${cost - userTokens} more tokens to redeem ${name}.`);
     }
@@ -1244,7 +1371,7 @@ function RewardsView({ userTokens, setUserTokens, user }: { userTokens: number, 
                 </div>
                 <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-sm font-black text-green-600">10,000 <span className="text-[10px]">Tokens</span></span>
-                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(10000, 'Comprehensive Health Checkup')} disabled={userTokens < 10000}>Redeem</button>
+                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(10000, 'Comprehensive Health Checkup', 'City General', 'City General Hospital, Seattle Center')} disabled={userTokens < 10000}>Redeem</button>
                 </div>
               </div>
 
@@ -1261,7 +1388,7 @@ function RewardsView({ userTokens, setUserTokens, user }: { userTokens: number, 
                 </div>
                 <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-sm font-black text-green-600">8,000 <span className="text-[10px]">Tokens</span></span>
-                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(8000, 'Dental Cleaning & Scaling')} disabled={userTokens < 8000}>Redeem</button>
+                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(8000, 'Dental Cleaning & Scaling', 'St. Jude Medical', 'St. Jude Medical Center, Western Ave')} disabled={userTokens < 8000}>Redeem</button>
                 </div>
               </div>
 
@@ -1278,7 +1405,7 @@ function RewardsView({ userTokens, setUserTokens, user }: { userTokens: number, 
                 </div>
                 <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
                   <span className="text-sm font-black text-green-600">5,000 <span className="text-[10px]">Tokens</span></span>
-                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(5000, 'Vision Diagnostic Test')} disabled={userTokens < 5000}>Redeem</button>
+                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(5000, 'Vision Diagnostic Test', 'North Valley', 'North Valley Specialist Clinic')} disabled={userTokens < 5000}>Redeem</button>
                 </div>
               </div>
 
@@ -1303,7 +1430,7 @@ function RewardsView({ userTokens, setUserTokens, user }: { userTokens: number, 
                     </div>
                     <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
                       <span className="text-sm font-black text-green-600">6,000 <span className="text-[10px]">Tokens</span></span>
-                      <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(6000, 'Mental Health Consultation')} disabled={userTokens < 6000}>Redeem</button>
+                      <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(6000, 'Mental Health Consultation', 'Lakeside Care', 'Lakeside Wellness Center, Pier 54')} disabled={userTokens < 6000}>Redeem</button>
                     </div>
                   </div>
 
@@ -1320,7 +1447,7 @@ function RewardsView({ userTokens, setUserTokens, user }: { userTokens: number, 
                     </div>
                     <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
                       <span className="text-sm font-black text-green-600">12,000 <span className="text-[10px]">Tokens</span></span>
-                      <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(12000, 'ECG & Heart Screening')} disabled={userTokens < 12000}>Redeem</button>
+                      <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(12000, 'ECG & Heart Screening', 'Heart Center', 'Heart & Vascular Institute, Seattle')} disabled={userTokens < 12000}>Redeem</button>
                     </div>
                   </div>
 
@@ -1370,11 +1497,173 @@ function RewardsView({ userTokens, setUserTokens, user }: { userTokens: number, 
               </div>
             </div>
           </div>
+
+          {/* Redeemed Facilities */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 overflow-hidden">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-base font-bold flex items-center gap-2 text-slate-900">
+                <span className="material-symbols-outlined text-green-500">redeem</span>
+                Redeemed Facilities
+              </h2>
+              <span className="text-[10px] font-bold px-2 py-1 rounded bg-green-50 text-green-600 border border-green-100">
+                {redeemedList.length} Used
+              </span>
+            </div>
+            {redeemedList.length === 0 ? (
+              <div className="flex flex-col items-center py-6 text-center">
+                <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3">
+                  <span className="material-symbols-outlined text-slate-300 text-3xl">confirmation_number</span>
+                </div>
+                <p className="text-slate-400 text-xs font-medium">No redeemed facilities yet.</p>
+                <p className="text-slate-300 text-xs mt-1">Redeem tokens above to unlock perks!</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {redeemedList.slice().reverse().map((item: any, idx: number) => {
+                  const usedTickets = JSON.parse(localStorage.getItem('usedTickets') || '[]');
+                  const isConfirmed = usedTickets.includes(item.id);
+                  return (
+                    <motion.div
+                      key={item.id || idx}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                      onClick={() => setAppointment(item)}
+                      className={`relative p-4 rounded-xl border cursor-pointer group transition-all active:scale-[0.98] ${isConfirmed
+                        ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-md'
+                        : 'bg-slate-50 border-slate-200 hover:border-[#ee2b2b]/40 hover:shadow-md'
+                        }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-slate-900 text-sm leading-tight truncate">{item.name}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">{item.hospital}</p>
+                          <p className="text-[10px] text-slate-400 mt-1 font-mono">{item.id}</p>
+                        </div>
+                        <span className={`shrink-0 text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-widest mt-0.5 ${isConfirmed ? 'bg-emerald-500 text-white' : 'bg-amber-100 text-amber-600'
+                          }`}>
+                          {isConfirmed ? '✓ Used' : 'Pending'}
+                        </span>
+                      </div>
+                      {isConfirmed ? (
+                        <div className="mt-2 flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span>
+                            <span className="text-[10px] text-emerald-600 font-bold">Facility Redeemed</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-bold group-hover:text-emerald-600 transition-colors flex items-center gap-0.5">
+                            View Ticket <span className="material-symbols-outlined text-xs">open_in_new</span>
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="mt-2 flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-amber-500 text-sm">qr_code_2</span>
+                            <span className="text-[10px] text-amber-600 font-bold">Scan QR to confirm</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-bold group-hover:text-[#ee2b2b] transition-colors flex items-center gap-0.5">
+                            View QR <span className="material-symbols-outlined text-xs">open_in_new</span>
+                          </span>
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </aside>
       </div>
+
+      {/* Redemption Ticket Modal */}
+      <AnimatePresence>
+        {appointment && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100"
+            >
+              <div className="bg-[#ee2b2b] p-6 text-white relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none"></div>
+                <div className="relative z-10 flex justify-between items-start">
+                  <div>
+                    <span className="bg-white/20 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded">Confirmed Appointment</span>
+                    <h3 className="text-2xl font-black mt-2 tracking-tight">Redemption Ticket</h3>
+                  </div>
+                  <button onClick={() => setAppointment(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
+                    <span className="material-symbols-outlined">close</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div className="flex justify-between items-center pb-4 border-b border-dashed border-slate-200">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Appointment ID</label>
+                    <p className="text-lg font-black text-[#ee2b2b] tracking-wider">{appointment.id}</p>
+                  </div>
+                  <div className="w-20 h-20 bg-white border-2 border-slate-100 rounded-xl flex items-center justify-center p-1.5 shadow-sm">
+                    <QRCodeSVG
+                      value={`${window.location.origin}/redeem/${appointment.id}?name=${encodeURIComponent(appointment.name)}&hospital=${encodeURIComponent(appointment.hospital)}&date=${encodeURIComponent(appointment.date)}&time=${encodeURIComponent(appointment.time)}`}
+                      size={64}
+                      fgColor="#1e293b"
+                      bgColor="#ffffff"
+                      level="H"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Service / Facility</label>
+                    <p className="text-slate-900 font-bold leading-tight">{appointment.name}</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Hospital</label>
+                      <p className="text-slate-700 font-bold text-sm">{appointment.hospital}</p>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Scheduled Date</label>
+                      <p className="text-slate-700 font-bold text-sm">{appointment.date}</p>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-2xl flex items-start gap-3 border border-slate-100">
+                    <span className="material-symbols-outlined text-slate-400 text-lg mt-0.5">location_on</span>
+                    <div className="flex-1">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Address</label>
+                      <p className="text-xs font-bold text-slate-600 mt-0.5">{appointment.address}</p>
+                    </div>
+                    <a
+                      href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(appointment.address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-10 h-10 bg-white shadow-sm border border-slate-200 rounded-xl flex items-center justify-center text-[#ee2b2b] hover:bg-[#ee2b2b] hover:text-white transition-all active:scale-90"
+                    >
+                      <span className="material-symbols-outlined text-xl">directions</span>
+                    </a>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setAppointment(null)}
+                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black shadow-lg shadow-slate-900/20 hover:bg-slate-800 transition-all active:scale-95"
+                >
+                  Confirm & Close
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
+
+
 
 
 
