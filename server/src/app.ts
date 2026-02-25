@@ -72,16 +72,22 @@ app.use(verbTamperingGuard);
 // 3. CORS – First enforce strict server-side check, then apply CORS headers
 //    Covers: CORS Misconfiguration exploitation
 // ──────────────────────────────────────────────────────────────────────────
+// Dynamically build the allowed origins list.
+// Add FRONTEND_URL env var in your Vercel backend project settings
+// to allow your deployed frontend (e.g. https://blood-donation-frontend.vercel.app)
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    'http://127.0.0.1:3000',
+    'http://localhost:5000',
+    'http://127.0.0.1:5000',
+    ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
+];
+
 app.use(strictCorsGuard);
 app.use(cors({
-    origin: [
-        'http://localhost:5173',
-        'http://localhost:3000',
-        'http://127.0.0.1:5173',
-        'http://127.0.0.1:3000',
-        'http://localhost:5000',
-        'http://127.0.0.1:5000',
-    ],
+    origin: allowedOrigins,
     credentials: true,
 }));
 
