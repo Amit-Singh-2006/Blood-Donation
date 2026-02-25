@@ -10,6 +10,7 @@ export default function HospitalRegistration() {
     const [currentStep, setCurrentStep] = useState<Step>('basic');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
+    const [agreed, setAgreed] = useState(false);
     const [formData, setFormData] = useState({
         hospitalName: '',
         registrationId: '',
@@ -38,7 +39,30 @@ export default function HospitalRegistration() {
         { key: 'verification', label: 'Verification', icon: 'verified_user' },
     ];
 
+    const validateStep = () => {
+        if (currentStep === 'basic') {
+            return formData.hospitalName.trim() !== '' && formData.registrationId.trim() !== '' && formData.hospitalType !== '';
+        }
+        if (currentStep === 'location') {
+            return formData.address.trim() !== '' && formData.city.trim() !== '' && formData.state.trim() !== '' && formData.zipCode.trim() !== '';
+        }
+        if (currentStep === 'contact') {
+            return formData.email.trim() !== '' && formData.phone.trim() !== '' && formData.emergencyHotline.trim() !== '';
+        }
+        if (currentStep === 'infrastructure') {
+            return formData.bedCapacity !== '' && formData.icuBeds !== '';
+        }
+        if (currentStep === 'verification') {
+            return agreed;
+        }
+        return true;
+    };
+
     const handleSubmit = async () => {
+        if (!validateStep()) {
+            setError('Please check the compliance statement to continue.');
+            return;
+        }
         setIsSubmitting(true);
         setError('');
         try {
@@ -64,6 +88,11 @@ export default function HospitalRegistration() {
     };
 
     const handleNext = () => {
+        if (!validateStep()) {
+            setError('Please fill in all required fields to continue.');
+            return;
+        }
+        setError('');
         const currentIndex = steps.findIndex(s => s.key === currentStep);
         if (currentIndex < steps.length - 1) {
             setCurrentStep(steps[currentIndex + 1].key);
@@ -230,6 +259,8 @@ export default function HospitalRegistration() {
                                         <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-medium">map</span>
                                         <input
                                             type="text"
+                                            value={formData.address}
+                                            onChange={(e) => updateFormData('address', e.target.value)}
                                             className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
                                             placeholder="Street, Landmark, Area"
                                         />
@@ -241,6 +272,8 @@ export default function HospitalRegistration() {
                                         <label className="text-sm font-bold text-slate-700 ml-1">City</label>
                                         <input
                                             type="text"
+                                            value={formData.city}
+                                            onChange={(e) => updateFormData('city', e.target.value)}
                                             className="w-full px-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
                                         />
                                     </div>
@@ -248,6 +281,8 @@ export default function HospitalRegistration() {
                                         <label className="text-sm font-bold text-slate-700 ml-1">State</label>
                                         <input
                                             type="text"
+                                            value={formData.state}
+                                            onChange={(e) => updateFormData('state', e.target.value)}
                                             className="w-full px-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
                                         />
                                     </div>
@@ -255,6 +290,8 @@ export default function HospitalRegistration() {
                                         <label className="text-sm font-bold text-slate-700 ml-1">ZIP Code</label>
                                         <input
                                             type="text"
+                                            value={formData.zipCode}
+                                            onChange={(e) => updateFormData('zipCode', e.target.value)}
                                             className="w-full px-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
                                         />
                                     </div>
@@ -289,6 +326,8 @@ export default function HospitalRegistration() {
                                             <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">mail</span>
                                             <input
                                                 type="email"
+                                                value={formData.email}
+                                                onChange={(e) => updateFormData('email', e.target.value)}
                                                 className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900"
                                                 placeholder="contact@hospital.com"
                                             />
@@ -300,6 +339,8 @@ export default function HospitalRegistration() {
                                             <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-red-500 font-black">emergency</span>
                                             <input
                                                 type="tel"
+                                                value={formData.emergencyHotline}
+                                                onChange={(e) => updateFormData('emergencyHotline', e.target.value)}
                                                 className="w-full pl-12 pr-4 py-3.5 bg-red-50/50 border-red-100 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-slate-900 placeholder:text-red-300 font-bold"
                                                 placeholder="+1-800-EMERGENCY"
                                             />
@@ -312,6 +353,8 @@ export default function HospitalRegistration() {
                                         <label className="text-sm font-bold text-slate-700 ml-1">Phone Number</label>
                                         <input
                                             type="tel"
+                                            value={formData.phone}
+                                            onChange={(e) => updateFormData('phone', e.target.value)}
                                             className="w-full px-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900"
                                         />
                                     </div>
@@ -319,6 +362,8 @@ export default function HospitalRegistration() {
                                         <label className="text-sm font-bold text-slate-700 ml-1">Website (Optional)</label>
                                         <input
                                             type="url"
+                                            value={formData.website}
+                                            onChange={(e) => updateFormData('website', e.target.value)}
                                             className="w-full px-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900"
                                             placeholder="https://www.hospital.com"
                                         />
@@ -349,11 +394,11 @@ export default function HospitalRegistration() {
                                         <div className="space-y-4">
                                             <div className="space-y-1.5">
                                                 <label className="text-xs font-black text-slate-500">Total Bed Capacity</label>
-                                                <input className="w-full px-4 py-3 bg-white border-slate-200 rounded-xl text-sm font-bold" type="number" placeholder="0" />
+                                                <input value={formData.bedCapacity} onChange={(e) => updateFormData('bedCapacity', e.target.value)} className="w-full px-4 py-3 bg-white border-slate-200 rounded-xl text-sm font-bold" type="number" placeholder="0" />
                                             </div>
                                             <div className="space-y-1.5">
                                                 <label className="text-xs font-black text-slate-500">Available ICU Beds</label>
-                                                <input className="w-full px-4 py-3 bg-white border-slate-200 rounded-xl text-sm font-bold" type="number" placeholder="0" />
+                                                <input value={formData.icuBeds} onChange={(e) => updateFormData('icuBeds', e.target.value)} className="w-full px-4 py-3 bg-white border-slate-200 rounded-xl text-sm font-bold" type="number" placeholder="0" />
                                             </div>
                                         </div>
                                     </div>
@@ -436,27 +481,29 @@ export default function HospitalRegistration() {
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <div className="space-y-4">
-                                        <div className="p-8 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50 flex flex-col items-center justify-center text-center group hover:border-[#ee2b2b] hover:bg-[#ee2b2b]/5 transition-all cursor-pointer">
+                                    <label className="space-y-4 cursor-pointer">
+                                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg" />
+                                        <div className="p-8 h-full border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50 flex flex-col items-center justify-center text-center group hover:border-[#ee2b2b] hover:bg-[#ee2b2b]/5 transition-all">
                                             <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-[#ee2b2b] group-hover:scale-110 transition-all shadow-sm mb-4">
                                                 <span className="material-symbols-outlined text-3xl">upload_file</span>
                                             </div>
                                             <h4 className="text-sm font-black text-slate-900">Hospital License</h4>
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">PDF, JPG up to 10MB</p>
                                         </div>
-                                    </div>
-                                    <div className="space-y-4">
-                                        <div className="p-8 border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50 flex flex-col items-center justify-center text-center group hover:border-[#ee2b2b] hover:bg-[#ee2b2b]/5 transition-all cursor-pointer">
+                                    </label>
+                                    <label className="space-y-4 cursor-pointer">
+                                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg" />
+                                        <div className="p-8 h-full border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50 flex flex-col items-center justify-center text-center group hover:border-[#ee2b2b] hover:bg-[#ee2b2b]/5 transition-all">
                                             <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-[#ee2b2b] group-hover:scale-110 transition-all shadow-sm mb-4">
                                                 <span className="material-symbols-outlined text-3xl">verified</span>
                                             </div>
                                             <h4 className="text-sm font-black text-slate-900">Accreditation (NABH/JCI)</h4>
                                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Certification Document</p>
                                         </div>
-                                    </div>
+                                    </label>
                                 </div>
 
-                                <div className="p-6 bg-slate-900 rounded-3xl flex items-center justify-between text-white shadow-2xl shadow-slate-900/20">
+                                <label className="p-6 bg-slate-900 rounded-3xl flex items-center justify-between text-white shadow-2xl shadow-slate-900/20 cursor-pointer">
                                     <div className="flex items-center gap-4">
                                         <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
                                             <span className="material-symbols-outlined text-green-400">shield_check</span>
@@ -466,8 +513,8 @@ export default function HospitalRegistration() {
                                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">I certify that all provided information is accurate</p>
                                         </div>
                                     </div>
-                                    <input type="checkbox" className="w-6 h-6 rounded-lg bg-white/10 border-none accent-[#ee2b2b]" />
-                                </div>
+                                    <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="w-6 h-6 rounded-lg bg-white/10 border-none accent-[#ee2b2b] cursor-pointer" />
+                                </label>
                             </motion.div>
                         )}
                     </AnimatePresence>

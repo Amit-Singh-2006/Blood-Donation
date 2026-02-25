@@ -19,6 +19,11 @@ const register = async (req, res) => {
             if (!inviteCode || inviteCode !== validCode) {
                 return res.status(403).json({ message: 'Invalid or missing admin invite code' });
             }
+            // CRITICAL: Only one admin allowed — block if admin already exists
+            const adminExists = await (0, db_1.query)(`SELECT 1 FROM users WHERE role = 'admin' LIMIT 1`);
+            if (adminExists.rows.length > 0) {
+                return res.status(403).json({ message: 'Admin account already exists. Contact the system administrator.' });
+            }
         }
         const hashedPassword = await bcrypt_1.default.hash(password, 10);
         const result = await (0, db_1.query)('INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role', [name, email, hashedPassword, role]);
@@ -42,6 +47,13 @@ const register = async (req, res) => {
     }
     catch (err) {
         console.error('Registration error:', err);
+        // Handle PostgreSQL unique constraint violation (duplicate email)
+        if (err.code === '23505') {
+            return res.status(400).json({
+                message: 'This email is already registered. Please login instead or use a different email.',
+                error: 'duplicate_email'
+            });
+        }
         res.status(500).json({
             message: err.message || 'Unknown registration error',
             error: err
