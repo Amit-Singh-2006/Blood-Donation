@@ -326,20 +326,18 @@ export default function Login() {
                 </motion.div>
               )}
 
-              {/* For admin: only Google Sign-In is supported */}
-              {role !== 'admin' && (
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="w-full bg-[#ee2b2b] text-white py-4 rounded-lg font-bold text-lg shadow-xl shadow-[#ee2b2b]/20 hover:bg-[#ee2b2b]/90 active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center gap-2"
-                >
-                  {isLoading ? (
-                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    'Sign In'
-                  )}
-                </button>
-              )}
+              {/* Standard Sign In Button - now available for all roles including Admin */}
+              <button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-[#ee2b2b] text-white py-4 rounded-lg font-bold text-lg shadow-xl shadow-[#ee2b2b]/20 hover:bg-[#ee2b2b]/90 active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+              >
+                {isLoading ? (
+                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  'Sign In'
+                )}
+              </button>
             </form>
 
             {/* Divider */}
