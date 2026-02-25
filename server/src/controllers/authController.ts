@@ -13,6 +13,11 @@ export const register = async (req: Request, res: Response) => {
         hospital_name, contact_number
     } = req.body;
 
+    // Enforce allowed roles explicitly
+    if (!['donor', 'hospital', 'admin'].includes(role)) {
+        return res.status(400).json({ message: 'Invalid role specified' });
+    }
+
     try {
         // CRITICAL: Admin registration requires a server-side invite code
         if (role === 'admin') {
