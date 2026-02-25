@@ -14,6 +14,21 @@ export const register = async (req: Request, res: Response) => {
     } = req.body;
 
     try {
+        // CRITICAL: Admin registration requires a server-side invite code
+        if (role === 'admin') {
+            const inviteCode = req.body.admin_invite_code;
+            const validCode = process.env.ADMIN_INVITE_CODE;
+            if (!inviteCode || inviteCode !== validCode) {
+                return res.status(403).json({ message: 'Invalid or missing admin invite code' });
+            }
+
+            // CRITICAL: Only one admin allowed — block if admin already exists
+            const adminExists = await query(`SELECT 1 FROM users WHERE role = 'admin' LIMIT 1`);
+            if (adminExists.rows.length > 0) {
+                return res.status(403).json({ message: 'Admin account already exists. Contact the system administrator.' });
+            }
+        }
+
         const hashedPassword = await bcrypt.hash(password, 10);
         const result = await query(
             'INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
@@ -37,12 +52,18 @@ export const register = async (req: Request, res: Response) => {
         const token = jwt.sign(
             { id: user.id, email: user.email, role: user.role },
             process.env.JWT_SECRET as string,
-            { expiresIn: '24h' }
+            { expiresIn: '30m' }
         );
 
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 30 * 60 * 1000 // 30 minutes
+        });
+
         res.status(201).json({
-            user: { ...user, blood_group }, // Include blood_group for frontend usability
-            token
+            user: { ...user, blood_group } // Include blood_group for frontend usability
         });
     } catch (err: any) {
         console.error('Registration error:', err);
@@ -80,8 +101,14 @@ export const login = async (req: Request, res: Response) => {
         const token = jwt.sign(
             { id: user.id, email: user.email, role: user.role },
             process.env.JWT_SECRET as string,
-            { expiresIn: '24h' }
+            { expiresIn: '30m' }
         );
+
+        // --- Store last_login_ip for admin accounts (helps detect sudden IP jumps) ---
+        if (user.role === 'admin') {
+            const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+            await query('UPDATE users SET last_login_ip = $1 WHERE id = $2', [ip, user.id]).catch(() => { });
+        }
 
         let profileData = {};
         if (user.role === 'donor') {
@@ -96,6 +123,13 @@ export const login = async (req: Request, res: Response) => {
             }
         }
 
+        res.cookie('token', token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax',
+            maxAge: 30 * 60 * 1000 // 30 minutes
+        });
+
         res.json({
             user: {
                 id: user.id,
@@ -103,10 +137,14 @@ export const login = async (req: Request, res: Response) => {
                 email: user.email,
                 role: user.role,
                 ...profileData
-            },
-            token,
+            }
         });
     } catch (err: any) {
         res.status(500).json({ message: err.message });
     }
+};
+
+export const logout = async (req: Request, res: Response) => {
+    res.clearCookie('token');
+    res.json({ message: 'Logged out successfully' });
 };

@@ -10,6 +10,8 @@ import {
 } from '../controllers/hospitalController';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { roleMiddleware } from '../middleware/roleMiddleware';
+import { validateRequest } from '../middleware/validateZod';
+import { createHospitalRequestSchema, updateHospitalInventorySchema, verifyDonationSchema } from '../schemas/hospitalSchemas';
 
 const router = Router();
 
@@ -18,8 +20,8 @@ router.get('/inventory', authMiddleware, roleMiddleware(['hospital']), getHospit
 router.get('/requests', authMiddleware, roleMiddleware(['hospital']), getHospitalRequests);
 router.get('/potential-donors/:requestId', authMiddleware, roleMiddleware(['hospital']), getPotentialDonors);
 
-router.post('/requests', authMiddleware, roleMiddleware(['hospital']), createHospitalRequest);
-router.put('/inventory', authMiddleware, roleMiddleware(['hospital']), updateHospitalInventory);
-router.post('/verify-donation', authMiddleware, roleMiddleware(['hospital']), verifyDonation);
+router.post('/requests', authMiddleware, roleMiddleware(['hospital']), validateRequest(createHospitalRequestSchema), createHospitalRequest);
+router.put('/inventory', authMiddleware, roleMiddleware(['hospital']), validateRequest(updateHospitalInventorySchema), updateHospitalInventory);
+router.post('/verify-donation', authMiddleware, roleMiddleware(['hospital']), validateRequest(verifyDonationSchema), verifyDonation);
 
 export default router;

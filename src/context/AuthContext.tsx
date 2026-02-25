@@ -41,8 +41,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 email: result.user.email,
                 role: selectedRole,
             }));
-            // Set a dummy token so ProtectedRoute's token check passes
-            localStorage.setItem('token', 'firebase-google-auth');
         } catch (error) {
             console.error("Error signing in with Google", error);
             throw error;
@@ -56,7 +54,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setRole(null);
             localStorage.removeItem('userRole');
             localStorage.removeItem('user');
-            localStorage.removeItem('token');
         } catch (error) {
             console.error("Error signing out", error);
             throw error;

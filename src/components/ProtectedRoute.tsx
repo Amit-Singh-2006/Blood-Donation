@@ -6,11 +6,10 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
-    const token = localStorage.getItem('token');
     const userStr = localStorage.getItem('user');
     const user = userStr ? JSON.parse(userStr) : null;
 
-    if (!token || !user) {
+    if (!user) {
         return <Navigate to="/login" replace />;
     }
 

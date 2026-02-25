@@ -144,12 +144,11 @@ const initDb = async () => {
 
   try {
     const client = await pool.connect();
-    console.log('Successfully connected to the database for initialization.');
     await client.query(schemaQuery);
-    console.log('Database tables verified/upgraded successfully.');
     client.release();
+    if (process.env.NODE_ENV !== 'production') console.log('[DB] Schema initialized.');
   } catch (err: any) {
-    console.error('Failed to connect to the database or upgrade tables:', err.message);
+    console.error('[DB] Initialization failed:', err.message);
   }
 };
 

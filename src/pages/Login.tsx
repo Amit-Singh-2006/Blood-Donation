@@ -30,20 +30,6 @@ export default function Login() {
     setIsLoading(true);
     setError('');
 
-    // Validate admin special key
-    if (role === 'admin' && adminKey !== '7291admin') {
-      setError('Invalid Admin Access Key. Please contact your system administrator.');
-      setIsLoading(false);
-      return;
-    }
-
-    // Validate hospital special key
-    if (role === 'hospital' && hospitalKey !== 'HOSP-7291') {
-      setError('Invalid Hospital ID. Access denied.');
-      setIsLoading(false);
-      return;
-    }
-
     try {
       let authResponse;
       if (isRegistering) {
@@ -60,21 +46,18 @@ export default function Login() {
           body: JSON.stringify(registerData),
         });
       } else {
-        // Login
         authResponse = await apiFetch('/auth/login', {
           method: 'POST',
           body: JSON.stringify({ email, password }),
         });
       }
 
-      localStorage.setItem('token', authResponse.token);
       localStorage.setItem('user', JSON.stringify(authResponse.user));
 
       // Ensure the user's actual role matches the selected login tab
       const userRole = authResponse.user.role;
       if (userRole !== role) {
         // Role mismatch — reject login and clear storage
-        localStorage.removeItem('token');
         localStorage.removeItem('user');
         setError(`Invalid credentials. Please use the correct login tab for your account type.`);
         return;
@@ -94,17 +77,10 @@ export default function Login() {
   const handleGoogleSignIn = async () => {
     setError(null);
 
-    // Require keys before allowing Google Sign-In for specific roles
+    // Admin must enter the correct key before Google auth
     if (role === 'admin') {
-      if (adminKey !== '7291admin') {
-        setError('Invalid Admin Access Key. Please enter the correct key before signing in with Google.');
-        return;
-      }
-    }
-
-    if (role === 'hospital') {
-      if (hospitalKey !== 'HOSP-7291') {
-        setError('Invalid Hospital ID. Please enter a valid ID before signing in with Google.');
+      if (adminKey !== 'LIFELINK-ADMIN-ONLY-7291XZK') {
+        setError('Invalid Admin Access Key. Please enter the correct key.');
         return;
       }
     }
@@ -292,7 +268,7 @@ export default function Login() {
                 </div>
               </div>
 
-              {/* Admin Special Key Field */}
+              {/* Admin Special Key Field - shown during login AND registration */}
               {role === 'admin' && (
                 <motion.div
                   initial={{ opacity: 0, y: -8 }}
@@ -350,17 +326,20 @@ export default function Login() {
                 </motion.div>
               )}
 
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-[#ee2b2b] text-white py-4 rounded-lg font-bold text-lg shadow-xl shadow-[#ee2b2b]/20 hover:bg-[#ee2b2b]/90 active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center gap-2"
-              >
-                {isLoading ? (
-                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                ) : (
-                  'Sign In'
-                )}
-              </button>
+              {/* For admin: only Google Sign-In is supported */}
+              {role !== 'admin' && (
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full bg-[#ee2b2b] text-white py-4 rounded-lg font-bold text-lg shadow-xl shadow-[#ee2b2b]/20 hover:bg-[#ee2b2b]/90 active:scale-[0.98] transition-all disabled:opacity-70 flex items-center justify-center gap-2"
+                >
+                  {isLoading ? (
+                    <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    'Sign In'
+                  )}
+                </button>
+              )}
             </form>
 
             {/* Divider */}

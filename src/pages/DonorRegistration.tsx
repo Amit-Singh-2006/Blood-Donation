@@ -44,7 +44,6 @@ export default function DonorRegistration() {
         }),
       });
 
-      localStorage.setItem('token', response.token);
       localStorage.setItem('user', JSON.stringify(response.user));
 
       setIsSuccess(true);
