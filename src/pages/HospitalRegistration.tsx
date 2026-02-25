@@ -54,7 +54,6 @@ export default function HospitalRegistration() {
                     contact_number: formData.phone
                 }),
             });
-            localStorage.setItem('token', response.token);
             localStorage.setItem('user', JSON.stringify(response.user));
             navigate('/hospital');
         } catch (err: any) {

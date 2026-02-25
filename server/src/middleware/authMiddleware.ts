@@ -13,7 +13,7 @@ export interface AuthRequest extends Request {
 }
 
 export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
-    const token = req.header('Authorization')?.split(' ')[1];
+    const token = req.cookies?.token || req.header('Authorization')?.split(' ')[1]; // fallback for legacy clients if needed
 
     if (!token) {
         return res.status(401).json({ message: 'No token, authorization denied' });

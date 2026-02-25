@@ -18,12 +18,6 @@ export default function AdminRegistration() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-
-        if (specialId !== '7291admin') {
-            setError('Invalid Admin Special ID. Unauthorized registration attempt.');
-            return;
-        }
-
         setIsSubmitting(true);
 
         try {
@@ -33,11 +27,11 @@ export default function AdminRegistration() {
                     name: name,
                     email: email,
                     password: password,
-                    role: 'admin'
+                    role: 'admin',
+                    admin_invite_code: specialId  // backend validates this — never check on frontend
                 }),
             });
 
-            localStorage.setItem('token', response.token);
             localStorage.setItem('user', JSON.stringify(response.user));
 
             setIsSuccess(true);
@@ -104,7 +98,7 @@ export default function AdminRegistration() {
                                 type={showSpecialId ? 'text' : 'password'}
                                 value={specialId}
                                 onChange={(e) => setSpecialId(e.target.value)}
-                                placeholder="Enter your special key (e.g., 7291admin)"
+                                placeholder="Enter your admin invite code"
                                 className="w-full px-4 py-2 pr-10 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
                             />
                             <button

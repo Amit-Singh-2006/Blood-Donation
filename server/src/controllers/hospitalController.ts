@@ -129,6 +129,7 @@ export const verifyDonation = async (req: AuthRequest, res: Response) => {
 
 export const getPotentialDonors = async (req: AuthRequest, res: Response) => {
     const { requestId } = req.params;
+    const hospitalId = req.user?.id;
 
     try {
         // 1. Get the request details
@@ -136,6 +137,11 @@ export const getPotentialDonors = async (req: AuthRequest, res: Response) => {
         if (requestResult.rows.length === 0) return res.status(404).json({ message: 'Request not found' });
 
         const request = requestResult.rows[0];
+
+        // Ensure the hospital owns the request (IDOR Prevention)
+        if (request.hospital_id !== hospitalId) {
+            return res.status(403).json({ message: 'Forbidden: You do not have access to this request' });
+        }
 
         // 2. Find matching donors using distance if coordinates exist
         let matchesQuery = `

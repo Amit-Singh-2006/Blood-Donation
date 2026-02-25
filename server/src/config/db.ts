@@ -15,8 +15,8 @@ export const pool = new Pool({
 });
 
 pool.connect()
-    .then(() => console.log('Supabase PostgreSQL connected successfully'))
-    .catch((err) => console.error('Connection error:', err));
+    .then(client => { client.release(); }) // silently confirm connection
+    .catch((err) => { if (process.env.NODE_ENV !== 'production') console.error('DB connection error:', err.message); });
 
 export const query = (text: string, params?: any[]) => pool.query(text, params);
 

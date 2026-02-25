@@ -1,0 +1,1 @@
+{"version":3,"file":"BloodInventory.d.ts","sourceRoot":"","sources":["BloodInventory.ts"],"names":[],"mappings":"AAAA,MAAM,WAAW,cAAc;IAC3B,EAAE,EAAE,MAAM,CAAC;IACX,WAAW,EAAE,MAAM,CAAC;IACpB,WAAW,EAAE,IAAI,GAAG,IAAI,GAAG,IAAI,GAAG,IAAI,GAAG,KAAK,GAAG,KAAK,GAAG,IAAI,GAAG,IAAI,CAAC;IACrE,KAAK,EAAE,MAAM,CAAC;CACjB"}
