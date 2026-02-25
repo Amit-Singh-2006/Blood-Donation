@@ -363,11 +363,21 @@ export const bruteForceDelay = async (req: Request, res: Response, next: NextFun
 const PROTECTED_PREFIXES = ['/admin', '/donor', '/hospital', '/user'];
 
 /**
+ * Intentionally public paths that are under a protected prefix
+ * but do NOT require authentication (e.g. the leaderboard).
+ */
+const PUBLIC_PATHS = ['/donor/leaderboard'];
+
+/**
  * Middleware: Block unauthenticated access to protected path prefixes.
- * Defends against Forced Browsing — manually navigating to /admin/... 
+ * Defends against Forced Browsing — manually navigating to /admin/...
  * without a valid token.
+ * Exceptions: PUBLIC_PATHS are always allowed through.
  */
 export const forcedBrowsingGuard = (req: Request, res: Response, next: NextFunction): void => {
+    // Always allow explicitly public paths
+    if (PUBLIC_PATHS.includes(req.path)) { next(); return; }
+
     const cookieToken = (req as any).cookies?.token;
     const authHeader = req.header('Authorization');
     const hasToken = !!cookieToken || !!authHeader;
