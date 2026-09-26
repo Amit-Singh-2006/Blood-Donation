@@ -11,7 +11,8 @@ export const getNotifications = async (req: AuthRequest, res: Response) => {
         );
         res.json(result.rows);
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };
 
@@ -25,7 +26,8 @@ export const markNotificationRead = async (req: AuthRequest, res: Response) => {
         );
         res.json({ message: 'Notification marked as read' });
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };
 
@@ -48,6 +50,7 @@ export const updateProfile = async (req: AuthRequest, res: Response) => {
         }
         res.json({ message: 'Profile updated successfully' });
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };

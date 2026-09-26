@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware';
-import { query } from '../config/db';
+import pool, { query } from '../config/db';
 
 export const getHospitalDonations = async (req: AuthRequest, res: Response) => {
     const hospitalId = req.user?.id;
@@ -16,7 +16,8 @@ export const getHospitalDonations = async (req: AuthRequest, res: Response) => {
         );
         res.json(result.rows);
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };
 
@@ -26,7 +27,8 @@ export const getHospitalInventory = async (req: AuthRequest, res: Response) => {
         const result = await query('SELECT * FROM blood_inventory WHERE hospital_id = $1', [hospitalId]);
         res.json(result.rows);
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };
 
@@ -36,7 +38,8 @@ export const getHospitalRequests = async (req: AuthRequest, res: Response) => {
         const result = await query('SELECT * FROM blood_requests WHERE hospital_id = $1 ORDER BY created_at DESC', [hospitalId]);
         res.json(result.rows);
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };
 
@@ -51,7 +54,8 @@ export const createHospitalRequest = async (req: AuthRequest, res: Response) => 
         );
         res.status(201).json(result.rows[0]);
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };
 
@@ -70,7 +74,8 @@ export const updateHospitalInventory = async (req: AuthRequest, res: Response) =
         );
         res.json(result.rows[0]);
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };
 
@@ -78,24 +83,28 @@ export const verifyDonation = async (req: AuthRequest, res: Response) => {
     const hospitalId = req.user?.id;
     const { donor_id, units, xp_earned } = req.body;
 
+    // A transaction must run on a single connection: pool.query() may hand each
+    // statement to a different client, so BEGIN/COMMIT/ROLLBACK would not apply.
+    const client = await pool.connect();
     try {
-        await query('BEGIN');
+        await client.query('BEGIN');
 
         // 1. Insert into donations
-        const donationResult = await query(
+        const donationResult = await client.query(
             'INSERT INTO donations (donor_id, hospital_id, units, xp_earned) VALUES ($1, $2, $3, $4) RETURNING id, donation_date',
             [donor_id, hospitalId, units, xp_earned || (units * 10)]
         );
 
         // 2. Update Hospital Inventory
         // First, get the blood group of the donor
-        const donorData = await query('SELECT blood_group FROM donors WHERE user_id = $1', [donor_id]);
+        const donorData = await client.query('SELECT blood_group FROM donors WHERE user_id = $1', [donor_id]);
         if (donorData.rows.length === 0) {
-            throw new Error('Donor not found');
+            await client.query('ROLLBACK');
+            return res.status(404).json({ message: 'Donor not found' });
         }
         const bloodGroup = donorData.rows[0].blood_group;
 
-        await query(
+        await client.query(
             `INSERT INTO blood_inventory (hospital_id, blood_group, units, last_updated) 
              VALUES ($1, $2, $3, CURRENT_TIMESTAMP) 
              ON CONFLICT (hospital_id, blood_group) 
@@ -105,7 +114,7 @@ export const verifyDonation = async (req: AuthRequest, res: Response) => {
 
         // 3. Update Donor Stats (XP and Last Donation Date)
         const earnedXP = xp_earned || (units * 10);
-        await query(
+        await client.query(
             `UPDATE donors 
              SET xp_points = xp_points + $1, 
                  last_donation_date = CURRENT_DATE,
@@ -114,7 +123,7 @@ export const verifyDonation = async (req: AuthRequest, res: Response) => {
             [earnedXP, donor_id]
         );
 
-        await query('COMMIT');
+        await client.query('COMMIT');
 
         res.status(201).json({
             message: 'Donation verified successfully',
@@ -122,8 +131,11 @@ export const verifyDonation = async (req: AuthRequest, res: Response) => {
             xp_earned: earnedXP
         });
     } catch (err: any) {
-        await query('ROLLBACK');
-        res.status(500).json({ message: err.message });
+        await client.query('ROLLBACK').catch(() => { });
+        console.error('verifyDonation error:', err);
+        res.status(500).json({ message: 'Failed to verify donation.' });
+    } finally {
+        client.release();
     }
 };
 
@@ -168,6 +180,7 @@ export const getPotentialDonors = async (req: AuthRequest, res: Response) => {
 
         res.json(donors.rows);
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };

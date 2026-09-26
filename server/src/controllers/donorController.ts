@@ -16,7 +16,8 @@ export const getDonorDonations = async (req: AuthRequest, res: Response) => {
         );
         res.json(result.rows);
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };
 
@@ -50,13 +51,15 @@ export const getMatchedRequests = async (req: AuthRequest, res: Response) => {
             queryParams.push(donor.city);
         }
 
-        matchesQuery += ` ORDER BY br.urgency DESC, br.created_at DESC`;
+        // Sort by severity, not alphabetically (alphabetical DESC puts 'Emergency' last)
+        matchesQuery += ` ORDER BY CASE br.urgency WHEN 'Emergency' THEN 3 WHEN 'Urgent' THEN 2 ELSE 1 END DESC, br.created_at DESC`;
 
         const matches = await query(matchesQuery, queryParams);
 
         res.json(matches.rows);
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };
 
@@ -71,7 +74,8 @@ export const getLeaderboard = async (req: AuthRequest, res: Response) => {
         );
         res.json(result.rows);
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };
 
@@ -96,12 +100,13 @@ export const getImpactPrediction = async (req: AuthRequest, res: Response) => {
         let impactLevel = 'Normal';
         let insight = 'Your donation will help maintain a healthy blood supply.';
 
-        if (data.urgency === 'Urgent' || stock < 10) {
-            impactLevel = 'High';
-            insight = `Critical Need! the current inventory for ${data.blood_group} is low (${stock} units). Your donation could save a life today.`;
-        } else if (data.urgency === 'Emergency' || stock < 5) {
+        // Check the most severe condition first, otherwise 'Critical' is unreachable
+        if (data.urgency === 'Emergency' || stock < 5) {
             impactLevel = 'Critical';
             insight = `Immediate Action Required! This hospital is in an emergency state for ${data.blood_group}. Your contribution is vital for upcoming surgeries.`;
+        } else if (data.urgency === 'Urgent' || stock < 10) {
+            impactLevel = 'High';
+            insight = `Critical Need! the current inventory for ${data.blood_group} is low (${stock} units). Your donation could save a life today.`;
         }
 
         res.json({
@@ -113,6 +118,7 @@ export const getImpactPrediction = async (req: AuthRequest, res: Response) => {
             urgency: data.urgency
         });
     } catch (err: any) {
-        res.status(500).json({ message: err.message });
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
     }
 };

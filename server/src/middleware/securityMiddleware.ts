@@ -147,10 +147,18 @@ const hasLDAPInjection = (value: string): boolean => {
     return /[()\\*\x00]/.test(value) || /\|\|/.test(value) || /&&/.test(value);
 };
 
+/**
+ * Fields never interpolated into any query (only bcrypt-hashed), and which the
+ * password policy requires to contain special characters such as ( ) * \.
+ */
+const INJECTION_EXEMPT_KEYS = new Set(['password']);
+
 const containsInjection = (obj: any): boolean => {
     if (typeof obj === 'string') return hasNoSQLInjection(obj) || hasLDAPInjection(obj);
     if (Array.isArray(obj)) return obj.some(containsInjection);
-    if (obj && typeof obj === 'object') return Object.values(obj).some(containsInjection);
+    if (obj && typeof obj === 'object') {
+        return Object.entries(obj).some(([key, value]) => !INJECTION_EXEMPT_KEYS.has(key) && containsInjection(value));
+    }
     return false;
 };
 

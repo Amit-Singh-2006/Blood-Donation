@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# tsc output emitted next to sources shadows the .ts files under ts-node
+server/src/**/*.js
+server/src/**/*.js.map
+server/src/**/*.d.ts
+server/src/**/*.d.ts.map

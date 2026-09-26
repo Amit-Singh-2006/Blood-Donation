@@ -4,8 +4,9 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "nodemon --watch src --exec ts-node src/server.ts"
+    "start": "node dist/src/server.js",
+    "dev": "nodemon --watch src --exec ts-node src/server.ts",
+    "test": "node -r ts-node/register/transpile-only --test --test-force-exit \"test/**/*.test.ts\""
   },
   "keywords": [],
   "author": "",
