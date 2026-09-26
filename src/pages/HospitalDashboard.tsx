@@ -11,6 +11,10 @@ type NavItem = 'overview' | 'requests' | 'inventory' | 'map' | 'analytics' | 'se
 
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
+// The API stores urgency as Normal/Urgent/Emergency; this UI styles 'critical'.
+const toUiUrgency = (urgency: string) =>
+  ({ Emergency: 'critical', Urgent: 'high', Normal: 'standard' } as Record<string, string>)[urgency] ?? urgency;
+
 export default function HospitalDashboard() {
   const [activeTab, setActiveTab] = useState<NavItem>('overview');
   const [showChat, setShowChat] = useState(false);
@@ -99,7 +103,9 @@ export default function HospitalDashboard() {
         apiFetch('/hospital/donations'),
       ]);
       setInventory(invData.status === 'fulfilled' && invData.value?.length ? invData.value : DUMMY_INVENTORY);
-      setRequests(reqData.status === 'fulfilled' && reqData.value?.length ? reqData.value : DUMMY_REQUESTS);
+      setRequests(reqData.status === 'fulfilled' && reqData.value?.length
+        ? reqData.value.map((r: any) => ({ ...r, urgency: toUiUrgency(r.urgency) }))
+        : DUMMY_REQUESTS);
       setDonations(donData.status === 'fulfilled' && donData.value?.length ? donData.value : DUMMY_DONATIONS);
     } catch (err) {
       console.error('Failed to load data', err);
@@ -312,7 +318,7 @@ export default function HospitalDashboard() {
               id: data.id,
               blood_group: data.blood_group,
               units_required: data.units_required,
-              urgency: data.urgency === 'critical' ? 'critical' : 'high',
+              urgency: toUiUrgency(data.urgency) === 'critical' ? 'critical' : 'high',
               status: 'active',
               time: 'Just now',
               patient: 'AI Prompted Request',

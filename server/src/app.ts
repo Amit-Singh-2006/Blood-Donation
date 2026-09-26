@@ -8,6 +8,7 @@ import donorRoutes from './routes/donorRoutes';
 import hospitalRoutes from './routes/hospitalRoutes';
 import adminRoutes from './routes/adminRoutes';
 import userRoutes from './routes/userRoutes';
+import aiRoutes from './routes/aiRoutes';
 import rateLimit from 'express-rate-limit';
 
 // ── Security Middleware ────────────────────────────────────────────────────
@@ -95,6 +96,9 @@ app.use(cors({
 // 4. Body parsing (must come before sanitizers that mutate req.body)
 // ──────────────────────────────────────────────────────────────────────────
 app.use(cookieParser());
+// Chat requests carry the system prompt, tool schemas and history; the capped
+// Zod schema in aiRoutes bounds them instead of the 10kb global limit.
+app.use('/ai', express.json({ limit: '64kb' }));
 app.use(express.json({ limit: '10kb' }));   // Limit body size → DoS mitigation
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 
@@ -161,6 +165,7 @@ app.use('/donor', donorRoutes);
 app.use('/hospital', hospitalRoutes);
 app.use('/admin', adminRoutes);
 app.use('/user', userRoutes);
+app.use('/ai', aiRoutes);
 
 // ──────────────────────────────────────────────────────────────────────────
 // 13. Health Check (public)

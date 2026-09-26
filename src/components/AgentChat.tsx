@@ -374,11 +374,7 @@ export default function AgentChat({ isOpen, onClose, context, onAction }: AgentC
         setIsThinking(true);
 
         try {
-            const apiKey = import.meta.env.VITE_GROQ_API_KEY;
-            if (!apiKey) throw new Error('Groq API key not configured.');
-
             const MODEL = 'llama-3.3-70b-versatile';
-            const BASE = 'https://api.groq.com/openai/v1/chat/completions';
 
             // IMPORTANT: setMessages is async, so we use the functional update to get the latest messages
             // But since we are in handleSend, we can just build the history from current state
@@ -410,12 +406,10 @@ export default function AgentChat({ isOpen, onClose, context, onAction }: AgentC
             const calledTools = new Set<string>();
 
             while (iteration < MAX_ITERATIONS) {
-                const res = await fetch(BASE, {
+                // Proxied through the backend so the Groq API key never reaches the browser;
+                // apiFetch throws with the server's message on a non-2xx response.
+                const data = await apiFetch('/ai/chat', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey}`,
-                    },
                     body: JSON.stringify({
                         model: MODEL,
                         messages: apiMessages,
@@ -424,13 +418,6 @@ export default function AgentChat({ isOpen, onClose, context, onAction }: AgentC
                         temperature: 0,
                     }),
                 });
-
-                if (!res.ok) {
-                    const err = await res.json();
-                    throw new Error(err?.error?.message || res.statusText);
-                }
-
-                const data = await res.json();
                 const aiMsg = data.choices?.[0]?.message;
                 if (!aiMsg) break;
 

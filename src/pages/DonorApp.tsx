@@ -109,7 +109,7 @@ export default function DonorApp() {
 
   const handleClaimCertificate = async (donation: any) => {
     // Prompt the user for the email they want the certificate sent to
-    const defaultEmail = user?.email || "chayankhatua2006@gmail.com";
+    const defaultEmail = user?.email || "";
     const userEmail = window.prompt("Where should we email your Certificate of Appreciation?", defaultEmail);
 
     // If user clicks Cancel on the prompt, abort.

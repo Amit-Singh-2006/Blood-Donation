@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, X, Send, Bot, User } from 'lucide-react';
+import { apiFetch } from '../lib/api';
 
 export default function ChatBot() {
   const [isOpen, setIsOpen] = useState(false);
@@ -19,19 +20,14 @@ export default function ChatBot() {
     setInput('');
 
     try {
-      const apiKey = import.meta.env.VITE_GROQ_API_KEY || "";
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      // Proxied through the backend so the Groq API key never reaches the browser
+      const data = await apiFetch('/ai/chat', {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
         body: JSON.stringify({
           model: "llama-3.1-8b-instant",
           messages: [{ role: "user", content: userInput }]
         })
       });
-      const data = await res.json();
       const responseText = data.choices?.[0]?.message?.content || "I'm not sure about that. Could you ask differently?";
       setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), sender: 'bot', text: responseText }]);
     } catch (err) {

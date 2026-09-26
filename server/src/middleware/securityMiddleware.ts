@@ -166,7 +166,14 @@ const containsInjection = (obj: any): boolean => {
  * Middleware: Block requests containing NoSQL / LDAP injection patterns.
  * Note: SQL injection is prevented by parameterised queries (pg library).
  */
+/**
+ * Free-text chat endpoints: the body is forwarded to the LLM provider and never
+ * reaches a query, and prompts routinely contain ( ) * characters.
+ */
+const INJECTION_EXEMPT_PATHS = new Set(['/ai/chat']);
+
 export const injectionGuard = (req: Request, res: Response, next: NextFunction): void => {
+    if (INJECTION_EXEMPT_PATHS.has(req.path)) { next(); return; }
     const sources = [req.body, req.query, req.params];
     if (sources.some(containsInjection)) {
         res.status(400).json({ message: 'Invalid characters detected in request.' });
