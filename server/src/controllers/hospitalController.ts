@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware';
 import pool, { query } from '../config/db';
+import { compatibleDonorGroups, ELIGIBILITY_WINDOW_SQL } from '../utils/bloodCompatibility';
 
 export const getHospitalDonations = async (req: AuthRequest, res: Response) => {
     const hospitalId = req.user?.id;
@@ -155,26 +156,34 @@ export const getPotentialDonors = async (req: AuthRequest, res: Response) => {
             return res.status(403).json({ message: 'Forbidden: You do not have access to this request' });
         }
 
-        // 2. Find matching donors using distance if coordinates exist
-        let matchesQuery = `
-             SELECT u.name, d.blood_group, d.city, d.phone, d.is_eligible, d.xp_points
-             FROM donors d
-             JOIN users u ON d.user_id = u.id
-             WHERE d.blood_group = $1
-             AND d.is_eligible = TRUE
-        `;
-        let queryParams = [request.blood_group];
+        // 2. Compatibility engine: ABO/Rh-compatible donors who are eligible and past
+        //    their deferral window, within 50 miles (or in the hospital's city)
+        const queryParams: any[] = [compatibleDonorGroups(request.blood_group), request.blood_group];
+        let distanceSql = 'NULL';
+        let locationFilter: string;
 
         if (request.latitude != null && request.longitude != null) {
-            matchesQuery += ` AND d.latitude IS NOT NULL AND calculate_distance(d.latitude, d.longitude, $2, $3) < 50 `;
+            distanceSql = 'calculate_distance(d.latitude, d.longitude, $3, $4)';
+            locationFilter = `d.latitude IS NOT NULL AND ${distanceSql} < 50`;
             queryParams.push(request.latitude, request.longitude);
         } else {
             // Fallback to hospital city
-            matchesQuery += ` AND d.city = (SELECT city FROM hospitals WHERE user_id = $2) `;
+            locationFilter = 'd.city = (SELECT city FROM hospitals WHERE user_id = $3)';
             queryParams.push(request.hospital_id);
         }
 
-        matchesQuery += ` ORDER BY d.xp_points DESC NULLS LAST`;
+        // Ranked by proximity, then ABO-identical donors first (keeps universal O- for
+        // the patients who can only take O-), then XP
+        const matchesQuery = `
+             SELECT u.name, d.blood_group, d.city, d.phone, d.is_eligible, d.xp_points,
+                    ${distanceSql} AS distance_miles
+             FROM donors d
+             JOIN users u ON d.user_id = u.id
+             WHERE d.blood_group = ANY($1)
+             AND d.is_eligible = TRUE
+             AND ${ELIGIBILITY_WINDOW_SQL}
+             AND ${locationFilter}
+             ORDER BY distance_miles ASC NULLS LAST, (d.blood_group = $2) DESC, d.xp_points DESC NULLS LAST`;
 
         const donors = await query(matchesQuery, queryParams);
 

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { query } from '../config/db';
+import { recipientGroupsFor } from '../utils/bloodCompatibility';
 
 export const getDonorDonations = async (req: AuthRequest, res: Response) => {
     const donorId = req.user?.id;
@@ -36,10 +37,11 @@ export const getMatchedRequests = async (req: AuthRequest, res: Response) => {
             SELECT br.*, h.hospital_name, h.city as hospital_city
             FROM blood_requests br
             JOIN hospitals h ON br.hospital_id = h.user_id
-            WHERE br.blood_group = $1 
+            WHERE br.blood_group = ANY($1)
             AND br.status = 'Open'
         `;
-        let queryParams = [donor.blood_group];
+        // Every open request whose patient can receive this donor's blood (ABO/Rh)
+        let queryParams: any[] = [recipientGroupsFor(donor.blood_group)];
 
         if (donor.latitude != null && donor.longitude != null) {
             // Match within ~50 miles radius
