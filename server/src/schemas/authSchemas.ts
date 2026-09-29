@@ -45,6 +45,11 @@ export const registerSchema = z.object({
     // Hospital specific fields
     hospital_name: z.string().max(200).optional(),
     contact_number: z.string().max(15).optional(),
+    // Registration / licence number an admin checks before verifying the hospital
+    registration_number: z.string().trim().max(100).optional(),
+    // Optional hospital coordinates so donors are ranked by distance, not just city
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
 
     // Admin invite code (validated server-side in controller)
     admin_invite_code: z.string().optional(),
@@ -54,7 +59,7 @@ export const registerSchema = z.object({
         return !!data.blood_group && !!data.city && !!data.phone;
     }
     if (data.role === 'hospital') {
-        return !!data.hospital_name && !!data.city && !!(data.contact_number || data.phone);
+        return !!data.hospital_name && !!data.city && !!(data.contact_number || data.phone) && !!data.registration_number;
     }
     return true;
 }, {

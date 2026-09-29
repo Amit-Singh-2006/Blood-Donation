@@ -19,8 +19,14 @@ test('allows passwords with the special characters the password policy requires'
 test('still blocks injection patterns in every other field', () => {
     assert.equal(run({ email: '{"$ne": null}', password: 'x' }).passed, false);
     assert.equal(run({ name: '$where', password: 'Valid*1a' }).passed, false);
-    assert.equal(run({ name: 'a*b' }).passed, false);
-    assert.equal(run({ name: 'a*b' }).res.statusCode, 400);
+    assert.equal(run({ name: 'a\u0000b' }).passed, false);
+    assert.equal(run({ name: 'a\u0000b' }).res.statusCode, 400);
+});
+
+test('lets ordinary names and references through', () => {
+    for (const name of ['AIIMS (New Delhi)', "St. John's Medical College", 'Ram Manohar Lohia & Sons', 'ICU (Bed 7)*', 'Ward 3 \\ Bed 2']) {
+        assert.equal(run({ hospital_name: name }).passed, true, name);
+    }
 });
 
 const corsCheck = (origin?: string) => {

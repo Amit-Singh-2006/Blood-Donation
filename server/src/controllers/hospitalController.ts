@@ -2,6 +2,10 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware';
 import pool, { query } from '../config/db';
 import { compatibleDonorGroups, ELIGIBILITY_WINDOW_SQL } from '../utils/bloodCompatibility';
+import {
+    DispatchResult, HospitalDonorView, HospitalRequestView, NetworkError,
+    dispatchRequest, hospitalPortal, networkConfigured, toE164,
+} from '../services/donorNetwork';
 
 export const getHospitalDonations = async (req: AuthRequest, res: Response) => {
     const hospitalId = req.user?.id;
@@ -33,27 +37,151 @@ export const getHospitalInventory = async (req: AuthRequest, res: Response) => {
     }
 };
 
-export const getHospitalRequests = async (req: AuthRequest, res: Response) => {
-    const hospitalId = req.user?.id;
+const loadHospital = async (userId: number | undefined) => {
+    const result = await query(
+        'SELECT hospital_name, city, contact_number, latitude, longitude, is_verified FROM hospitals WHERE user_id = $1',
+        [userId]
+    );
+    return result.rows[0];
+};
+
+/** The hospital token authorises actions on the network; it never leaves the server. */
+const publicRequest = ({ hospital_token, ...rest }: Record<string, any>) => rest;
+
+const toNumber = (v: unknown) => (v === null || v === undefined || v === '' ? undefined : Number(v));
+
+// GET /hospital/profile
+export const getHospitalProfile = async (req: AuthRequest, res: Response) => {
     try {
-        const result = await query('SELECT * FROM blood_requests WHERE hospital_id = $1 ORDER BY created_at DESC', [hospitalId]);
-        res.json(result.rows);
+        const hospital = await loadHospital(req.user?.id);
+        if (!hospital) return res.status(404).json({ message: 'Hospital profile not found.' });
+        res.json({
+            hospital_name: hospital.hospital_name,
+            city: hospital.city,
+            contact_number: hospital.contact_number,
+            is_verified: !!hospital.is_verified,
+            network_configured: networkConfigured(),
+        });
     } catch (err: any) {
         console.error(err);
         res.status(500).json({ message: 'Internal server error.' });
     }
 };
 
+/**
+ * Records donations the hospital confirmed on the network in `donations`, so
+ * they appear in the donor's and hospital's history. Donors are matched by
+ * phone; donors who joined only through the network (e.g. USSD) are skipped.
+ */
+const recordNetworkDonations = async (hospitalId: number | undefined, donors: HospitalDonorView[] = []) => {
+    for (const d of donors) {
+        if (d.status !== 'donated' || !d.phone) continue;
+        await query(
+            `INSERT INTO donations (donor_id, hospital_id, units, donation_date, network_match_id)
+             SELECT dn.user_id, $2, 1, COALESCE($3::date, CURRENT_DATE), $4
+             FROM donors dn
+             WHERE right(regexp_replace(dn.phone, '\\D', '', 'g'), 10) = right(regexp_replace($1, '\\D', '', 'g'), 10)
+             LIMIT 1
+             ON CONFLICT (network_match_id) DO NOTHING`,
+            [d.phone, hospitalId, d.responded_at, d.match_id]
+        );
+    }
+};
+
+// GET /hospital/requests: the hospital's requests with live progress from the network
+export const getHospitalRequests = async (req: AuthRequest, res: Response) => {
+    const hospitalId = req.user?.id;
+    try {
+        const { rows } = await query('SELECT * FROM blood_requests WHERE hospital_id = $1 ORDER BY created_at DESC LIMIT 50', [hospitalId]);
+
+        // One network call covers the 25 most recent linked requests
+        const linked = rows.filter((r: any) => r.network_request_id && r.hospital_token).slice(0, 25);
+        const views = new Map<number, HospitalRequestView>();
+        let networkError: string | undefined;
+        if (linked.length && networkConfigured()) {
+            try {
+                const live = await hospitalPortal(linked.map((r: any) => ({ request_id: r.network_request_id, hospital_token: r.hospital_token })));
+                for (const v of live) if (v.found) views.set(v.request_id, v);
+            } catch (err) {
+                console.error('Hospital portal error:', err);
+                networkError = 'Live donor updates are unavailable right now.';
+            }
+        }
+
+        const requests = [];
+        for (const r of rows) {
+            const live = views.get(r.network_request_id) ?? null;
+            if (live) {
+                // Keep our copy in step with the network, for admin views and history
+                if (live.status && live.status !== r.status) {
+                    await query('UPDATE blood_requests SET status = $1 WHERE id = $2', [live.status, r.id]);
+                }
+                await recordNetworkDonations(hospitalId, live.donors);
+            }
+            requests.push({ ...publicRequest(r), status: live?.status ?? r.status, live });
+        }
+        res.json({ requests, network_error: networkError ?? null });
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+};
+
+// POST /hospital/requests: saves the request and dispatches it to the donor network
 export const createHospitalRequest = async (req: AuthRequest, res: Response) => {
     const hospitalId = req.user?.id;
-    const { blood_group, units_required, urgency, latitude, longitude } = req.body;
+    const { blood_group, units_required, urgency, latitude, longitude, patient_ref, required_by } = req.body;
 
     try {
-        const result = await query(
-            'INSERT INTO blood_requests (hospital_id, blood_group, units_required, urgency, latitude, longitude) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-            [hospitalId, blood_group, units_required, urgency, latitude, longitude]
+        const hospital = await loadHospital(hospitalId);
+        if (!hospital) return res.status(404).json({ message: 'Hospital profile not found.' });
+        if (!hospital.is_verified) {
+            return res.status(403).json({ message: 'Your hospital must be verified by a LifeLink admin before requests can alert donors.' });
+        }
+
+        const lat = toNumber(latitude) ?? toNumber(hospital.latitude);
+        const lng = toNumber(longitude) ?? toNumber(hospital.longitude);
+        const inserted = await query(
+            `INSERT INTO blood_requests (hospital_id, blood_group, units_required, urgency, latitude, longitude, patient_ref, required_by)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+            [hospitalId, blood_group, units_required, urgency, lat ?? null, lng ?? null, patient_ref || null, required_by || null]
         );
-        res.status(201).json(result.rows[0]);
+        let request = inserted.rows[0];
+
+        let network: DispatchResult | null = null;
+        let warning: string | undefined;
+        try {
+            network = await dispatchRequest({
+                hospital_name: hospital.hospital_name,
+                hospital_city: hospital.city,
+                hospital_contact: toE164(hospital.contact_number) ?? undefined,
+                patient_ref: patient_ref || undefined,
+                blood_group,
+                units_required,
+                urgency,
+                ...(lat !== undefined && lng !== undefined ? { latitude: lat, longitude: lng } : {}),
+                required_by: required_by || undefined,
+            });
+            const updated = await query(
+                `UPDATE blood_requests SET network_request_id = $1, tracking_token = $2, hospital_token = $3, status = $4, network_error = NULL
+                 WHERE id = $5 RETURNING *`,
+                [network.request_id, network.tracking_token, network.hospital_token,
+                    network.status === 'no_compatible_donors' ? 'Exhausted' : 'Open', request.id]
+            );
+            request = updated.rows[0];
+        } catch (err) {
+            console.error('Dispatch failed:', err);
+            warning = err instanceof NetworkError && err.status === 400
+                ? `The donor network rejected the request: ${err.message}`
+                : 'The request was saved, but the donor network could not be reached, so no donors were alerted yet. Please try again shortly.';
+            await query('UPDATE blood_requests SET network_error = $1 WHERE id = $2', [warning, request.id]);
+        }
+
+        res.status(201).json({
+            request: publicRequest(request),
+            network: network && { ...network, hospital_token: undefined },
+            warning: warning ?? null,
+        });
     } catch (err: any) {
         console.error(err);
         res.status(500).json({ message: 'Internal server error.' });

@@ -143,10 +143,12 @@ const hasNoSQLInjection = (value: string): boolean => {
     return /(\$where|\$gt|\$lt|\$gte|\$lte|\$ne|\$in|\$nin|\$exists|\$regex|\$or|\$and|\$not|\$nor|\$expr|\$jsonSchema|\$mod|\$text|\$where)/i.test(value);
 };
 
-/** Detect LDAP injection patterns. */
-const hasLDAPInjection = (value: string): boolean => {
-    return /[()\\*\x00]/.test(value) || /\|\|/.test(value) || /&&/.test(value);
-};
+/**
+ * Reject NUL bytes, which can truncate strings in native code. There is no
+ * LDAP here and SQL is always parameterised, so ( ) * \ || && are ordinary
+ * text: blocking them rejected real names like "AIIMS (New Delhi)".
+ */
+const hasControlBytes = (value: string): boolean => /\x00/.test(value);
 
 /**
  * Fields never interpolated into any query (only bcrypt-hashed), and which the
@@ -155,7 +157,7 @@ const hasLDAPInjection = (value: string): boolean => {
 const INJECTION_EXEMPT_KEYS = new Set(['password']);
 
 const containsInjection = (obj: any): boolean => {
-    if (typeof obj === 'string') return hasNoSQLInjection(obj) || hasLDAPInjection(obj);
+    if (typeof obj === 'string') return hasNoSQLInjection(obj) || hasControlBytes(obj);
     if (Array.isArray(obj)) return obj.some(containsInjection);
     if (obj && typeof obj === 'object') {
         return Object.entries(obj).some(([key, value]) => !INJECTION_EXEMPT_KEYS.has(key) && containsInjection(value));
@@ -169,7 +171,7 @@ const containsInjection = (obj: any): boolean => {
  */
 /**
  * Free-text chat endpoints: the body is forwarded to the LLM provider and never
- * reaches a query, and prompts routinely contain ( ) * characters.
+ * reaches a query, so injection checks do not apply.
  */
 const INJECTION_EXEMPT_PATHS = new Set(['/ai/chat']);
 

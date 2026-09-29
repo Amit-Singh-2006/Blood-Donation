@@ -440,7 +440,7 @@ const respondNoDonors = node({
     name: 'Respond: No Compatible Donors',
     parameters: {
       respondWith: 'json',
-      responseBody: expr('{{ { status: "no_compatible_donors", request_id: $("Create Request").first().json.id, blood_group: $("Create Request").first().json.blood_group, compatible_groups: $("Compatibility Engine").first().json.compatible_groups, match_rule: $("Compatibility Engine").first().json.match_rule, tracking_url: "https://amitsingh7291.app.n8n.cloud/webhook/lifelink/request-status?token=" + $("Create Request").first().json.status_token, message: "No available, eligible compatible donors right now. The hospital has been alerted to contact the regional blood bank." } }}'),
+      responseBody: expr('{{ { status: "no_compatible_donors", request_id: $("Create Request").first().json.id, blood_group: $("Create Request").first().json.blood_group, compatible_groups: $("Compatibility Engine").first().json.compatible_groups, match_rule: $("Compatibility Engine").first().json.match_rule, tracking_url: "https://amitsingh7291.app.n8n.cloud/webhook/lifelink/request-status?token=" + $("Create Request").first().json.status_token, hospital_token: $("Create Request").first().json.hospital_token, message: "No available, eligible compatible donors right now. The hospital has been alerted to contact the regional blood bank." } }}'),
       options: { responseCode: 201 }
     },
     position: [1980, 700]

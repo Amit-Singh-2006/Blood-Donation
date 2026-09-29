@@ -74,6 +74,83 @@ export const registerDonor = async (profile: NetworkProfile, change: PreferenceC
 export const donorPortal = (phone: string, change?: PreferenceChange) =>
     post('donor-portal', change ? { phone, action: 'update', ...change } : { phone, action: 'status' });
 
+export interface DispatchPayload {
+    hospital_name: string;
+    hospital_city: string;
+    hospital_contact?: string | undefined;
+    patient_ref?: string | undefined;
+    blood_group: string;
+    units_required: number;
+    urgency: string;
+    latitude?: number | undefined;
+    longitude?: number | undefined;
+    required_by?: string | undefined;
+}
+
+export interface DispatchResult {
+    status: 'dispatched' | 'no_compatible_donors';
+    request_id: number;
+    tracking_token: string | null;
+    hospital_token: string;
+    compatible_donors: number;
+    donors_alerted: number;
+    donors_on_standby: number;
+    escalation_minutes: number | null;
+    message?: string;
+}
+
+/** Raises the request on the network, which matches and alerts donors straight away. */
+export const dispatchRequest = async (payload: DispatchPayload): Promise<DispatchResult> => {
+    const { status, data } = await post('emergency-request', payload);
+    if (status === 400) {
+        const reasons = Array.isArray(data?.errors) ? data.errors.map((e: any) => e.message).join('; ') : '';
+        throw new NetworkError(reasons || 'The donor network rejected the request.', 400);
+    }
+    if (status !== 201 && status !== 200) throw new NetworkError(`Donor network answered ${status}`, status);
+
+    const token = String(data.tracking_url ?? '').match(/token=([0-9a-f-]{36})/i);
+    return {
+        status: data.status,
+        request_id: data.request_id,
+        tracking_token: token?.[1] ?? null,
+        hospital_token: data.hospital_token,
+        compatible_donors: data.compatible_donors ?? 0,
+        donors_alerted: Array.isArray(data.donors_alerted) ? data.donors_alerted.length : 0,
+        donors_on_standby: data.donors_on_standby ?? 0,
+        escalation_minutes: data.escalation_minutes ?? null,
+        message: data.message,
+    };
+};
+
+export interface HospitalDonorView {
+    match_id: number;
+    name: string;
+    phone: string | null;
+    blood_group: string;
+    distance_miles: number | null;
+    status: 'accepted' | 'donated' | 'no_show';
+    responded_at: string | null;
+    donated_url: string | null;
+    no_show_url: string | null;
+}
+
+export interface HospitalRequestView {
+    request_id: number;
+    found: boolean;
+    status?: string;
+    units_confirmed?: number;
+    units_donated?: number;
+    donors?: HospitalDonorView[];
+    [key: string]: unknown;
+}
+
+/** Live progress of a hospital's own requests, with confirmed donors and action links. */
+export const hospitalPortal = async (requests: { request_id: number; hospital_token: string }[]): Promise<HospitalRequestView[]> => {
+    const { status, data } = await post('hospital-portal', { requests });
+    if (status !== 200 || !Array.isArray(data?.requests)) throw new NetworkError(`Hospital portal answered ${status}`, status);
+    return data.requests;
+};
+
 /**
  * Enrols a newly registered donor. Sign-up must not fail because the network
  * is down or not configured, so errors are logged and swallowed.

@@ -1,5 +1,7 @@
 import { Router } from 'express';
-import { getAllDonations, getAllUsers } from '../controllers/adminController';
+import { getAllDonations, getAllUsers, getHospitals, setHospitalVerification } from '../controllers/adminController';
+import { validateRequest } from '../middleware/validateZod';
+import { hospitalVerificationSchema } from '../schemas/adminSchemas';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { requireAdmin } from '../middleware/requireAdmin';
 import { botDetection, logSecurityEvent } from '../middleware/securityMiddleware';
@@ -35,5 +37,7 @@ const auditAdminAccess = (req: Request, res: Response, next: NextFunction): void
 // ─────────────────────────────────────────────
 router.get('/donations', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getAllDonations);
 router.get('/users', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getAllUsers);
+router.get('/hospitals', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getHospitals);
+router.put('/hospitals/:id/verification', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, validateRequest(hospitalVerificationSchema), setHospitalVerification);
 
 export default router;

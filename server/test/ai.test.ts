@@ -42,13 +42,14 @@ test('chat schema rejects models outside the allowlist and oversized input', () 
     }).success, false);
 });
 
-test('injectionGuard lets chat prompts containing ( ) * through on /ai/chat only', () => {
+test('injectionGuard skips /ai/chat but still checks other routes', () => {
     let passed = false;
     injectionGuard({ path: '/ai/chat', body: agentPayload, query: {}, params: {} } as any, fakeRes(), () => { passed = true; });
     assert.equal(passed, true);
 
     passed = false;
-    injectionGuard({ path: '/hospital/requests', body: agentPayload, query: {}, params: {} } as any, fakeRes(), () => { passed = true; });
+    const attack = { ...agentPayload, messages: [{ role: 'user', content: '{"$where": "sleep(1000)"}' }] };
+    injectionGuard({ path: '/hospital/requests', body: attack, query: {}, params: {} } as any, fakeRes(), () => { passed = true; });
     assert.equal(passed, false);
 });
 

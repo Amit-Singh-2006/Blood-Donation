@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { cn } from '../lib/utils';
+import { apiFetch } from '../lib/api';
 
 export default function AdminDashboard() {
   const location = useLocation();
@@ -844,490 +845,114 @@ function OverviewView() {
 }
 
 function HospitalsView({ initialSearch = '' }: { initialSearch?: string }) {
-  const [selectedHospital, setSelectedHospital] = useState<any>(null);
+  const [hospitals, setHospitals] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [localSearch, setLocalSearch] = useState(initialSearch);
 
   useEffect(() => {
     setLocalSearch(initialSearch);
   }, [initialSearch]);
 
-  const hospitals = [
-    {
-      id: 1,
-      name: "City General Hospital",
-      location: "Downtown Medical Zone, Sector 4",
-      status: "Active",
-      stock: "High",
-      requests: 12,
-      image: "https://images.unsplash.com/photo-1587350859728-117699f4a13d?auto=format&fit=crop&q=80&w=800",
-      contact: "Dr. Adrian Thorne",
-      efficiency: "94%",
-      donors: 840
-    },
-    {
-      id: 2,
-      name: "St. Mary's Medical",
-      location: "East Riverside, Suburbs",
-      status: "Active",
-      stock: "Low",
-      requests: 8,
-      image: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&q=80&w=800",
-      contact: "Sarah Miller (Admin)",
-      efficiency: "88%",
-      donors: 420
-    },
-    {
-      id: 3,
-      name: "Westside Emergency",
-      location: "Industrial Corridor, West Bay",
-      status: "Maintenance",
-      stock: "Medium",
-      requests: 0,
-      image: "https://images.unsplash.com/photo-1586773860418-d37222d8fce3?auto=format&fit=crop&q=80&w=800",
-      contact: "Tech Support (N/A)",
-      efficiency: "N/A",
-      donors: 0
-    },
-    {
-      id: 4,
-      name: "Children's Health",
-      location: "Academic Heights, North Hills",
-      status: "Active",
-      stock: "Critical",
-      requests: 24,
-      image: "https://images.unsplash.com/photo-1538108197017-c1a938fc938d?auto=format&fit=crop&q=80&w=800",
-      contact: "Dr. Elena Vance",
-      efficiency: "97%",
-      donors: 1205
+  const load = async () => {
+    setLoading(true);
+    try {
+      setHospitals(await apiFetch('/admin/hospitals'));
+      setError('');
+    } catch (err: any) {
+      setError(err.message || 'Could not load hospitals.');
+    } finally {
+      setLoading(false);
     }
-  ];
+  };
 
-  const filteredHospitals = hospitals.filter(h =>
-    h.name.toLowerCase().includes(localSearch.toLowerCase()) ||
-    h.location.toLowerCase().includes(localSearch.toLowerCase())
+  useEffect(() => { load(); }, []);
+
+  // Only verified hospitals can raise requests that alert donors
+  const setVerified = async (h: any, verified: boolean) => {
+    const question = verified
+      ? `Verify ${h.hospital_name}? Its requests will start alerting real donors. Confirm you have checked registration number "${h.registration_number || 'not provided'}".`
+      : `Revoke verification for ${h.hospital_name}? It will no longer be able to alert donors.`;
+    if (!window.confirm(question)) return;
+    setBusyId(h.id);
+    try {
+      await apiFetch(`/admin/hospitals/${h.id}/verification`, { method: 'PUT', body: JSON.stringify({ verified }) });
+      await load();
+    } catch (err: any) {
+      setError(err.message || 'Could not update verification.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const q = localSearch.toLowerCase();
+  const filtered = hospitals.filter(h =>
+    [h.hospital_name, h.city, h.registration_number, h.email].some(v => String(v ?? '').toLowerCase().includes(q))
   );
-
-  if (selectedHospital) {
-    return <HospitalDetailView hospital={selectedHospital} onBack={() => setSelectedHospital(null)} />;
-  }
+  const pending = hospitals.filter(h => !h.is_verified).length;
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-xl font-bold text-slate-800">Global Facility Management</h3>
-        <div className="flex gap-2">
-          <div className="relative">
-            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
-            <input
-              type="text"
-              value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
-              placeholder="Search facilities..."
-              className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-64 focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all outline-none"
-            />
-          </div>
-          <button className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold hover:bg-slate-800 transition-colors">+ Add New Hospital</button>
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        <div>
+          <h3 className="text-xl font-bold text-slate-800">Hospital Verification</h3>
+          <p className="text-xs text-slate-500 mt-1">{hospitals.length} registered · {pending} awaiting verification</p>
+        </div>
+        <div className="relative">
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+          <input
+            type="text"
+            value={localSearch}
+            onChange={(e) => setLocalSearch(e.target.value)}
+            placeholder="Search name, city, registration no…"
+            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-72 focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all outline-none"
+          />
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {filteredHospitals.map((h) => (
-          <motion.div
-            key={h.id}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            whileHover={{ y: -4 }}
-            onClick={() => setSelectedHospital(h)}
-            className="group bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl hover:border-[#ee2b2b]/20 transition-all cursor-pointer flex flex-col sm:flex-row"
-          >
-            <div className="w-full sm:w-48 h-48 sm:h-auto overflow-hidden relative">
-              <img src={h.image} alt={h.name} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
-              <div className="absolute top-3 left-3">
-                <span className={`px-2 py-1 rounded-md text-[10px] font-black uppercase shadow-sm ${h.status === 'Active' ? 'bg-emerald-500 text-white' : 'bg-slate-500 text-white'
-                  }`}>
-                  {h.status}
-                </span>
-              </div>
-            </div>
-            <div className="p-5 flex-1 flex flex-col justify-between">
-              <div>
-                <div className="flex justify-between items-start">
-                  <h4 className="font-extrabold text-slate-900 text-lg group-hover:text-[#ee2b2b] transition-colors">{h.name}</h4>
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${h.stock === 'Critical' ? 'border-[#ee2b2b] text-[#ee2b2b] bg-red-50' :
-                    h.stock === 'Low' ? 'border-orange-500 text-orange-500 bg-orange-50' :
-                      'border-slate-200 text-slate-500 bg-slate-50'
-                    }`}>
-                    {h.stock} STOCK
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900">
+        Before verifying, check the registration number against the state's Clinical Establishments register or the hospital's blood centre licence, and confirm the contact details with the hospital. Only verified hospitals can alert donors.
+      </div>
+
+      {error && <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">{error}</div>}
+
+      {loading ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-400">Loading hospitals…</div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-400">
+          {hospitals.length === 0 ? 'No hospitals have registered yet.' : 'No hospitals match your search.'}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((h) => (
+            <div key={h.id} className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <h4 className="font-extrabold text-slate-900">{h.hospital_name}</h4>
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${h.is_verified ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {h.is_verified ? 'Verified' : 'Pending'}
                   </span>
                 </div>
-                <div className="mt-2 flex items-center gap-1 text-slate-500">
-                  <span className="material-symbols-outlined text-sm">location_on</span>
-                  <span className="text-xs font-semibold truncate max-w-[200px]">{h.location}</span>
-                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  {h.city || '—'} · {h.contact_number || 'no phone'} · {h.email}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Registration no.: <span className="font-bold text-slate-700">{h.registration_number || 'not provided'}</span>
+                  {h.created_at ? ` · registered ${new Date(h.created_at).toLocaleDateString('en-IN')}` : ''}
+                </p>
               </div>
-
-              <div className="mt-4 pt-4 border-t border-slate-50 grid grid-cols-3 gap-2">
-                <div className="text-center">
-                  <p className="text-[10px] font-bold text-slate-400">REQUESTS</p>
-                  <p className="text-sm font-black text-slate-900">{h.requests}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] font-bold text-slate-400">DONORS</p>
-                  <p className="text-sm font-black text-slate-900">{h.donors}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] font-bold text-slate-400">EFFICIENCY</p>
-                  <p className="text-sm font-black text-emerald-600">{h.efficiency}</p>
-                </div>
-              </div>
+              <button
+                disabled={busyId === h.id}
+                onClick={() => setVerified(h, !h.is_verified)}
+                className={`px-4 py-2 rounded-lg text-xs font-bold shrink-0 disabled:opacity-50 ${h.is_verified ? 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
+              >
+                {busyId === h.id ? 'Saving…' : h.is_verified ? 'Revoke' : 'Verify'}
+              </button>
             </div>
-          </motion.div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function HospitalDetailView({ hospital, onBack }: { hospital: any, onBack: () => void }) {
-  const [activeModal, setActiveModal] = useState<'contact' | 'status' | 'ai' | null>(null);
-  const [currentStatus, setCurrentStatus] = useState(hospital.status);
-  const [isOptimizing, setIsOptimizing] = useState(false);
-  const [showToast, setShowToast] = useState(false);
-
-  const handleUpdateStatus = (newStatus: string) => {
-    setCurrentStatus(newStatus);
-    setActiveModal(null);
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
-  };
-
-  const runAIOptimization = () => {
-    setIsOptimizing(true);
-    setTimeout(() => {
-      setIsOptimizing(false);
-      setActiveModal('ai');
-    }, 2000);
-  };
-
-  return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300 relative">
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors"
-      >
-        <span className="material-symbols-outlined">arrow_back</span>
-        Back to List
-      </button>
-
-      {/* Toast Notification */}
-      {showToast && (
-        <div className="fixed top-8 right-8 bg-slate-900 text-white px-6 py-3 rounded-xl shadow-2xl z-[100] flex items-center gap-3 animate-in slide-in-from-right duration-300">
-          <span className="material-symbols-outlined text-emerald-400">check_circle</span>
-          <span className="text-sm font-bold">System status updated successfully!</span>
+          ))}
         </div>
       )}
-
-      <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
-        <div className="relative h-64">
-          <img src={hospital.image} alt={hospital.name} className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-8">
-            <div className="flex-1 text-white">
-              <div className="flex items-center gap-3 mb-2">
-                <span className="px-3 py-1 bg-[#ee2b2b] text-white text-[10px] font-black rounded-lg uppercase tracking-widest">Premium Facility</span>
-                <span className={`px-3 py-1 backdrop-blur-md text-[10px] font-bold rounded-lg uppercase ${currentStatus === 'Active' ? 'bg-emerald-500/80' :
-                  currentStatus === 'Maintenance' ? 'bg-amber-500/80' : 'bg-slate-500/80'
-                  }`}>
-                  {currentStatus}
-                </span>
-              </div>
-              <h2 className="text-3xl font-black">{hospital.name}</h2>
-              <div className="flex items-center gap-2 text-white/80 mt-2">
-                <span className="material-symbols-outlined text-sm">location_on</span>
-                <span className="text-sm font-medium">{hospital.location}</span>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setActiveModal('contact')}
-                className="px-6 py-3 bg-white text-slate-900 rounded-xl font-bold text-sm hover:bg-slate-100 transition-all shadow-lg active:scale-95 flex items-center gap-2"
-              >
-                <span className="material-symbols-outlined text-lg">chat</span>
-                Contact Admin
-              </button>
-              <button
-                onClick={() => setActiveModal('status')}
-                className="px-6 py-3 bg-[#ee2b2b] text-white rounded-xl font-bold text-sm hover:bg-[#ee2b2b]/90 transition-all shadow-lg shadow-[#ee2b2b]/20 active:scale-95 flex items-center gap-2"
-              >
-                <span className="material-symbols-outlined text-lg">sync</span>
-                Update Status
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <div className="p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="col-span-2 space-y-8">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#ee2b2b]">inventory_2</span>
-                Blood Stock Levels
-              </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {['O+', 'O-', 'A+', 'B+'].map((type, i) => (
-                  <div key={i} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 group hover:border-[#ee2b2b]/30 transition-all">
-                    <p className="text-sm font-black text-slate-400 mb-1">{type}</p>
-                    <p className="text-xl font-black text-slate-900">{Math.floor(Math.random() * 50 + 10)} Units</p>
-                    <div className="mt-3 w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full ${i === 1 ? 'bg-[#ee2b2b]' : 'bg-emerald-500'}`} style={{ width: `${Math.random() * 60 + 20}%` }}></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                <h4 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-blue-500">trending_up</span>
-                  Usage Activity
-                </h4>
-                <div className="h-32 flex items-end gap-2 px-2">
-                  {[40, 70, 45, 90, 65, 80, 50].map((v, i) => (
-                    <div key={i} className="flex-1 h-full relative group">
-                      <motion.div
-                        initial={{ height: 0 }}
-                        animate={{ height: `${v}%` }}
-                        transition={{ delay: i * 0.1, duration: 1, ease: "easeOut" }}
-                        className="absolute bottom-0 w-full bg-blue-500 rounded-t-md group-hover:bg-[#ee2b2b] transition-colors cursor-pointer"
-                      >
-                        <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-black px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-all pointer-events-none">
-                          {v}%
-                        </div>
-                      </motion.div>
-                    </div>
-                  ))}
-                </div>
-                <p className="text-xs text-slate-500 mt-4 text-center">Last 7 Days Consumption</p>
-              </div>
-
-              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
-                <h4 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-amber-500">history_edu</span>
-                  Recent Encounters
-                </h4>
-                <div className="space-y-3">
-                  {[1, 2, 3].map((item) => (
-                    <div key={item} className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                        <span className="font-bold text-slate-700">O+ Match Fulfilled</span>
-                      </div>
-                      <span className="text-slate-400">2h ago</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="p-6 bg-slate-900 rounded-3xl text-white shadow-xl relative overflow-hidden group">
-              {isOptimizing && (
-                <div className="absolute inset-0 bg-slate-900/90 z-10 flex flex-col items-center justify-center">
-                  <div className="w-12 h-12 border-4 border-white/20 border-t-white rounded-full animate-spin mb-4"></div>
-                  <p className="text-xs font-bold animate-pulse uppercase tracking-widest">AI Scanning Patterns...</p>
-                </div>
-              )}
-              <h3 className="text-xl font-bold mb-4">Facility Health</h3>
-              <div className="space-y-6">
-                <div>
-                  <div className="flex justify-between text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">
-                    <span>Performance</span>
-                    <span>94/100</span>
-                  </div>
-                  <div className="w-full bg-white/10 h-2 rounded-full overflow-hidden">
-                    <div className="bg-[#ee2b2b] h-full rounded-full" style={{ width: '94%' }}></div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Avg Response</p>
-                    <p className="text-lg font-black mt-1">8.2m</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Fulfillment</p>
-                    <p className="text-lg font-black mt-1">98.5%</p>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={runAIOptimization}
-                className="w-full mt-8 py-4 bg-white/10 hover:bg-[#ee2b2b] border border-white/20 rounded-2xl font-bold transition-all flex items-center justify-center gap-2 active:scale-95 group-hover:border-[#ee2b2b]"
-              >
-                <span className="material-symbols-outlined text-sm">auto_awesome</span>
-                AI Optimization Report
-              </button>
-            </div>
-
-            <div className="p-6 bg-white border border-slate-200 rounded-3xl">
-              <h4 className="font-bold text-slate-900 mb-4">Admin Contact</h4>
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-[#ee2b2b]">
-                  <span className="material-symbols-outlined text-2xl font-black">person</span>
-                </div>
-                <div>
-                  <p className="font-bold text-slate-900">{hospital.contact}</p>
-                  <p className="text-xs text-slate-500">Chief Medical Officer</p>
-                </div>
-              </div>
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center gap-2 text-xs text-slate-600">
-                  <span className="material-symbols-outlined text-sm">mail</span>
-                  thorne.a@hospital.com
-                </div>
-                <div className="flex items-center gap-2 text-xs text-slate-600">
-                  <span className="material-symbols-outlined text-sm">phone</span>
-                  +1 (555) 902-1234
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* --- MODALS --- */}
-
-      {/* Contact Admin Modal */}
-      {activeModal === 'contact' && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-white w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl"
-          >
-            <div className="p-6 bg-[#ee2b2b] text-white flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined">forum</span>
-                <h4 className="font-black text-lg">Message to {hospital.name}</h4>
-              </div>
-              <button onClick={() => setActiveModal(null)} className="hover:bg-white/20 p-1 rounded-full"><span className="material-symbols-outlined">close</span></button>
-            </div>
-            <div className="p-8 space-y-6">
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-sm text-slate-600 italic">
-                "Hello {hospital.contact}, this is the System Admin. We've noticed a low stock on O-Negative. Please confirm if you need an emergency dispatch."
-              </div>
-              <textarea
-                className="w-full h-32 p-4 bg-slate-100 rounded-2xl border-none text-sm focus:ring-2 focus:ring-[#ee2b2b]/20 outline-none resize-none"
-                placeholder="Type your priority message here..."
-              ></textarea>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => { setActiveModal(null); setShowToast(true); setTimeout(() => setShowToast(false), 3000); }}
-                  className="flex-1 py-4 bg-[#ee2b2b] text-white rounded-2xl font-extrabold text-sm hover:bg-[#ee2b2b]/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#ee2b2b]/20"
-                >
-                  <span className="material-symbols-outlined text-sm">send</span>
-                  Send Priority Message
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
-
-      {/* Update Status Modal */}
-      {activeModal === 'status' && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <motion.div
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            className="bg-white w-full max-w-sm rounded-[2rem] overflow-hidden shadow-2xl p-8"
-          >
-            <h4 className="text-xl font-black text-slate-900 mb-2">Network Status Control</h4>
-            <p className="text-sm text-slate-500 mb-8">Override the automated network availability for this facility.</p>
-            <div className="space-y-3">
-              {[
-                { id: 'Active', icon: 'check_circle', color: 'text-emerald-500', bg: 'bg-emerald-50' },
-                { id: 'Maintenance', icon: 'settings', color: 'text-amber-500', bg: 'bg-amber-50' },
-                { id: 'Inactive', icon: 'cancel', color: 'text-slate-500', bg: 'bg-slate-50' },
-                { id: 'Emergency Only', icon: 'emergency', color: 'text-[#ee2b2b]', bg: 'bg-red-50' }
-              ].map(opt => (
-                <button
-                  key={opt.id}
-                  onClick={() => handleUpdateStatus(opt.id)}
-                  className={`w-full flex items-center gap-4 p-4 rounded-2xl border border-transparent hover:border-slate-200 transition-all text-left group ${currentStatus === opt.id ? opt.bg + ' !border-slate-300' : ''}`}
-                >
-                  <span className={`material-symbols-outlined ${opt.color} group-hover:scale-110 transition-transform`}>{opt.icon}</span>
-                  <span className={`font-bold text-sm ${currentStatus === opt.id ? 'text-slate-900' : 'text-slate-600'}`}>{opt.id}</span>
-                  {currentStatus === opt.id && <span className="ml-auto material-symbols-outlined text-sm text-slate-400">check</span>}
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setActiveModal(null)} className="w-full mt-6 py-3 text-slate-400 font-bold text-sm hover:text-slate-600">Cancel</button>
-          </motion.div>
-        </div>
-      )}
-
-      {/* AI Optimization Modal */}
-      {activeModal === 'ai' && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="bg-[#0f172a] text-white w-full max-w-2xl rounded-[2.5rem] overflow-hidden shadow-2xl"
-          >
-            <div className="p-8 border-b border-white/10 flex justify-between items-center bg-gradient-to-r from-slate-900 to-[#0f172a]">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-[#ee2b2b]/20 rounded-2xl flex items-center justify-center text-[#ee2b2b]">
-                  <span className="material-symbols-outlined text-3xl font-black">auto_awesome</span>
-                </div>
-                <div>
-                  <h4 className="text-xl font-black">LifeLink AI Insights</h4>
-                  <p className="text-xs text-white/50 font-bold uppercase tracking-widest">Facility Optimization Path</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setActiveModal(null)}
-                className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all border border-white/10"
-              >
-                <span className="material-symbols-outlined text-sm">close</span>
-              </button>
-            </div>
-            <div className="p-10 space-y-8">
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <p className="text-xs font-bold text-[#ee2b2b] uppercase tracking-tighter">Recommendation 1</p>
-                  <h5 className="font-bold text-lg leading-snug">Redirect O+ Surplus from Sector 2</h5>
-                  <p className="text-sm text-white/60 leading-relaxed">AI analysis suggests a 40% stock overflow in sibling facility 'Westside'. Moving 20 units will stabilize this facility's deficit.</p>
-                </div>
-                <div className="space-y-4">
-                  <p className="text-xs font-bold text-emerald-500 uppercase tracking-tighter">Impact Projection</p>
-                  <div className="p-6 rounded-2xl bg-white/5 border border-white/5 text-center">
-                    <p className="text-3xl font-black text-emerald-500">+18%</p>
-                    <p className="text-[10px] font-bold text-white/40 mt-1 uppercase">Monthly Efficiency Increase</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 rounded-3xl bg-[#ee2b2b]/10 border border-[#ee2b2b]/20 flex items-start gap-4">
-                <span className="material-symbols-outlined text-[#ee2b2b] mt-1">emergency</span>
-                <div>
-                  <p className="font-extrabold text-sm text-[#ee2b2b] mb-1">Critical Insight Identified</p>
-                  <p className="text-xs text-white/80 leading-relaxed font-medium">Predicted demand spike for AB Negative on Friday night due to regional event patterns. Recommend doubling reserve thresholds by Thursday morning.</p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => { setActiveModal(null); setShowToast(true); }}
-                className="w-full py-5 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white rounded-2xl font-black transition-all flex items-center justify-center gap-3 shadow-xl shadow-[#ee2b2b]/20"
-              >
-                <span className="material-symbols-outlined">bolt</span>
-                Deploy AI Recommendations Now
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-
     </div>
   );
 }

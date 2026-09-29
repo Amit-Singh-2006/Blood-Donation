@@ -1,40 +1,25 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { formatMinutes, useNetworkAnalytics } from '../lib/network';
 
-const Tier = ({ name, color, icon, features, cta }: any) => (
-    <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true }}
-        className={`rounded-2xl border p-8 space-y-6 ${color}`}
-    >
-        <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-3xl">{icon}</span>
-            <h3 className="text-xl font-black">{name}</h3>
-        </div>
-        <ul className="space-y-2">
-            {features.map((f: string, i: number) => (
-                <li key={i} className="flex items-start gap-2 text-sm">
-                    <span className="material-symbols-outlined text-base mt-0.5">check_circle</span>
-                    {f}
-                </li>
-            ))}
-        </ul>
-        <button className="w-full py-3 rounded-xl font-black text-sm border-2 border-current hover:opacity-80 transition-all active:scale-95">
-            {cta}
-        </button>
-    </motion.div>
-);
+const FEATURES = [
+    { icon: 'hub', title: 'Matching in Seconds', desc: 'Every request is matched against ABO/Rh-compatible donors near your hospital, nearest first, keeping rare O- blood for the patients who need it.' },
+    { icon: 'fact_check', title: 'Eligibility Checks', desc: 'Donors inside their rest period (90 days for men, 120 for women) or marked unavailable are never alerted. The blood centre still screens every donor.' },
+    { icon: 'notifications_active', title: 'Alerts That Escalate', desc: 'Donors get SMS, WhatsApp or in-app alerts with one-tap YES/NO. If nobody answers, the next donors are alerted automatically until the request is covered.' },
+    { icon: 'call', title: 'Direct Donor Contact', desc: 'As soon as a donor confirms you see their first name and phone number to coordinate, and you record the donation or a no-show with one tap.' },
+    { icon: 'family_restroom', title: 'Family Tracking Link', desc: "Each request comes with a link and QR code for the patient's family: live progress, never donor identities." },
+    { icon: 'payments', title: 'Free for Hospitals', desc: 'LifeLink costs hospitals nothing. Donation stays voluntary and unpaid, as India\'s National Blood Policy requires.' },
+];
+
+const STEPS = [
+    { icon: 'how_to_reg', title: 'Register your hospital', desc: 'Create a hospital account with your registration or licence number and contact details.' },
+    { icon: 'verified', title: 'Get verified', desc: 'A LifeLink admin checks your registration details. Only verified hospitals can alert donors.' },
+    { icon: 'emergency', title: 'Raise requests', desc: 'Request blood from your dashboard or the AI assistant, and share the tracking link with the family.' },
+];
 
 export default function HospitalPartnership() {
-    const [formSent, setFormSent] = useState(false);
-    const [form, setForm] = useState({ name: '', email: '', hospital: '', beds: '', city: '' });
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        setFormSent(true);
-    };
+    const { data: stats } = useNetworkAnalytics();
 
     return (
         <div className="min-h-screen bg-[#f8f6f6] flex flex-col">
@@ -48,7 +33,7 @@ export default function HospitalPartnership() {
                 </Link>
                 <Link to="/" className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-[#ee2b2b] transition-colors">
                     <span className="material-symbols-outlined text-base">arrow_back</span>
-                    Back to Login
+                    Home
                 </Link>
             </header>
 
@@ -59,34 +44,32 @@ export default function HospitalPartnership() {
                 </div>
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="relative z-10">
                     <span className="material-symbols-outlined text-6xl mb-4 block opacity-80">domain_add</span>
-                    <h1 className="text-4xl md:text-5xl font-black mb-4">Hospital Partnership Program</h1>
-                    <p className="text-white/80 max-w-2xl mx-auto text-lg">Join the LifeLink AI network to receive real-time blood availability data, AI-powered donor matching, and emergency supply forecasting — saving more lives every day.</p>
-                    <div className="mt-8 flex flex-wrap justify-center gap-6">
-                        {['156+ Partner Hospitals', '12.4 Min Avg Response', '98.2% AI Accuracy'].map((stat) => (
-                            <div key={stat} className="bg-white/10 backdrop-blur-sm px-6 py-3 rounded-full text-sm font-black border border-white/20">
+                    <h1 className="text-4xl md:text-5xl font-black mb-4">Hospital Partnership</h1>
+                    <p className="text-white/80 max-w-2xl mx-auto text-lg">Reach compatible, eligible donors near your hospital in seconds, and follow every request until the blood arrives.</p>
+                    <div className="mt-8 flex flex-wrap justify-center gap-4">
+                        {[
+                            stats && `${stats.donor_pool.registered} registered donors`,
+                            stats && `${stats.donor_pool.eligible_now} eligible right now`,
+                            stats && `First donor in ${formatMinutes(stats.requests.median_minutes_to_first_donor).toLowerCase()} (median)`,
+                        ].filter(Boolean).map((stat) => (
+                            <div key={stat as string} className="bg-white/10 backdrop-blur-sm px-6 py-3 rounded-full text-sm font-black border border-white/20">
                                 {stat}
                             </div>
                         ))}
                     </div>
+                    {stats && <p className="text-white/60 text-xs mt-3">Live from the LifeLink network</p>}
                 </motion.div>
             </div>
 
-            {/* Why Partner Section */}
+            {/* What you get */}
             <section className="max-w-5xl mx-auto w-full py-20 px-6">
                 <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-14">
-                    <h2 className="text-3xl font-black text-slate-900 mb-3">Why Partner with LifeLink AI?</h2>
-                    <p className="text-slate-500 max-w-xl mx-auto">We bridge the critical gap between blood availability and patient need using cutting-edge AI infrastructure.</p>
+                    <h2 className="text-3xl font-black text-slate-900 mb-3">What Your Hospital Gets</h2>
+                    <p className="text-slate-500 max-w-xl mx-auto">Everything below works today in the hospital dashboard.</p>
                 </motion.div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    {[
-                        { icon: 'hub', title: 'AI-Powered Matching', desc: 'Our AI engine finds the most compatible, geographically closest donors within seconds of an urgent request.' },
-                        { icon: 'insights', title: 'Demand Forecasting', desc: 'Predict blood shortages up to 7 days in advance using regional and seasonal AI models.' },
-                        { icon: 'verified_user', title: 'Verified Donor Pool', desc: 'Every donor is medically verified and eligibility-checked before appearing in your request feed.' },
-                        { icon: 'bolt', title: 'Real-Time Alerts', desc: 'Receive instant notifications when matching donors become available for your urgent O- or rare group needs.' },
-                        { icon: 'analytics', title: 'Analytics Dashboard', desc: 'Monitor your hospital\'s blood request history, match rates, and inventory health through a dedicated admin panel.' },
-                        { icon: 'support_agent', title: '24/7 Support', desc: 'Dedicated hospital partnership support team available around the clock for critical assistance.' },
-                    ].map((card, i) => (
-                        <motion.div key={i} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08 }} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-shadow">
+                    {FEATURES.map((card, i) => (
+                        <motion.div key={card.title} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08 }} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm hover:shadow-md transition-shadow">
                             <span className="material-symbols-outlined text-3xl text-[#ee2b2b] mb-3 block">{card.icon}</span>
                             <h3 className="font-black text-slate-900 mb-2">{card.title}</h3>
                             <p className="text-sm text-slate-500 leading-relaxed">{card.desc}</p>
@@ -95,101 +78,31 @@ export default function HospitalPartnership() {
                 </div>
             </section>
 
-            {/* Partnership Tiers */}
+            {/* How to join */}
             <section className="bg-white py-20 px-6">
                 <div className="max-w-5xl mx-auto">
                     <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-14">
-                        <h2 className="text-3xl font-black text-slate-900 mb-3">Partnership Tiers</h2>
-                        <p className="text-slate-500">Choose the level of integration that fits your facility's needs.</p>
+                        <h2 className="text-3xl font-black text-slate-900 mb-3">How to Join</h2>
+                        <p className="text-slate-500">Three steps from sign-up to your first request.</p>
                     </motion.div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                        <Tier
-                            name="Essential"
-                            color="border-slate-200 text-slate-800 bg-slate-50"
-                            icon="local_hospital"
-                            features={[
-                                'AI donor matching access',
-                                'Emergency blood alerts',
-                                'Basic demand forecast',
-                                'Email support',
-                                'Up to 5 staff accounts',
-                            ]}
-                            cta="Get Started Free"
-                        />
-                        <Tier
-                            name="Advanced"
-                            color="border-[#ee2b2b]/30 text-[#ee2b2b] bg-red-50"
-                            icon="medical_services"
-                            features={[
-                                'Everything in Essential',
-                                'Real-time inventory sync',
-                                'Cross-region rare blood search',
-                                'Dedicated account manager',
-                                'Up to 20 staff accounts',
-                                'Priority match queue',
-                            ]}
-                            cta="Apply for Advanced"
-                        />
-                        <Tier
-                            name="Trauma Center"
-                            color="border-slate-800 text-slate-900 bg-slate-900 text-white"
-                            icon="emergency"
-                            features={[
-                                'Everything in Advanced',
-                                'Direct API integration',
-                                'Custom AI model tuning',
-                                'SLA-backed 99.9% uptime',
-                                'Unlimited staff accounts',
-                                '24/7 dedicated hotline',
-                            ]}
-                            cta="Contact Enterprise Team"
-                        />
-                    </div>
-                </div>
-            </section>
-
-            {/* Application Form */}
-            <section className="max-w-2xl mx-auto w-full py-20 px-6">
-                <motion.div initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-center mb-10">
-                    <h2 className="text-3xl font-black text-slate-900 mb-2">Apply to Join the Network</h2>
-                    <p className="text-slate-500">Fill out the form below and our partnership team will reach out within 48 hours.</p>
-                </motion.div>
-
-                {formSent ? (
-                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-white rounded-2xl border border-emerald-200 p-12 text-center shadow-sm">
-                        <span className="material-symbols-outlined text-5xl text-emerald-500 mb-4 block">check_circle</span>
-                        <h3 className="text-2xl font-black text-slate-900 mb-2">Application Received!</h3>
-                        <p className="text-slate-500">Thank you for your interest in partnering with LifeLink AI. Our team will contact <strong>{form.email}</strong> within 24–48 business hours.</p>
-                    </motion.div>
-                ) : (
-                    <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm space-y-5">
-                        {[
-                            { label: 'Your Full Name', key: 'name', placeholder: 'Dr. Rebecca Moore', icon: 'person', type: 'text' },
-                            { label: 'Work Email', key: 'email', placeholder: 'r.moore@hospital.com', icon: 'mail', type: 'email' },
-                            { label: 'Hospital / Clinic Name', key: 'hospital', placeholder: 'City General Hospital', icon: 'local_hospital', type: 'text' },
-                            { label: 'City / Region', key: 'city', placeholder: 'San Francisco, CA', icon: 'location_on', type: 'text' },
-                            { label: 'Approximate Bed Count', key: 'beds', placeholder: '250', icon: 'bed', type: 'number' },
-                        ].map(({ label, key, placeholder, icon, type }) => (
-                            <div key={key} className="space-y-1.5">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
-                                <div className="relative">
-                                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">{icon}</span>
-                                    <input
-                                        type={type}
-                                        required
-                                        value={(form as any)[key]}
-                                        onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
-                                        placeholder={placeholder}
-                                        className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b]/50 transition-all"
-                                    />
-                                </div>
+                        {STEPS.map((step, i) => (
+                            <div key={step.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-8">
+                                <span className="text-xs font-black text-[#ee2b2b]">STEP {i + 1}</span>
+                                <span className="material-symbols-outlined text-3xl text-slate-800 block my-3">{step.icon}</span>
+                                <h3 className="font-black text-slate-900 mb-2">{step.title}</h3>
+                                <p className="text-sm text-slate-500 leading-relaxed">{step.desc}</p>
                             </div>
                         ))}
-                        <button type="submit" className="w-full py-4 bg-[#ee2b2b] text-white rounded-xl font-black text-sm hover:bg-[#ee2b2b]/90 shadow-xl shadow-[#ee2b2b]/20 transition-all active:scale-95 mt-2">
-                            Submit Partnership Application
-                        </button>
-                    </form>
-                )}
+                    </div>
+                    <div className="text-center mt-12">
+                        <Link to="/register-hospital" className="inline-flex items-center gap-2 bg-[#ee2b2b] text-white px-8 py-4 rounded-xl font-black text-sm hover:bg-[#ee2b2b]/90 shadow-xl shadow-[#ee2b2b]/20 transition-all">
+                            <span className="material-symbols-outlined">local_hospital</span>
+                            Register Your Hospital
+                        </Link>
+                        <p className="text-xs text-slate-400 mt-3">Already registered? <Link to="/login" className="font-bold text-[#ee2b2b] hover:underline">Sign in</Link></p>
+                    </div>
+                </div>
             </section>
 
             <footer className="border-t border-slate-200 py-8 text-center text-xs text-slate-400 font-medium">

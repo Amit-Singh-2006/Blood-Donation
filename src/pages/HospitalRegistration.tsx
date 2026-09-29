@@ -5,12 +5,46 @@ import { apiFetch } from '../lib/api';
 
 type Step = 'basic' | 'location' | 'contact' | 'infrastructure' | 'verification';
 
+// Mirrors the backend's password rules so problems show before submitting
+const passwordProblems = (p: string) => [
+    p.length < 8 && 'at least 8 characters',
+    !/[A-Z]/.test(p) && 'an uppercase letter',
+    !/[a-z]/.test(p) && 'a lowercase letter',
+    !/[0-9]/.test(p) && 'a number',
+    !/[^A-Za-z0-9]/.test(p) && 'a special character',
+].filter(Boolean) as string[];
+
 export default function HospitalRegistration() {
     const navigate = useNavigate();
     const [currentStep, setCurrentStep] = useState<Step>('basic');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
     const [agreed, setAgreed] = useState(false);
+    const [coords, setCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+    const [locating, setLocating] = useState(false);
+    const [locationNote, setLocationNote] = useState('');
+
+    // Exact coordinates let the network rank donors by distance, not just city
+    const useCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            setLocationNote('Location is not available in this browser.');
+            return;
+        }
+        setLocating(true);
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                const round = (v: number) => Math.round(v * 1e6) / 1e6;
+                setCoords({ latitude: round(pos.coords.latitude), longitude: round(pos.coords.longitude) });
+                setLocationNote('Location captured. Use this only while you are at the hospital.');
+                setLocating(false);
+            },
+            () => {
+                setLocationNote('Could not get your location. Donors will be matched by city instead.');
+                setLocating(false);
+            },
+            { enableHighAccuracy: true, timeout: 10000 }
+        );
+    };
     const [formData, setFormData] = useState({
         hospitalName: '',
         registrationId: '',
@@ -47,7 +81,7 @@ export default function HospitalRegistration() {
             return formData.address.trim() !== '' && formData.city.trim() !== '' && formData.state.trim() !== '' && formData.zipCode.trim() !== '';
         }
         if (currentStep === 'contact') {
-            return formData.email.trim() !== '' && formData.phone.trim() !== '' && formData.emergencyHotline.trim() !== '';
+            return formData.email.trim() !== '' && formData.phone.trim() !== '' && passwordProblems(formData.password).length === 0;
         }
         if (currentStep === 'infrastructure') {
             return formData.bedCapacity !== '' && formData.icuBeds !== '';
@@ -71,11 +105,13 @@ export default function HospitalRegistration() {
                 body: JSON.stringify({
                     name: formData.hospitalName,
                     email: formData.email,
-                    password: formData.password || 'password123', // Use a default if not set, or ensure it's collected
+                    password: formData.password,
                     role: 'hospital',
                     hospital_name: formData.hospitalName,
                     city: formData.city,
-                    contact_number: formData.phone
+                    contact_number: formData.phone,
+                    registration_number: formData.registrationId.trim(),
+                    ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : {}),
                 }),
             });
             localStorage.setItem('user', JSON.stringify(response.user));
@@ -89,7 +125,10 @@ export default function HospitalRegistration() {
 
     const handleNext = () => {
         if (!validateStep()) {
-            setError('Please fill in all required fields to continue.');
+            const problems = currentStep === 'contact' ? passwordProblems(formData.password) : [];
+            setError(problems.length && formData.email.trim() && formData.phone.trim()
+                ? `Your password needs ${problems.join(', ')}.`
+                : 'Please fill in all required fields to continue.');
             return;
         }
         setError('');
@@ -287,7 +326,7 @@ export default function HospitalRegistration() {
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-bold text-slate-700 ml-1">ZIP Code</label>
+                                        <label className="text-sm font-bold text-slate-700 ml-1">PIN Code</label>
                                         <input
                                             type="text"
                                             value={formData.zipCode}
@@ -297,11 +336,21 @@ export default function HospitalRegistration() {
                                     </div>
                                 </div>
 
-                                <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100 flex items-start gap-4">
-                                    <span className="material-symbols-outlined text-blue-500">info</span>
-                                    <p className="text-sm font-bold text-blue-900/70 leading-relaxed">
-                                        Accurate location data helps LifeLink AI calculate real-time emergency travel duration for ambulances and donors.
-                                    </p>
+                                <div className="p-6 bg-blue-50 rounded-2xl border border-blue-100 flex flex-col sm:flex-row sm:items-center gap-4">
+                                    <span className="material-symbols-outlined text-blue-500">my_location</span>
+                                    <div className="flex-1 text-sm font-bold text-blue-900/70 leading-relaxed">
+                                        <p>Optional: share the hospital's exact location so the nearest donors are asked first. Without it, donors are matched by city.</p>
+                                        {coords && <p className="text-blue-900 mt-1">📍 {coords.latitude}, {coords.longitude}</p>}
+                                        {locationNote && <p className="text-xs mt-1">{locationNote}</p>}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={useCurrentLocation}
+                                        disabled={locating}
+                                        className="px-4 py-2 rounded-xl bg-white border border-blue-200 text-xs font-black text-blue-700 hover:bg-blue-100 disabled:opacity-50 shrink-0"
+                                    >
+                                        {locating ? 'Locating…' : coords ? 'Update location' : 'Use my current location'}
+                                    </button>
                                 </div>
                             </motion.div>
                         )}
@@ -334,17 +383,19 @@ export default function HospitalRegistration() {
                                         </div>
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-bold text-slate-700 ml-1">Emergency Hotline (24/7)</label>
+                                        <label className="text-sm font-bold text-slate-700 ml-1">Password</label>
                                         <div className="relative">
-                                            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-red-500 font-black">emergency</span>
+                                            <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">lock</span>
                                             <input
-                                                type="tel"
-                                                value={formData.emergencyHotline}
-                                                onChange={(e) => updateFormData('emergencyHotline', e.target.value)}
-                                                className="w-full pl-12 pr-4 py-3.5 bg-red-50/50 border-red-100 rounded-xl focus:ring-2 focus:ring-red-500/20 focus:border-red-500 transition-all text-slate-900 placeholder:text-red-300 font-bold"
-                                                placeholder="+1-800-EMERGENCY"
+                                                type="password"
+                                                autoComplete="new-password"
+                                                value={formData.password}
+                                                onChange={(e) => updateFormData('password', e.target.value)}
+                                                className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900"
+                                                placeholder="For signing in to the hospital portal"
                                             />
                                         </div>
+                                        <p className="text-[11px] text-slate-400 ml-1">8+ characters with upper and lower case, a number and a symbol.</p>
                                     </div>
                                 </div>
 
@@ -477,30 +528,16 @@ export default function HospitalRegistration() {
                             >
                                 <div className="space-y-2">
                                     <h3 className="text-2xl font-black text-slate-900">Final Verification</h3>
-                                    <p className="text-slate-500 font-medium">Upload necessary accreditation documents to go live.</p>
+                                    <p className="text-slate-500 font-medium">What happens after you register.</p>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                    <label className="space-y-4 cursor-pointer">
-                                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg" />
-                                        <div className="p-8 h-full border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50 flex flex-col items-center justify-center text-center group hover:border-[#ee2b2b] hover:bg-[#ee2b2b]/5 transition-all">
-                                            <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-[#ee2b2b] group-hover:scale-110 transition-all shadow-sm mb-4">
-                                                <span className="material-symbols-outlined text-3xl">upload_file</span>
-                                            </div>
-                                            <h4 className="text-sm font-black text-slate-900">Hospital License</h4>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">PDF, JPG up to 10MB</p>
-                                        </div>
-                                    </label>
-                                    <label className="space-y-4 cursor-pointer">
-                                        <input type="file" className="hidden" accept=".pdf,.jpg,.jpeg" />
-                                        <div className="p-8 h-full border-2 border-dashed border-slate-200 rounded-3xl bg-slate-50 flex flex-col items-center justify-center text-center group hover:border-[#ee2b2b] hover:bg-[#ee2b2b]/5 transition-all">
-                                            <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-[#ee2b2b] group-hover:scale-110 transition-all shadow-sm mb-4">
-                                                <span className="material-symbols-outlined text-3xl">verified</span>
-                                            </div>
-                                            <h4 className="text-sm font-black text-slate-900">Accreditation (NABH/JCI)</h4>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Certification Document</p>
-                                        </div>
-                                    </label>
+                                <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-3 text-sm text-slate-600">
+                                    <p className="flex gap-3"><span className="material-symbols-outlined text-[#ee2b2b]">fact_check</span>
+                                        <span>A LifeLink admin checks your registration number <strong className="text-slate-900">{formData.registrationId || '(not entered)'}</strong> against the state's Clinical Establishments register or your blood centre licence.</span></p>
+                                    <p className="flex gap-3"><span className="material-symbols-outlined text-[#ee2b2b]">call</span>
+                                        <span>They may contact you at <strong className="text-slate-900">{formData.email || 'your email'}</strong> or <strong className="text-slate-900">{formData.phone || 'your phone'}</strong> for your licence or NABH accreditation documents.</span></p>
+                                    <p className="flex gap-3"><span className="material-symbols-outlined text-[#ee2b2b]">lock_clock</span>
+                                        <span>You can sign in and set up inventory straight away. Blood requests start alerting donors once your hospital is verified.</span></p>
                                 </div>
 
                                 <label className="p-6 bg-slate-900 rounded-3xl flex items-center justify-between text-white shadow-2xl shadow-slate-900/20 cursor-pointer">

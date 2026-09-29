@@ -66,7 +66,7 @@ const initDb = async () => {
       blood_group VARCHAR(10) CHECK (blood_group IN ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-')),
       units_required INTEGER NOT NULL CHECK (units_required > 0),
       urgency VARCHAR(20) CHECK (urgency IN ('Normal', 'Emergency', 'Urgent')),
-      status VARCHAR(20) DEFAULT 'Open' CHECK (status IN ('Open', 'Fulfilled', 'Cancelled')),
+      status VARCHAR(20) DEFAULT 'Open' CHECK (status IN ('Open', 'Fulfilled', 'Completed', 'Exhausted', 'Cancelled')),
       latitude DECIMAL(9,6),
       longitude DECIMAL(9,6),
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -124,6 +124,33 @@ const initDb = async () => {
         ALTER TABLE blood_requests ADD COLUMN longitude DECIMAL(9,6);
       END IF;
     END $$;
+
+    -- Hospital verification: only admin-verified hospitals can alert donors
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS registration_number VARCHAR(100);
+
+    -- Link each request to the n8n donor network (tokens stay server-side)
+    ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS patient_ref VARCHAR(40);
+    ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS required_by TIMESTAMPTZ;
+    ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS network_request_id INTEGER;
+    ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS tracking_token VARCHAR(64);
+    ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS hospital_token VARCHAR(64);
+    ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS network_error TEXT;
+
+    -- The network also closes requests as Completed or Exhausted
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'blood_requests_status_check'
+                 AND pg_get_constraintdef(oid) NOT LIKE '%Exhausted%') THEN
+        ALTER TABLE blood_requests DROP CONSTRAINT blood_requests_status_check;
+        ALTER TABLE blood_requests ADD CONSTRAINT blood_requests_status_check
+          CHECK (status IN ('Open', 'Fulfilled', 'Completed', 'Exhausted', 'Cancelled'));
+      END IF;
+    END $$;
+
+    -- Donations confirmed through the network, recorded once per match
+    ALTER TABLE donations ADD COLUMN IF NOT EXISTS network_match_id INTEGER;
+    CREATE UNIQUE INDEX IF NOT EXISTS donations_network_match_id_key ON donations (network_match_id);
 
     -- Supabase exposes the public schema through its REST API with the public
     -- anon key. RLS with no policies closes that door; the backend connects as

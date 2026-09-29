@@ -1,6 +1,6 @@
 # LifeLink n8n workflows
 
-These seven n8n workflows run the donor network end to end: onboarding, matching, alerts, donor replies, fulfilment and analytics. They follow the "AI-Enhanced Blood Donation Network" flow (stages 1–8) and are live on `https://amitsingh7291.app.n8n.cloud`.
+These eight n8n workflows run the donor network end to end: onboarding, matching, alerts, donor replies, fulfilment and analytics. They follow the "AI-Enhanced Blood Donation Network" flow (stages 1–8) and are live on `https://amitsingh7291.app.n8n.cloud`.
 
 Each `*.workflow.ts` file is the source for one workflow, written with the n8n Workflow SDK. To change a workflow, edit its file, then validate it and create or update the workflow through the n8n MCP server (`validate_workflow`, then `create_workflow_from_code` or `update_workflow`). The files are not part of the website build.
 
@@ -13,6 +13,7 @@ All endpoints live under `https://amitsingh7291.app.n8n.cloud/webhook/lifelink/`
 | `donor-registry` | `POST /donors` | 1–2: onboarding and registry capture |
 | `ussd-gateway` | `POST /ussd` (Africa's Talking format) | 1: basic-phone login, registration and replies |
 | `donor-portal` | `POST /donor-portal` (backend only) | Website/app donor dashboard: status, live alerts, availability and alert channel |
+| `hospital-portal` | `POST /hospital-portal` (backend only) | Hospital dashboard: live progress of its requests, confirmed donors (first name and phone) and donated/no-show/cancel links |
 | `emergency-dispatch` | `POST /emergency-request` | 3–6: request, compatibility engine, notifications, auto-escalation |
 | `donor-response` | `GET /donor-response` | 6–7: one-tap donor replies, hospital confirmations, fulfilment |
 | `tracking-analytics` | `GET /request-status?token=…`, `GET /analytics` | Patient-side tracking; 8: analytics |
@@ -74,7 +75,7 @@ Once enough donors have confirmed, the loop only watches for withdrawals or no-s
 
 | Credential (n8n) | Used by |
 |---|---|
-| `Header Auth account` (header `X-LifeLink-Key`) | `emergency-request`, `donors` and `donor-portal` webhooks. Callers must send the header; anything else gets 403. The website backend sends it from its `N8N_WEBHOOK_KEY` environment variable. |
+| `Header Auth account` (header `X-LifeLink-Key`) | `emergency-request`, `donors`, `donor-portal` and `hospital-portal` webhooks. Callers must send the header; anything else gets 403. The website backend sends it from its `N8N_WEBHOOK_KEY` environment variable. |
 | `Twilio account` | Donor SMS alerts (`emergency-dispatch`) and hospital texts (`donor-response`) |
 | `WhatsApp account` (Meta WhatsApp Cloud API) | Donor WhatsApp alerts (`emergency-dispatch`), sent as the `lifelink_blood_request` template |
 

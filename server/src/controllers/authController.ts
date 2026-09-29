@@ -29,7 +29,7 @@ export const register = async (req: Request, res: Response) => {
     const {
         name, email, password, role,
         blood_group, city, phone, dob, gender, preferred_channel,
-        hospital_name, contact_number
+        hospital_name, contact_number, registration_number, latitude, longitude
     } = req.body;
 
     // Enforce allowed roles explicitly → Privilege Escalation / Vertical Access Control Bypass
@@ -72,8 +72,8 @@ export const register = async (req: Request, res: Response) => {
             await enrolDonor({ name, phone, blood_group, city, gender }, { preferred_channel });
         } else if (role === 'hospital') {
             await query(
-                'INSERT INTO hospitals (user_id, hospital_name, city, contact_number) VALUES ($1, $2, $3, $4)',
-                [user.id, hospital_name || name, city, contact_number || phone]
+                'INSERT INTO hospitals (user_id, hospital_name, city, contact_number, registration_number, latitude, longitude) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                [user.id, hospital_name || name, city, contact_number || phone, registration_number, latitude ?? null, longitude ?? null]
             );
         }
 

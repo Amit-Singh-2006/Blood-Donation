@@ -6,7 +6,8 @@ import {
     createHospitalRequest,
     updateHospitalInventory,
     verifyDonation,
-    getPotentialDonors
+    getPotentialDonors,
+    getHospitalProfile,
 } from '../controllers/hospitalController';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { roleMiddleware } from '../middleware/roleMiddleware';
@@ -29,6 +30,7 @@ const hospitalApiLimiter = rateLimit({
 });
 
 // ── GET routes ──
+router.get('/profile', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getHospitalProfile);
 router.get('/donations', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getHospitalDonations);
 router.get('/inventory', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getHospitalInventory);
 router.get('/requests', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getHospitalRequests);
@@ -43,7 +45,7 @@ router.post(
     hospitalApiLimiter,
     authMiddleware,
     roleMiddleware(['hospital']),
-    massAssignmentGuard(['blood_group', 'units_required', 'urgency', 'latitude', 'longitude']),
+    massAssignmentGuard(['blood_group', 'units_required', 'urgency', 'latitude', 'longitude', 'patient_ref', 'required_by']),
     validateRequest(createHospitalRequestSchema),
     createHospitalRequest
 );

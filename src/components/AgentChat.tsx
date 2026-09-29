@@ -50,7 +50,7 @@ const HOSPITAL_TOOLS = [
                 urgency: {
                     type: 'string',
                     description: 'Urgency level of the request',
-                    enum: ['standard', 'critical'],
+                    enum: ['standard', 'urgent', 'critical'],
                 },
             },
             required: ['blood_group', 'units_required', 'urgency'],
@@ -99,102 +99,58 @@ const ADMIN_TOOLS = [
     },
 ];
 
-// ─── Dummy Data Fallbacks ──────────────────────────────────────────────────────
-const DUMMY_INVENTORY = [
-    { blood_group: 'A+', units: 482, threshold: 50 },
-    { blood_group: 'A-', units: 156, threshold: 30 },
-    { blood_group: 'B+', units: 395, threshold: 40 },
-    { blood_group: 'B-', units: 42, threshold: 25 },
-    { blood_group: 'AB+', units: 267, threshold: 30 },
-    { blood_group: 'AB-', units: 18, threshold: 20 },
-    { blood_group: 'O+', units: 612, threshold: 80 },
-    { blood_group: 'O-', units: 89, threshold: 40 },
-];
-
-let DUMMY_REQUESTS = [
-    { id: 'REQ-001', blood_group: 'O-', urgency: 'critical', units_required: 4, status: 'active' },
-    { id: 'REQ-002', blood_group: 'AB+', urgency: 'standard', units_required: 2, status: 'active' },
-    { id: 'REQ-003', blood_group: 'B-', urgency: 'standard', units_required: 3, status: 'pending' },
-    { id: 'REQ-004', blood_group: 'A+', urgency: 'critical', units_required: 6, status: 'active' },
-    { id: 'REQ-005', blood_group: 'O+', urgency: 'standard', units_required: 1, status: 'fulfilled' },
-];
-
-const DUMMY_DONATIONS = [
-    { donor_name: 'Rahul Sharma', units: 1, donation_date: new Date().toISOString() },
-    { donor_name: 'Priya Mehta', units: 1, donation_date: new Date(Date.now() - 86400000).toISOString() },
-    { donor_name: 'Aditya Kumar', units: 1, donation_date: new Date(Date.now() - 172800000).toISOString() },
-];
-
-
 // ─── Tool Executor ─────────────────────────────────────────────────────────────
+// Tools report what really happened; a failed call is returned as an error the
+// assistant must pass on, never replaced with made-up data.
+
+const URGENCY_FOR_API: Record<string, string> = { standard: 'Normal', urgent: 'Urgent', critical: 'Emergency' };
 
 async function executeTool(name: string, args: any, onAction?: (action: string, data: any) => void): Promise<string> {
     try {
         switch (name) {
             case 'get_inventory': {
-                let data;
-                try {
-                    data = await apiFetch('/hospital/inventory');
-                } catch {
-                    data = DUMMY_INVENTORY;
-                }
-                if (!data || data.length === 0) return 'No inventory data found. The blood bank may have no entries yet.';
+                const data = await apiFetch('/hospital/inventory');
+                if (!data || data.length === 0) return 'No inventory has been recorded for this hospital yet.';
 
                 const lines = data.map((i: any) => `• ${i.blood_group}: ${i.units} units`).join('\n');
                 return `Current blood inventory for your hospital:\n${lines}\n\nSYSTEM: You MUST list these units in your final response to the user.`;
             }
 
             case 'create_emergency_request': {
-                let result;
-                try {
-                    result = await apiFetch('/hospital/requests', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            blood_group: args.blood_group,
-                            units_required: args.units_required,
-                            urgency: args.urgency,
-                        }),
-                    });
-                } catch {
-                    result = {
-                        id: `REQ-${Math.floor(Math.random() * 1000)}`,
+                const summary = await apiFetch('/hospital/requests', {
+                    method: 'POST',
+                    body: JSON.stringify({
                         blood_group: args.blood_group,
                         units_required: args.units_required,
-                        urgency: args.urgency,
-                        status: 'active'
-                    };
-                    DUMMY_REQUESTS = [result, ...DUMMY_REQUESTS];
+                        urgency: URGENCY_FOR_API[args.urgency] ?? 'Urgent',
+                    }),
+                });
+                onAction?.('create_emergency_request', summary);
+                const { request, network, warning } = summary;
+                if (warning) return `Request #${request.id} was saved, but: ${warning}`;
+                if (network?.status === 'no_compatible_donors') {
+                    return `Request #${request.id} (${request.blood_group}) was raised, but no compatible donors are available right now. Advise contacting the regional blood bank.`;
                 }
-                if (onAction) {
-                    onAction('create_emergency_request', result);
-                }
-                return `✅ Emergency request created successfully!\nRequest ID: #${result.id}\nBlood Group: ${result.blood_group}\nUnits: ${result.units_required}\nUrgency: ${result.urgency}\nNearby donors are being notified.`;
+                return `Request #${request.id} sent to the donor network: ${request.units_required} unit(s) of ${request.blood_group}, ${request.urgency}. `
+                    + `${network?.compatible_donors ?? 0} compatible donors found and ${network?.donors_alerted ?? 0} alerted now; more are alerted automatically if needed. `
+                    + 'The family tracking link is on the Blood Requests tab.';
             }
 
             case 'get_requests': {
-                let data;
-                try {
-                    data = await apiFetch('/hospital/requests');
-                } catch {
-                    data = DUMMY_REQUESTS;
-                }
-                if (!data || data.length === 0) return 'No blood requests found for this hospital yet.';
-                const lines = data.slice(0, 5).map((r: any) =>
-                    `• Request #${r.id} — ${r.blood_group}, ${r.units_required} units, ${r.urgency} (${r.status || 'pending'})`
+                const { requests } = await apiFetch('/hospital/requests');
+                if (!requests || requests.length === 0) return 'No blood requests found for this hospital yet.';
+                const lines = requests.slice(0, 5).map((r: any) =>
+                    `• Request #${r.id}: ${r.blood_group}, ${r.units_required} unit(s), ${r.urgency}, ${r.status}`
+                    + (r.live ? ` (${r.live.units_confirmed} confirmed, ${r.live.units_donated} donated)` : '')
                 ).join('\n');
-                return `Your recent blood requests:\n${lines}${data.length > 5 ? `\n...and ${data.length - 5} more.` : ''}\n\nSYSTEM: You MUST repeat these request details to the user.`;
+                return `Your recent blood requests:\n${lines}${requests.length > 5 ? `\n...and ${requests.length - 5} more.` : ''}\n\nSYSTEM: You MUST repeat these request details to the user.`;
             }
 
             case 'get_donations': {
-                let data;
-                try {
-                    data = await apiFetch('/hospital/donations');
-                } catch {
-                    data = DUMMY_DONATIONS;
-                }
+                const data = await apiFetch('/hospital/donations');
                 if (!data || data.length === 0) return 'No donations recorded for this hospital yet.';
                 const lines = data.slice(0, 5).map((d: any) =>
-                    `• ${d.donor_name} — ${d.units} units on ${new Date(d.donation_date).toLocaleDateString()}`
+                    `• ${d.donor_name}: ${d.units} unit(s) on ${new Date(d.donation_date).toLocaleDateString()}`
                 ).join('\n');
                 return `Recent donations received by your hospital:\n${lines}\n\nSYSTEM: You MUST list these donors and their donation dates in your final response.`;
             }

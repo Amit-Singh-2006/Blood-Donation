@@ -14,12 +14,15 @@ const URGENCY_TO_DB = {
 export const createHospitalRequestSchema = z.object({
     blood_group: z.enum(BLOOD_GROUPS),
     // The dashboard form posts this as a string; the DB column is INTEGER.
-    units_required: z.coerce.number().int().positive("Units required must be positive"),
+    units_required: z.coerce.number().int().positive("Units required must be positive").max(20, 'At most 20 units per request'),
     urgency: z
         .enum(Object.keys(URGENCY_TO_DB) as [keyof typeof URGENCY_TO_DB, ...(keyof typeof URGENCY_TO_DB)[]])
         .transform(u => URGENCY_TO_DB[u]),
     latitude: z.number().optional(),
     longitude: z.number().optional(),
+    // Ward/bed reference only: never the patient's name (see the Terms)
+    patient_ref: z.string().trim().max(40, 'Use a short ward/bed reference (max 40 characters)').optional(),
+    required_by: z.iso.datetime({ offset: true }).optional(),
 });
 
 export const updateHospitalInventorySchema = z.object({
