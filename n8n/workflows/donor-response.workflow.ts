@@ -590,7 +590,9 @@ const insertNotifications = node({
           type: expr('{{ $json.type }}'),
           is_read: false,
           channel: expr('{{ $json.channel }}'),
-          recipient: expr('{{ $json.recipient }}')
+          recipient: expr('{{ $json.recipient }}'),
+          confirm_donation_url: expr('{{ $json.type === "donor_accepted" ? "https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m=" + $json.match_id + "&h=" + $("Find Request").first().json.hospital_token + "&a=donated" : null }}'),
+          no_show_url: expr('{{ $json.type === "donor_accepted" ? "https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m=" + $json.match_id + "&h=" + $("Find Request").first().json.hospital_token + "&a=no_show" : null }}')
         },
         matchingColumns: [],
         schema: [
@@ -602,7 +604,9 @@ const insertNotifications = node({
           { id: 'type', displayName: 'type', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
           { id: 'is_read', displayName: 'is_read', required: false, defaultMatch: false, display: true, type: 'boolean', canBeUsedToMatch: true },
           { id: 'channel', displayName: 'channel', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
-          { id: 'recipient', displayName: 'recipient', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true }
+          { id: 'recipient', displayName: 'recipient', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
+          { id: 'confirm_donation_url', displayName: 'confirm_donation_url', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
+          { id: 'no_show_url', displayName: 'no_show_url', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true }
         ]
       },
       options: {}

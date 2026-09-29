@@ -571,7 +571,9 @@ const createInApp = node({
           type: 'blood_request',
           is_read: false,
           channel: expr('{{ $json.channel }}'),
-          recipient: expr('donor:{{ $json.donor_id }}')
+          recipient: expr('donor:{{ $json.donor_id }}'),
+          accept_url: expr('{{ $json.accept_url }}'),
+          decline_url: expr('{{ $json.decline_url }}')
         },
         matchingColumns: [],
         schema: [
@@ -583,7 +585,9 @@ const createInApp = node({
           { id: 'type', displayName: 'type', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
           { id: 'is_read', displayName: 'is_read', required: false, defaultMatch: false, display: true, type: 'boolean', canBeUsedToMatch: true },
           { id: 'channel', displayName: 'channel', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
-          { id: 'recipient', displayName: 'recipient', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true }
+          { id: 'recipient', displayName: 'recipient', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
+          { id: 'accept_url', displayName: 'accept_url', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
+          { id: 'decline_url', displayName: 'decline_url', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true }
         ]
       },
       options: {}

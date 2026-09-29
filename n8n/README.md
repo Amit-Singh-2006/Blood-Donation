@@ -64,7 +64,7 @@ Once enough donors have confirmed, the loop only watches for withdrawals or no-s
 | `lifelink_donor_registry` | Donors keyed by phone: blood group, location, availability, donation history, commitment hold |
 | `lifelink_requests` | Blood requests and their fulfilment state |
 | `lifelink_request_matches` | Every ranked donor per request and their alert status (`queued`, `notified`, `accepted`, `declined`, `expired`, `donated`, `no_show`, …) |
-| `lifelink_notifications` | In-app notifications for donors and hospitals (mirrors the app's `notifications` table) |
+| `lifelink_notifications` | In-app notifications for donors and hospitals (mirrors the app's `notifications` table). Donor alerts carry `accept_url` / `decline_url`; hospital "donor confirmed" alerts carry `confirm_donation_url` / `no_show_url`, so the one-tap links are easy to open while SMS is off |
 | `lifelink_workflow_errors` | Failed runs, with a link to each execution |
 
 `legacy_v1_*` tables belong to the retired v1 workflow and can be deleted.
