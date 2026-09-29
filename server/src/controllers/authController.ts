@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { query } from '../config/db';
+import { authCookieOptions } from '../utils/authCookie';
 import dotenv from 'dotenv';
 import {
     blacklistToken,
@@ -80,12 +81,7 @@ export const register = async (req: Request, res: Response) => {
         );
 
         // HttpOnly cookie → prevents JavaScript/XSS from stealing the token
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: JWT_EXPIRY_MS,
-        });
+        res.cookie('token', token, { ...authCookieOptions(), maxAge: JWT_EXPIRY_MS });
 
         // ── SENSITIVE DATA EXPOSURE PREVENTION ──────────────────────────
         // Never return password_hash or internal DB fields
@@ -174,13 +170,8 @@ export const login = async (req: Request, res: Response) => {
             if (hospitalResult.rows.length > 0) profileData = hospitalResult.rows[0];
         }
 
-        // HttpOnly + SameSite cookie prevents XSS token theft and CSRF
-        res.cookie('token', token, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === 'production',
-            sameSite: 'lax',
-            maxAge: JWT_EXPIRY_MS,
-        });
+        // HttpOnly cookie prevents XSS token theft; see authCookieOptions for SameSite
+        res.cookie('token', token, { ...authCookieOptions(), maxAge: JWT_EXPIRY_MS });
 
         res.json({
             user: {
@@ -214,6 +205,6 @@ export const logout = async (req: Request, res: Response) => {
         blacklistToken(token, JWT_EXPIRY_MS);
     }
 
-    res.clearCookie('token', { httpOnly: true, sameSite: 'lax' });
+    res.clearCookie('token', authCookieOptions());
     res.json({ message: 'Logged out successfully' });
 };

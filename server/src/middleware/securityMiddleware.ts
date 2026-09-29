@@ -19,6 +19,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from './authMiddleware';
+import { authCookieOptions } from '../utils/authCookie';
 
 // ─────────────────────────────────────────────
 // 🔐  TOKEN REPLAY / JWT BLACKLIST
@@ -80,7 +81,7 @@ export const preventSessionFixation = (req: Request, res: Response, next: NextFu
     // clear it before the controller issues a fresh one — prevents fixation.
     if (req.method === 'POST' && (req.path === '/login' || req.path === '/register')) {
         if (req.cookies?.token) {
-            res.clearCookie('token', { httpOnly: true, sameSite: 'lax' });
+            res.clearCookie('token', authCookieOptions());
         }
     }
     next();
@@ -186,15 +187,33 @@ export const injectionGuard = (req: Request, res: Response, next: NextFunction):
 // 🕸️  CSRF ORIGIN CHECK
 // ─────────────────────────────────────────────
 
-const ALLOWED_ORIGINS = new Set([
+const DEFAULT_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:3000',
     'http://127.0.0.1:5173',
     'http://127.0.0.1:3000',
     'http://localhost:5000',
     'http://127.0.0.1:5000',
-    ...(process.env.FRONTEND_URL ? [process.env.FRONTEND_URL] : []),
-]);
+    // Production frontend, so the deployed site works without FRONTEND_URL
+    'https://blood-donation-frontend-delta.vercel.app',
+];
+
+/**
+ * Parses FRONTEND_URL, which may list several origins separated by commas.
+ * Browsers send a bare origin, so a trailing slash or path is dropped and
+ * unparseable entries are ignored.
+ */
+export const parseOrigins = (value: string | undefined): string[] =>
+    (value ?? '').split(',').flatMap((entry) => {
+        try {
+            return [new URL(entry.trim()).origin];
+        } catch {
+            return [];
+        }
+    });
+
+// Shared by the cors() options in app.ts and the guards below
+export const ALLOWED_ORIGINS = new Set([...DEFAULT_ORIGINS, ...parseOrigins(process.env.FRONTEND_URL)]);
 
 /**
  * Middleware: Verify Origin / Referer header for state-mutating requests.
