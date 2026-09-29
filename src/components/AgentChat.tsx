@@ -374,7 +374,7 @@ export default function AgentChat({ isOpen, onClose, context, onAction }: AgentC
         setIsThinking(true);
 
         try {
-            const MODEL = 'llama-3.3-70b-versatile';
+            const MODEL = 'openai/gpt-oss-120b';
 
             // IMPORTANT: setMessages is async, so we use the functional update to get the latest messages
             // But since we are in handleSend, we can just build the history from current state

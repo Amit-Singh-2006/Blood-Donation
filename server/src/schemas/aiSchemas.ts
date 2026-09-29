@@ -36,10 +36,13 @@ const toolSchema = z.object({
 
 /**
  * Only the models the app uses are allowed, so the server-side key cannot be
- * used to run arbitrary (more expensive) models.
+ * used to run arbitrary (more expensive) models. Groq retired the Llama 3.1 8B
+ * and 3.3 70B models these replaced on 2026-08-16.
  */
+export const CHAT_MODELS = ['openai/gpt-oss-20b', 'openai/gpt-oss-120b'] as const;
+
 export const chatCompletionSchema = z.object({
-    model: z.enum(['llama-3.1-8b-instant', 'llama-3.3-70b-versatile']),
+    model: z.enum(CHAT_MODELS),
     messages: z.array(messageSchema).min(1).max(60),
     tools: z.array(toolSchema).max(20).optional(),
     tool_choice: z.enum(['auto', 'none']).optional(),

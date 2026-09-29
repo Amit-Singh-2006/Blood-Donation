@@ -12,7 +12,7 @@ afterEach(() => {
 
 // The shape AgentChat sends mid-conversation: system prompt, a tool call and its result
 const agentPayload = {
-    model: 'llama-3.3-70b-versatile',
+    model: 'openai/gpt-oss-120b',
     messages: [
         { role: 'system', content: 'You are LifeLink AI (an assistant). Use **tools**.' },
         { role: 'user', content: 'Raise an O- request for 4 units' },
@@ -29,14 +29,16 @@ const agentPayload = {
 
 test('chat schema accepts the AgentChat and ChatBot payloads', () => {
     assert.ok(chatCompletionSchema.safeParse(agentPayload).success);
-    assert.ok(chatCompletionSchema.safeParse({ model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: 'Can I donate?' }] }).success);
+    assert.ok(chatCompletionSchema.safeParse({ model: 'openai/gpt-oss-20b', messages: [{ role: 'user', content: 'Can I donate?' }] }).success);
 });
 
 test('chat schema rejects models outside the allowlist and oversized input', () => {
-    assert.equal(chatCompletionSchema.safeParse({ ...agentPayload, model: 'llama-3.1-405b' }).success, false);
+    assert.equal(chatCompletionSchema.safeParse({ ...agentPayload, model: 'openai/gpt-oss-safeguard-20b' }).success, false);
+    // Groq retired this model on 2026-08-16
+    assert.equal(chatCompletionSchema.safeParse({ ...agentPayload, model: 'llama-3.3-70b-versatile' }).success, false);
     assert.equal(chatCompletionSchema.safeParse({ ...agentPayload, messages: [] }).success, false);
     assert.equal(chatCompletionSchema.safeParse({
-        model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: 'x'.repeat(5000) }],
+        model: 'openai/gpt-oss-20b', messages: [{ role: 'user', content: 'x'.repeat(5000) }],
     }).success, false);
 });
 
@@ -58,7 +60,7 @@ test('chatCompletion returns 503 when the server key is not configured', async (
     assert.equal(fetchMock.mock.callCount(), 0);
 });
 
-test('chatCompletion forwards with the server-side key and a token cap', async () => {
+test('chatCompletion forwards with the server-side key, a token cap and short hidden reasoning', async () => {
     process.env.GROQ_API_KEY = 'server-secret';
     const fetchMock = mock.method(globalThis, 'fetch', async () =>
         new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Hi' } }] }), { status: 200 }));
@@ -68,7 +70,11 @@ test('chatCompletion forwards with the server-side key and a token cap', async (
     const [url, init] = fetchMock.mock.calls[0]!.arguments as [string, RequestInit];
     assert.equal(url, 'https://api.groq.com/openai/v1/chat/completions');
     assert.equal((init.headers as Record<string, string>)['Authorization'], 'Bearer server-secret');
-    assert.equal(JSON.parse(init.body as string).max_tokens, 1024);
+    const sent = JSON.parse(init.body as string);
+    assert.equal(sent.max_completion_tokens, 2048);
+    assert.equal(sent.reasoning_effort, 'low');
+    assert.equal(sent.include_reasoning, false);
+    assert.equal(sent.model, 'openai/gpt-oss-120b');
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.choices[0].message.content, 'Hi');
 });

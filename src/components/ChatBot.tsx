@@ -24,7 +24,7 @@ export default function ChatBot() {
       const data = await apiFetch('/ai/chat', {
         method: "POST",
         body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
+          model: "openai/gpt-oss-20b",
           messages: [{ role: "user", content: userInput }]
         })
       });
