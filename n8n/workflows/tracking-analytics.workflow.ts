@@ -86,7 +86,7 @@ const fmt = (iso) => iso ? new Date(iso).toLocaleString('en-IN', { timeZone: 'As
 const minutesBetween = (a, b) => Math.max(0, Math.round((Date.parse(b) - Date.parse(a)) / 60000));
 
 const page = (title, body, refresh) => '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-  + (refresh ? '<meta http-equiv="refresh" content="60">' : '') + '<title>' + esc(title) + '</title>'
+  + (refresh ? '<meta http-equiv="refresh" content="120">' : '') + '<title>' + esc(title) + '</title>'
   + '<style>body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#fff5f5;color:#1f2937}main{max-width:560px;margin:0 auto;padding:24px 16px}'
   + '.card{background:#fff;border-radius:16px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,.08);margin-bottom:16px}.brand{color:#dc2626;font-weight:700}'
   + 'h1{font-size:1.35rem;margin:6px 0 4px}.sub{color:#6b7280;margin:0 0 16px}.bar{height:14px;background:#fee2e2;border-radius:999px;overflow:hidden}.fill{height:100%;background:#dc2626}'
@@ -159,7 +159,7 @@ const body = '<div class="card"><div class="brand">LifeLink</div><h1>' + esc(req
   + '<div class="card"><b>What happens next</b><p>' + esc(summary.next_step) + '</p>' + (nextCheck ? '<p class="muted">Next check: ' + esc(fmt(nextCheck)) + ' IST</p>' : '') + '</div>'
   + (summary.confirmed_donors.length ? '<div class="card"><b>Confirmed donors</b><ol>' + summary.confirmed_donors.map((d) => '<li>' + esc(d.blood_group) + ' donor' + (d.distance_miles != null ? ', ' + esc(d.distance_miles) + ' mi away' : '') + ' &middot; ' + esc(d.state) + '</li>').join('') + '</ol></div>' : '')
   + '<div class="card"><b>Timeline</b><ol>' + timeline.map((t) => '<li>' + esc(t.event) + '<br><span class="muted">' + esc(fmt(t.at)) + ' IST</span></li>').join('') + '</ol>'
-  + '<p class="muted">This page refreshes every minute and never shows donor identities.</p></div>';
+  + '<p class="muted">This page refreshes every 2 minutes and never shows donor identities.</p></div>';
 
 return [{ json: {
   http_status: 200,
@@ -353,13 +353,13 @@ const bars = GROUPS.map((g) => {
 }).join('');
 const r = metrics.requests;
 const s = metrics.responses;
-const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="120"><title>LifeLink network analytics</title>'
+const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="600"><title>LifeLink network analytics</title>'
   + '<style>body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#f8fafc;color:#0f172a}main{max-width:960px;margin:0 auto;padding:24px 16px}'
   + 'h1{margin:0 0 4px}.muted{color:#64748b;font-size:.85rem}.card{background:#fff;border-radius:16px;padding:20px;box-shadow:0 4px 20px rgba(15,23,42,.06);margin-top:16px}'
   + '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.stat{background:#f1f5f9;border-radius:12px;padding:14px}.stat b{display:block;font-size:1.6rem}'
   + '.row{display:flex;align-items:center;gap:10px;margin:8px 0}.lbl{width:36px;font-weight:700}.track{position:relative;flex:1;height:14px;background:#f1f5f9;border-radius:999px;overflow:hidden}'
   + '.reg{position:absolute;inset:0 auto 0 0;background:#fecaca}.elig{position:absolute;inset:0 auto 0 0;background:#dc2626}.num{width:64px;text-align:right;font-variant-numeric:tabular-nums}</style></head>'
-  + '<body><main><h1>LifeLink network analytics</h1><p class="muted">Generated ' + esc(metrics.generated_at) + ' &middot; refreshes every 2 minutes</p>'
+  + '<body><main><h1>LifeLink network analytics</h1><p class="muted">Generated ' + esc(metrics.generated_at) + ' &middot; refreshes every 10 minutes</p>'
   + '<div class="card"><b>Requests: open vs fulfilled</b><div class="grid">' + stat('open', r.open) + stat('fulfilled (donors on the way)', r.fulfilled) + stat('completed (donated)', r.completed)
   + stat('exhausted', r.exhausted) + stat('covered', r.covered_pct, '%') + stat('median minutes to first donor', r.median_minutes_to_first_donor) + stat('first donor within 15 min', r.first_donor_within_15_min_pct, '%') + '</div></div>'
   + '<div class="card"><b>Donor pool</b><div class="grid">' + stat('registered', metrics.donor_pool.registered) + stat('available', metrics.donor_pool.available)
