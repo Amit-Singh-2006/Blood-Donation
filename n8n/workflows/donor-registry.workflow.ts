@@ -1,11 +1,12 @@
-import { workflow, node, trigger, sticky, ifElse, expr } from '@n8n/workflow-sdk';
+import { workflow, node, trigger, sticky, ifElse, newCredential, expr } from '@n8n/workflow-sdk';
 
 const registryWebhook = trigger({
   type: 'n8n-nodes-base.webhook',
   version: 2.1,
   config: {
     name: 'Donor Profile Submitted',
-    parameters: { httpMethod: 'POST', path: 'lifelink/donors', responseMode: 'responseNode', options: {} },
+    parameters: { httpMethod: 'POST', path: 'lifelink/donors', authentication: 'headerAuth', responseMode: 'responseNode', options: {} },
+    credentials: { httpHeaderAuth: newCredential('Header Auth account') },
     position: [0, 300]
   },
   output: [{ body: { name: 'Riya Sharma', phone: '5550000201', blood_group: 'O-', gender: 'female', city: 'Delhi', latitude: 28.6139, longitude: 77.209, available: true, last_donation_date: '2026-03-15', total_donations: 3, preferred_channel: 'sms' } }]

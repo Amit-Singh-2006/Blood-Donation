@@ -69,8 +69,17 @@ Once enough donors have confirmed, the loop only watches for withdrawals or no-s
 
 `legacy_v1_*` tables belong to the retired v1 workflow and can be deleted.
 
-## Before going live
+## Credentials and going live
 
-- **Authenticate the webhooks.** Add a Header Auth credential to `emergency-request` and `donors` so that only the website backend can call them. Restrict `ussd` to your USSD gateway's IP range (webhook option *IP whitelist*).
-- **Enable real delivery.** Add Twilio, WhatsApp Business or Google service-account (FCM) credentials, fill in the placeholder fields, and enable the disabled channel nodes in `emergency-dispatch` and `donor-response`. Until then, alerts are in-app only.
-- **WhatsApp template.** Business-initiated messages need a pre-approved template (`lifelink_blood_request`) with 4 body parameters: blood group, hospital, YES link and NO link.
+| Credential (n8n) | Used by |
+|---|---|
+| `Header Auth account` (header `X-LifeLink-Key`) | `emergency-request` and `donors` webhooks. Callers must send the header; anything else gets 403. |
+| `Twilio account` | Donor SMS alerts (`emergency-dispatch`) and hospital texts (`donor-response`) |
+
+Still to do before real launch:
+
+- **Use a long random webhook key.** Generate one with `openssl rand -hex 32`, put it in the Header Auth credential and in the backend's environment. Never commit it.
+- **Restrict `ussd`** to your USSD gateway's IP range (webhook option *IP whitelist*).
+- **Twilio trial limits.** A trial account only delivers to verified numbers and prefixes messages with "Sent from your Twilio trial account". Upgrade before real donors are on it.
+- **WhatsApp.** Business-initiated messages need a pre-approved template. With the Meta node use `lifelink_blood_request` (4 body parameters: blood group, hospital, YES link, NO link); with Twilio, the sandbox works for testing only.
+- **Push (FCM).** Needs a Google service-account credential and the Firebase project ID; the node stays disabled until then.

@@ -5,7 +5,8 @@ const requestWebhook = trigger({
   version: 2.1,
   config: {
     name: 'Blood Request Received',
-    parameters: { httpMethod: 'POST', path: 'lifelink/emergency-request', responseMode: 'responseNode', options: {} },
+    parameters: { httpMethod: 'POST', path: 'lifelink/emergency-request', authentication: 'headerAuth', responseMode: 'responseNode', options: {} },
+    credentials: { httpHeaderAuth: newCredential('Header Auth account') },
     position: [0, 400]
   },
   output: [{ body: { hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', hospital_contact: '+915550000900', patient_ref: 'ICU-7', blood_group: 'AB+', units_required: 2, urgency: 'critical', latitude: 28.5672, longitude: 77.21 } }]
@@ -621,7 +622,6 @@ const sendSms = node({
   version: 1,
   config: {
     name: 'Send SMS (Twilio)',
-    disabled: true,
     onError: 'continueRegularOutput',
     parameters: {
       resource: 'sms',
@@ -632,7 +632,7 @@ const sendSms = node({
       message: expr('{{ $json.sms_text }}'),
       options: {}
     },
-    credentials: { twilioApi: newCredential('Twilio') },
+    credentials: { twilioApi: newCredential('Twilio account') },
     position: [2420, 120]
   },
   output: [{ sid: 'SM1', status: 'queued' }]

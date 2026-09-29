@@ -628,7 +628,6 @@ const textHospital = node({
   version: 1,
   config: {
     name: 'Text Hospital (Twilio)',
-    disabled: true,
     onError: 'continueRegularOutput',
     parameters: {
       resource: 'sms',
@@ -639,7 +638,7 @@ const textHospital = node({
       message: expr('{{ $json.text }}'),
       options: {}
     },
-    credentials: { twilioApi: newCredential('Twilio') },
+    credentials: { twilioApi: newCredential('Twilio account') },
     position: [1980, 1000]
   },
   output: [{ sid: 'SM2', status: 'queued' }]
