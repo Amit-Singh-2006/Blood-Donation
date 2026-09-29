@@ -3,6 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { query } from '../config/db';
 import { authCookieOptions } from '../utils/authCookie';
+import { enrolDonor } from '../services/donorNetwork';
 import dotenv from 'dotenv';
 import {
     blacklistToken,
@@ -27,7 +28,7 @@ const JWT_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes in milliseconds
 export const register = async (req: Request, res: Response) => {
     const {
         name, email, password, role,
-        blood_group, city, phone, dob, gender,
+        blood_group, city, phone, dob, gender, preferred_channel,
         hospital_name, contact_number
     } = req.body;
 
@@ -67,6 +68,8 @@ export const register = async (req: Request, res: Response) => {
                 'INSERT INTO donors (user_id, blood_group, city, phone, dob, gender) VALUES ($1, $2, $3, $4, $5, $6)',
                 [user.id, blood_group, city, phone, dob, gender]
             );
+            // Join the n8n donor network so this donor can be matched and alerted
+            await enrolDonor({ name, phone, blood_group, city, gender }, { preferred_channel });
         } else if (role === 'hospital') {
             await query(
                 'INSERT INTO hospitals (user_id, hospital_name, city, contact_number) VALUES ($1, $2, $3, $4)',

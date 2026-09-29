@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { User, Phone, Mail, MapPin, Droplets, Calendar, CheckCircle2, ArrowRight, Lock } from 'lucide-react';
+import { User, Phone, Mail, MapPin, Droplets, Calendar, CheckCircle2, ArrowRight, Lock, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '../lib/api';
 
@@ -24,6 +24,7 @@ export default function DonorRegistration() {
     gender: '',
     phone: '',
     city: '',
+    preferred_channel: 'sms',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -206,6 +207,22 @@ export default function DonorRegistration() {
                 placeholder="+91 98765 43210"
                 className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
               />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
+                <Bell className="w-4 h-4" /> Alert me by
+              </label>
+              <select
+                name="preferred_channel"
+                value={formData.preferred_channel}
+                onChange={handleChange}
+                className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all bg-white"
+              >
+                <option value="sms">SMS</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="in_app">Only in the app</option>
+              </select>
             </div>
 
             <div className="space-y-2">

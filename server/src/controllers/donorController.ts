@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { query } from '../config/db';
 import { recipientGroupsFor } from '../utils/bloodCompatibility';
+import { NetworkError, PreferenceChange, donorPortal, registerDonor, toE164 } from '../services/donorNetwork';
 
 export const getDonorDonations = async (req: AuthRequest, res: Response) => {
     const donorId = req.user?.id;
@@ -124,3 +125,47 @@ export const getImpactPrediction = async (req: AuthRequest, res: Response) => {
         res.status(500).json({ message: 'Internal server error.' });
     }
 };
+
+/**
+ * Answers with the donor's view from the n8n donor network (live alerts with
+ * their one-tap links, eligibility, history), applying `change` first when
+ * given. Donors who signed up before the network existed are enrolled here.
+ */
+const respondWithNetworkView = async (req: AuthRequest, res: Response, change?: PreferenceChange) => {
+    try {
+        const result = await query(
+            `SELECT u.name, d.phone, d.blood_group, d.city, d.gender
+             FROM donors d JOIN users u ON u.id = d.user_id
+             WHERE d.user_id = $1`,
+            [req.user?.id]
+        );
+        const profile = result.rows[0];
+        if (!profile) return res.status(404).json({ message: 'Donor profile not found.' });
+
+        const phone = toE164(profile.phone);
+        if (!phone) {
+            return res.status(400).json({ message: 'Add a valid mobile number to your profile to receive blood requests.' });
+        }
+
+        let view = await donorPortal(phone, change);
+        if (view.status === 404) {
+            await registerDonor({ ...profile, phone }, change);
+            view = await donorPortal(phone);
+        }
+        if (view.status !== 200) throw new NetworkError(`Donor portal answered ${view.status}`, view.status);
+        res.json(view.data);
+    } catch (err: any) {
+        if (err instanceof NetworkError && err.status === 503) {
+            return res.status(503).json({ message: err.message });
+        }
+        console.error('Donor network error:', err);
+        res.status(502).json({ message: 'The donor network is unavailable right now.' });
+    }
+};
+
+// GET /donor/network
+export const getNetworkStatus = (req: AuthRequest, res: Response) => respondWithNetworkView(req, res);
+
+// PUT /donor/network  { available?, preferred_channel? }
+export const updateNetworkPreferences = (req: AuthRequest, res: Response) =>
+    respondWithNetworkView(req, res, req.body as PreferenceChange);

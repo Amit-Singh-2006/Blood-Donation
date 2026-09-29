@@ -1,5 +1,7 @@
 import { Router } from 'express';
-import { getDonorDonations, getMatchedRequests, getLeaderboard, getImpactPrediction } from '../controllers/donorController';
+import { getDonorDonations, getMatchedRequests, getLeaderboard, getImpactPrediction, getNetworkStatus, updateNetworkPreferences } from '../controllers/donorController';
+import { validateRequest } from '../middleware/validateZod';
+import { networkPreferencesSchema } from '../schemas/donorSchemas';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { roleMiddleware } from '../middleware/roleMiddleware';
 import { botDetection } from '../middleware/securityMiddleware';
@@ -22,6 +24,9 @@ const donorApiLimiter = rateLimit({
 router.get('/donations', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), getDonorDonations);
 router.get('/matches', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), getMatchedRequests);
 router.get('/impact/:requestId', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), getImpactPrediction);
+// Live alerts, eligibility and preferences from the n8n donor network
+router.get('/network', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), getNetworkStatus);
+router.put('/network', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), validateRequest(networkPreferencesSchema), updateNetworkPreferences);
 
 // Leaderboard is public but bot-protected to prevent scraping
 router.get('/leaderboard', botDetection, donorApiLimiter, getLeaderboard);

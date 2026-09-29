@@ -71,17 +71,17 @@ const HOSPITAL_TOOLS = [
 const DONOR_TOOLS = [
     {
         name: 'get_donor_profile',
-        description: 'Get the current donor profile including blood group, XP points, and eligibility.',
+        description: 'Get the current donor profile including blood group, availability, alert channel, donations and eligibility.',
         parameters: { type: 'object', properties: {}, required: [] },
     },
     {
         name: 'get_nearby_requests',
-        description: 'Find active blood requests near the donor.',
+        description: 'List the blood requests the donor has been alerted to and has not answered yet.',
         parameters: { type: 'object', properties: {}, required: [] },
     },
     {
         name: 'accept_blood_request',
-        description: 'Accept a blood request on behalf of the donor. Call this if the donor agrees to book an appointment.',
+        description: 'Accept the newest blood request waiting for the donor\'s reply. Only call this after the donor clearly agrees to donate.',
         parameters: { type: 'object', properties: {}, required: [] },
     },
 ];
@@ -199,20 +199,29 @@ async function executeTool(name: string, args: any, onAction?: (action: string, 
                 return `Recent donations received by your hospital:\n${lines}\n\nSYSTEM: You MUST list these donors and their donation dates in your final response.`;
             }
 
+            // Donor tools read the live LifeLink donor network through the backend
             case 'get_donor_profile': {
-                const user = JSON.parse(localStorage.getItem('user') || '{}');
-                return `Donor profile:\nName: ${user.name || 'Unknown'}\nEmail: ${user.email || 'Unknown'}\nBlood Group: O-\nXP Points: 2000\nEligibility: Eligible to donate (Last donation > 3 months ago)`;
+                const d = (await apiFetch('/donor/network')).donor;
+                if (!d) return 'This donor is not on the LifeLink donor network yet.';
+                return `Donor profile:\nName: ${d.name}\nBlood Group: ${d.blood_group}\nCity: ${d.city}\nAvailable for requests: ${d.available ? 'yes' : 'no'}\nAlerts by: ${d.preferred_channel}\nDonations: ${d.total_donations}\nEligibility: ${d.eligible_now ? 'Eligible to donate now' : `Can donate again from ${d.eligible_from}`}`;
             }
 
             case 'get_nearby_requests': {
-                return 'Nearby Requests:\n1. 2 units of O- at City Hospital (Critical, 2 miles away)\n2. 1 unit of A+ at Sunshine Clinic (Standard, 5 miles away)\n\nSYSTEM INSTRUCTION: You MUST clearly list the 2 requests above to the user EXACTLY as shown, and then ask: "Would you like me to book an appointment for any of these requests?"';
+                const alerts = ((await apiFetch('/donor/network')).alerts ?? []).filter((a: any) => a.status === 'awaiting_reply');
+                if (alerts.length === 0) return 'There are no blood requests waiting for this donor right now.';
+                const lines = alerts.map((a: any, i: number) =>
+                    `${i + 1}. ${a.units_required} unit(s) of ${a.blood_group_needed} at ${a.hospital_name}, ${a.hospital_city} (${a.urgency}${a.distance_miles != null ? `, ${a.distance_miles} miles away` : ''})`
+                ).join('\n');
+                return `Requests waiting for the donor's reply:\n${lines}\n\nSYSTEM INSTRUCTION: List these requests to the user and ask whether they want to accept the first one.`;
             }
 
             case 'accept_blood_request': {
-                if (onAction) {
-                    onAction('accept_blood_request', {});
-                }
-                return '✅ Appointment booked successfully! The hospital has been notified and you have been marked as scheduled.';
+                const next = ((await apiFetch('/donor/network')).alerts ?? []).find((a: any) => a.status === 'awaiting_reply' && a.accept_url);
+                if (!next) return 'There is no request waiting for this donor to accept.';
+                // Same one-tap link the donor gets by SMS/WhatsApp; format=json returns the outcome
+                const outcome = await (await fetch(`${next.accept_url}&format=json`)).json();
+                onAction?.('accept_blood_request', outcome);
+                return `${outcome.title}. ${outcome.message}`;
             }
 
             case 'get_all_hospitals': {

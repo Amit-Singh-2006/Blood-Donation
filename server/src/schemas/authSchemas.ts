@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ALERT_CHANNELS } from '../services/donorNetwork';
 
 /**
  * Strong password validation:
@@ -39,6 +40,7 @@ export const registerSchema = z.object({
     phone: z.string().min(10, 'Phone number must be at least 10 characters long').max(15).optional(),
     dob: z.string().optional(),
     gender: z.enum(['male', 'female', 'other']).optional(),
+    preferred_channel: z.enum(ALERT_CHANNELS).optional(),
 
     // Hospital specific fields
     hospital_name: z.string().max(200).optional(),

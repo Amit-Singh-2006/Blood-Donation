@@ -6,7 +6,60 @@ import AgentChat from '../components/AgentChat';
 import FeedbackModal from '../components/FeedbackModal';
 import { apiFetch } from '../lib/api';
 
-function DonorSettingsView() {
+/** A blood request the donor was alerted to, from GET /donor/network. */
+interface NetworkAlert {
+  match_id: number;
+  status: 'awaiting_reply' | 'accepted';
+  hospital_name: string;
+  hospital_city: string;
+  blood_group_needed: string;
+  urgency: string;
+  units_required: number;
+  distance_miles: number | null;
+  alerted_at: string | null;
+  accept_url: string | null;
+  decline_url: string;
+}
+
+interface DonorNetworkView {
+  registered: boolean;
+  donor?: {
+    name: string;
+    blood_group: string;
+    city: string;
+    available: boolean;
+    preferred_channel: string;
+    total_donations: number;
+    last_donation_date: string | null;
+    eligible_from: string | null;
+    eligible_now: boolean;
+  };
+  alerts?: NetworkAlert[];
+}
+
+type PreferenceChange = { available?: boolean; preferred_channel?: string };
+
+const formatDay = (day?: string | null) =>
+  day ? new Date(day.length === 10 ? day + 'T00:00:00' : day).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+
+const openDirections = (place: string) =>
+  window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place)}`, '_blank', 'noopener');
+
+function DonorSettingsView({ channel, onSave }: { channel?: string; onSave: (change: PreferenceChange) => Promise<void> }) {
+  const [selected, setSelected] = useState(channel ?? 'sms');
+  const [status, setStatus] = useState('');
+  useEffect(() => { if (channel) setSelected(channel); }, [channel]);
+
+  const save = async () => {
+    setStatus('Saving…');
+    try {
+      await onSave({ preferred_channel: selected });
+      setStatus('Saved');
+    } catch (err: any) {
+      setStatus(err.message || 'Could not save your settings.');
+    }
+  };
+
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm">
@@ -15,14 +68,20 @@ function DonorSettingsView() {
           Account Settings
         </h2>
         <div className="space-y-6">
-          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border rounded-lg border-slate-100 bg-slate-50">
             <div>
-              <h4 className="font-bold text-slate-900">Push Notifications</h4>
-              <p className="text-sm text-slate-500">Receive alerts for emergency matches</p>
+              <h4 className="font-bold text-slate-900">Blood request alerts</h4>
+              <p className="text-sm text-slate-500">How LifeLink reaches you when a nearby patient needs your blood group</p>
             </div>
-            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
-              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
-            </div>
+            <select
+              value={selected}
+              onChange={(e) => setSelected(e.target.value)}
+              className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium"
+            >
+              <option value="sms">SMS</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="in_app">Only in the app</option>
+            </select>
           </div>
           <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
             <div>
@@ -34,9 +93,12 @@ function DonorSettingsView() {
             </div>
           </div>
         </div>
-        <button className="mt-8 px-6 py-3 w-full sm:w-auto bg-[#ee2b2b] text-white rounded-lg font-bold hover:bg-[#ee2b2b]/90 transition-all shadow-md">
-          Save Changes
-        </button>
+        <div className="mt-8 flex items-center gap-4">
+          <button onClick={save} className="px-6 py-3 w-full sm:w-auto bg-[#ee2b2b] text-white rounded-lg font-bold hover:bg-[#ee2b2b]/90 transition-all shadow-md">
+            Save Changes
+          </button>
+          {status && <span className="text-sm text-slate-500">{status}</span>}
+        </div>
       </div>
     </div>
   );
@@ -48,12 +110,12 @@ export default function DonorApp() {
   const [isAvailable, setIsAvailable] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
   const [showChat, setShowChat] = useState(false);
-  const [requestAccepted, setRequestAccepted] = useState(false);
-  const [requestRejected, setRequestRejected] = useState(false);
+  const [network, setNetwork] = useState<DonorNetworkView | null>(null);
+  const [networkError, setNetworkError] = useState('');
+  const [replyNotice, setReplyNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [respondingId, setRespondingId] = useState<number | null>(null);
   const [userPoints, setUserPoints] = useState(location.state?.initialPoints || 450);
   const [userTokens, setUserTokens] = useState(24000);
-  const [requestExpired, setRequestExpired] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(3 * 60 * 60); // 3 hours in seconds
   const [pendingAppointments, setPendingAppointments] = useState<{ date: string, time: string, hospital: string, id: number }[]>([]);
   const [hospitalRated, setHospitalRated] = useState(false);
   const [feedPosts, setFeedPosts] = useState([
@@ -72,7 +134,53 @@ export default function DonorApp() {
       setUser(JSON.parse(savedUser));
     }
     fetchDonations();
+    fetchNetwork();
   }, []);
+
+  // Live alerts, eligibility and availability come from the LifeLink donor network
+  const fetchNetwork = async () => {
+    try {
+      const view: DonorNetworkView = await apiFetch('/donor/network');
+      setNetwork(view);
+      setIsAvailable(!!view.donor?.available);
+      setNetworkError('');
+    } catch (err: any) {
+      setNetworkError(err.message || 'Could not reach the donor network.');
+    }
+  };
+
+  const updatePreferences = async (change: PreferenceChange) => {
+    const view: DonorNetworkView = await apiFetch('/donor/network', { method: 'PUT', body: JSON.stringify(change) });
+    setNetwork(view);
+    setIsAvailable(!!view.donor?.available);
+  };
+
+  const toggleAvailability = async () => {
+    const next = !isAvailable;
+    setIsAvailable(next);
+    try {
+      await updatePreferences({ available: next });
+    } catch (err: any) {
+      setIsAvailable(!next);
+      setNetworkError(err.message || 'Could not update your availability.');
+    }
+  };
+
+  // These are the same one-tap links sent by SMS/WhatsApp; format=json returns
+  // the outcome instead of a page, so the reply shows up right here.
+  const respondToAlert = async (alertInfo: NetworkAlert, url: string) => {
+    setRespondingId(alertInfo.match_id);
+    try {
+      const res = await fetch(`${url}&format=json`);
+      const outcome = await res.json();
+      setReplyNotice({ ok: res.ok, text: `${outcome.title}. ${outcome.message}` });
+    } catch {
+      window.open(url, '_blank', 'noopener');
+    } finally {
+      setRespondingId(null);
+      fetchNetwork();
+    }
+  };
 
   const fetchDonations = async () => {
     try {
@@ -145,26 +253,6 @@ export default function DonorApp() {
     }
   };
 
-  const handleAcceptRequest = () => {
-    setRequestAccepted(true);
-    alert("Thank you! The hospital has been notified. Please proceed to the location.");
-  };
-
-  const handleRejectRequest = () => {
-    setRequestRejected(true);
-  };
-
-  const formatTime = (seconds: number) => {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const openNavigation = () => {
-    window.open("https://www.google.com/maps/dir/?api=1&destination=City+General+Hospital", "_blank");
-  };
-
   return (
     <div className={`max-w-7xl mx-auto px-6 ${activeTab === 'centers' ? 'py-4' : 'py-8'} relative`}>
       {/* Hero: Availability Toggle */}
@@ -186,7 +274,8 @@ export default function DonorApp() {
                 type="checkbox"
                 className="sr-only peer"
                 checked={isAvailable}
-                onChange={() => setIsAvailable(!isAvailable)}
+                disabled={!network?.donor}
+                onChange={toggleAvailability}
               />
               <div className="w-14 h-7 bg-slate-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-[#ee2b2b]"></div>
             </label>
@@ -231,21 +320,14 @@ export default function DonorApp() {
 
       {activeTab === 'dashboard' && (
         <DashboardView
-          user={user}
           donations={donations}
-          requestAccepted={requestAccepted}
-          onAccept={handleAcceptRequest}
-          requestRejected={requestRejected}
-          onReject={handleRejectRequest}
-          onRate={() => setShowFeedback(true)}
-          requestExpired={requestExpired}
-          timeLeft={formatTime(timeLeft)}
+          network={network}
+          networkError={networkError}
           isAvailable={isAvailable}
-          openNavigation={openNavigation}
-          hospitalRated={hospitalRated}
-          userBloodType="O-"
-          demandBloodType="O-"
-          rewardTokens={2000}
+          replyNotice={replyNotice}
+          respondingId={respondingId}
+          onRespond={respondToAlert}
+          onRate={() => setShowFeedback(true)}
           onClaimCertificate={handleClaimCertificate}
           claimingId={claimingId}
         />
@@ -254,7 +336,7 @@ export default function DonorApp() {
       {activeTab === 'pending' && <PendingDonationsView userPoints={userPoints} appointments={pendingAppointments} onCancel={(id) => setPendingAppointments(pendingAppointments.filter(a => a.id !== id))} />}
       {activeTab === 'impact' && <RewardsView userTokens={userTokens} setUserTokens={setUserTokens} user={user} />}
       {activeTab === 'community' && <CommunityView feedPosts={feedPosts} setFeedPosts={setFeedPosts} />}
-      {activeTab === 'settings' && <DonorSettingsView />}
+      {activeTab === 'settings' && <DonorSettingsView channel={network?.donor?.preferred_channel} onSave={updatePreferences} />}
 
       {/* Floating AI Chat Button */}
       <button
@@ -267,9 +349,11 @@ export default function DonorApp() {
         isOpen={showChat}
         context="donor"
         onClose={() => setShowChat(false)}
-        onAction={(actionName) => {
+        onAction={(actionName, outcome) => {
+          // The assistant already accepted through the network; show the result and refresh
           if (actionName === 'accept_blood_request') {
-            handleAcceptRequest();
+            if (outcome?.title) setReplyNotice({ ok: true, text: `${outcome.title}. ${outcome.message}` });
+            fetchNetwork();
           }
         }}
       />
@@ -300,27 +384,33 @@ export default function DonorApp() {
 }
 
 function DashboardView({
-  user, donations, requestAccepted, onAccept, requestRejected, onReject, onRate, requestExpired, timeLeft, isAvailable, openNavigation, hospitalRated, userBloodType, demandBloodType, rewardTokens, onClaimCertificate, claimingId
+  donations, network, networkError, isAvailable, replyNotice, respondingId, onRespond, onRate, onClaimCertificate, claimingId
 }: {
-  user: any; donations: any[]; requestAccepted: boolean; onAccept: () => void; requestRejected: boolean; onReject: () => void; onRate: () => void;
-  requestExpired: boolean; timeLeft: string; isAvailable: boolean; openNavigation: () => void;
-  hospitalRated: boolean; userBloodType: string; demandBloodType: string; rewardTokens: number;
+  donations: any[]; network: DonorNetworkView | null; networkError: string; isAvailable: boolean;
+  replyNotice: { ok: boolean; text: string } | null; respondingId: number | null;
+  onRespond: (alertInfo: NetworkAlert, url: string) => void; onRate: () => void;
   onClaimCertificate: (donation: any) => void; claimingId: string | null;
 }) {
-  const isMatch = userBloodType === demandBloodType;
+  const donor = network?.donor;
+  const alerts = network?.alerts ?? [];
+  const waiting = alerts.filter((a) => a.status === 'awaiting_reply').length;
+  const totalDonations = donor?.total_donations ?? donations.length;
+  const nextMilestone = [1, 5, 10, 25, 50, 100].find((m) => m > totalDonations) ?? totalDonations;
+  const milestonePct = nextMilestone ? Math.round((totalDonations / nextMilestone) * 100) : 100;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {/* ... existing code ... */}
-      {/* Left Column: Pending Requests */}
+      {/* Left Column: Live requests from the donor network */}
       <div className="lg:col-span-2 space-y-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xl font-bold flex items-center gap-2 text-slate-900">
             <span className="material-symbols-outlined text-[#ee2b2b]">emergency</span>
             Pending Requests
           </h3>
-          {isAvailable && !requestRejected && !requestAccepted && isMatch && (
-            <span className="text-xs font-bold bg-[#ee2b2b]/10 text-[#ee2b2b] px-3 py-1 rounded-full uppercase">1 Live Match</span>
+          {waiting > 0 && (
+            <span className="text-xs font-bold bg-[#ee2b2b]/10 text-[#ee2b2b] px-3 py-1 rounded-full uppercase">
+              {waiting} Live {waiting === 1 ? 'Match' : 'Matches'}
+            </span>
           )}
         </div>
 
@@ -332,69 +422,94 @@ function DashboardView({
           <div>
             <h4 className="font-bold text-slate-900 text-sm">Donation Eligibility</h4>
             <p className="text-sm text-slate-600 mt-1">
-              Your last donation was on <strong className="text-slate-900">Oct 12, 2023</strong>.
-              You are currently <span className="font-bold text-green-600 uppercase text-xs tracking-wider">Eligible</span> to donate.
-              <br /><span className="text-xs text-slate-400 mt-1 block">(Usually, you must wait 56 days between whole blood donations.)</span>
+              {!donor ? (
+                networkError ? 'Your eligibility will show here once the donor network is reachable.' : 'Checking your eligibility…'
+              ) : (
+                <>
+                  {donor.last_donation_date
+                    ? <>Your last donation was on <strong className="text-slate-900">{formatDay(donor.last_donation_date)}</strong>. </>
+                    : <>No donation recorded yet. </>}
+                  {donor.eligible_now
+                    ? <>You are currently <span className="font-bold text-green-600 uppercase text-xs tracking-wider">Eligible</span> to donate.</>
+                    : <>You can donate again from <strong className="text-slate-900">{formatDay(donor.eligible_from)}</strong>.</>}
+                </>
+              )}
+              <br /><span className="text-xs text-slate-400 mt-1 block">(Donors wait 90 days (men) or 120 days (women) between whole blood donations.)</span>
             </p>
           </div>
         </div>
 
-        {requestAccepted ? (
-          <div className="bg-green-50 rounded-xl p-6 border border-green-200 flex flex-col items-center justify-center text-center space-y-4">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-green-600">
-              <span className="material-symbols-outlined text-4xl">check_circle</span>
-            </div>
-            <h3 className="text-xl font-bold text-green-800">Request Accepted!</h3>
-            <p className="text-green-700">Please proceed to City General Hospital. The staff has been notified of your arrival.</p>
-            <button onClick={openNavigation} className="text-sm font-bold text-green-700 hover:underline flex items-center gap-1">
-              <span className="material-symbols-outlined text-sm">navigation</span>
-              Get Directions
-            </button>
+        {replyNotice && (
+          <div className={`rounded-xl p-4 border text-sm font-medium ${replyNotice.ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+            {replyNotice.text}
           </div>
-        ) : isAvailable && !requestRejected ? (
-          <div className="bg-white rounded-xl overflow-hidden border border-[#ee2b2b]/20 shadow-lg shadow-[#ee2b2b]/5 group">
-            <div className="flex flex-col md:flex-row">
-              <div className="md:w-1/3 relative h-48 md:h-auto bg-slate-200">
-                <img alt="Hospital" className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCrWeWyQ1R-dF8F2VRM6ryKAtUU_cohDmLDJvdojeJRsLiIIXrT5rL1SjuIiV5GizM90CNYs5jKNegH8txwab0j1RGaaMrSkaAlFcT5sszOXOLsTUroZ40maGv9Yn5yK3QYsGFnnRzmnBoZXGV9Zl5192oDqT3lTibLJkrP-0o1LmICUIUvAdFGzqLBVOXnQM8MrJ6YUSF12tej8Mor-3gEXUj53dEgqbK5d7BccuG_HEsdNMOvLA8IfkHLboc6sNUQmF8lrBBCu94" />
-                <div className="absolute top-3 left-3 bg-[#ee2b2b] text-white text-[10px] font-black px-2 py-1 rounded uppercase tracking-tighter">AI Predicted Urgent</div>
-              </div>
-              <div className="p-6 md:w-2/3 flex flex-col justify-between">
+        )}
+
+        {networkError ? (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800">
+            {networkError}
+          </div>
+        ) : !network ? (
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center text-sm text-slate-500">
+            Checking for blood requests near you…
+          </div>
+        ) : alerts.length > 0 ? (
+          alerts.map((req) => (
+            <div key={req.match_id} className="bg-white rounded-xl p-6 border border-[#ee2b2b]/20 shadow-lg shadow-[#ee2b2b]/5">
+              <div className="flex justify-between items-start mb-2 gap-4">
                 <div>
-                  <div className="flex justify-between items-start mb-2">
-                    <h4 className="text-xl font-bold text-slate-900">City General Hospital</h4>
-                    <span className="text-3xl font-black text-[#ee2b2b]">O-</span>
-                  </div>
-                  <div className="flex items-center gap-4 text-sm text-slate-500 mb-4">
-                    <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">near_me</span> 2.4 miles</span>
-                    <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">schedule</span> Needs by 4:00 PM</span>
-                    <span className="flex items-center gap-1 text-green-600 font-bold bg-green-50 px-2 py-0.5 rounded"><span className="material-symbols-outlined text-sm">toll</span> +{rewardTokens.toLocaleString()} Tokens</span>
-                  </div>
-                  <div className="bg-[#ee2b2b]/5 p-3 rounded-lg border border-[#ee2b2b]/10 mb-6">
-                    <p className="text-sm text-slate-700">
-                      <strong className="text-[#ee2b2b] font-bold">AI Impact Prediction:</strong> Your O- donation could support a critical surgical procedure scheduled for tonight. High impact priority.
-                    </p>
-                  </div>
+                  <span className="bg-[#ee2b2b] text-white text-[10px] font-black px-2 py-1 rounded uppercase tracking-tighter">{req.urgency}</span>
+                  <h4 className="text-xl font-bold text-slate-900 mt-2">{req.hospital_name}</h4>
+                  <p className="text-sm text-slate-500">{req.hospital_city}</p>
                 </div>
-                <div className="flex gap-3">
+                <span className="text-3xl font-black text-[#ee2b2b]">{req.blood_group_needed}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500 mb-5">
+                {req.distance_miles != null && (
+                  <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">near_me</span> {req.distance_miles} miles</span>
+                )}
+                <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">water_drop</span> {req.units_required} unit(s) needed</span>
+                {req.alerted_at && (
+                  <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">schedule</span> Alerted {new Date(req.alerted_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                )}
+              </div>
+              {req.status === 'accepted' ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="flex-1 text-sm font-bold text-green-700 bg-green-50 px-4 py-3 rounded-lg">You're confirmed. The hospital is expecting you.</span>
                   <button
-                    onClick={onAccept}
-                    className="flex-1 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold py-3 rounded-lg transition-all shadow-md shadow-[#ee2b2b]/20"
+                    onClick={() => onRespond(req, req.decline_url)}
+                    disabled={respondingId === req.match_id}
+                    className="bg-white hover:bg-slate-50 text-slate-600 font-bold py-3 px-5 rounded-lg transition-all border border-slate-200 disabled:opacity-50"
                   >
-                    Accept Request
+                    I can't make it
                   </button>
-                  <button
-                    onClick={onReject}
-                    className="flex-none bg-white hover:bg-slate-50 text-slate-600 font-bold py-3 px-6 rounded-lg transition-all border border-slate-200"
-                  >
-                    Reject
-                  </button>
-                  <button onClick={openNavigation} className="w-12 h-12 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors">
+                  <button onClick={() => openDirections(`${req.hospital_name}, ${req.hospital_city}`)} className="w-12 h-12 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors" title="Directions">
                     <span className="material-symbols-outlined text-slate-600">map</span>
                   </button>
                 </div>
-              </div>
+              ) : (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => req.accept_url && onRespond(req, req.accept_url)}
+                    disabled={respondingId === req.match_id}
+                    className="flex-1 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold py-3 rounded-lg transition-all shadow-md shadow-[#ee2b2b]/20 disabled:opacity-50"
+                  >
+                    {respondingId === req.match_id ? 'Sending…' : 'Accept Request'}
+                  </button>
+                  <button
+                    onClick={() => onRespond(req, req.decline_url)}
+                    disabled={respondingId === req.match_id}
+                    className="flex-none bg-white hover:bg-slate-50 text-slate-600 font-bold py-3 px-6 rounded-lg transition-all border border-slate-200 disabled:opacity-50"
+                  >
+                    Decline
+                  </button>
+                  <button onClick={() => openDirections(`${req.hospital_name}, ${req.hospital_city}`)} className="w-12 h-12 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors" title="Directions">
+                    <span className="material-symbols-outlined text-slate-600">map</span>
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
+          ))
         ) : (
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center flex flex-col items-center">
             <span className="material-symbols-outlined text-4xl text-slate-400 mb-3">
@@ -408,7 +523,6 @@ function DashboardView({
             </p>
           </div>
         )}
-
         {/* History Table */}
         <div className="bg-white rounded-xl border border-slate-200 p-6 overflow-hidden">
           <h3 className="text-lg font-bold mb-6 text-slate-900">Donation History</h3>
@@ -471,21 +585,22 @@ function DashboardView({
             <h3 className="text-sm font-bold uppercase tracking-widest opacity-80 mb-6">Total Impact</h3>
             <div className="grid grid-cols-2 gap-6">
               <div>
-                <p className="text-4xl font-black mb-1">12</p>
+                <p className="text-4xl font-black mb-1">{totalDonations}</p>
                 <p className="text-[10px] font-bold uppercase opacity-80">Donations</p>
               </div>
               <div>
-                <p className="text-4xl font-black mb-1">36</p>
-                <p className="text-[10px] font-bold uppercase opacity-80">Lives Saved</p>
+                {/* One whole-blood donation can help up to three patients */}
+                <p className="text-4xl font-black mb-1">{totalDonations * 3}</p>
+                <p className="text-[10px] font-bold uppercase opacity-80">Lives Helped</p>
               </div>
             </div>
             <div className="mt-8 pt-6 border-t border-white/20">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-bold">Next Milestone: Gallon Club</span>
-                <span className="text-xs">85%</span>
+                <span className="text-xs font-bold">Next Milestone: {nextMilestone} {nextMilestone === 1 ? 'donation' : 'donations'}</span>
+                <span className="text-xs">{milestonePct}%</span>
               </div>
               <div className="w-full bg-white/20 rounded-full h-1.5">
-                <div className="bg-white rounded-full h-1.5 w-[85%]"></div>
+                <div className="bg-white rounded-full h-1.5" style={{ width: `${milestonePct}%` }}></div>
               </div>
             </div>
           </div>
@@ -527,7 +642,7 @@ function DashboardView({
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900">Centers Near You</h3>
-            <span className="text-[10px] text-slate-400">San Francisco, CA</span>
+            <span className="text-[10px] text-slate-400">{donor?.city ?? ''}</span>
           </div>
           <div className="h-48 bg-slate-200 relative">
             <img alt="Map View" className="w-full h-full object-cover grayscale opacity-60" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQv5H3unlG5_AmOlS9h45HtaApX0js3IFcNkO_5gPwHh64vPlyqVb18f97Gwlblq21VrccZk8lVg0cFHolcS-ZVZeE8gOSBWMBuvfogaU7NcmdChyLLklumMK1_FYsFfidRkukviJ01e90m7jaOAvdI6O003dNWa4x_uib2OqWfzVHELdGgZNzEUlGtuSai7gRr-KRgrQwW2CqMRo9M-vj6TJxJDCFZMyqPYyC4e0057KYc-R-Z_u_GG5UBeR6JqL-5FNMTE3zGe8" />
