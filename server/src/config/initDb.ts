@@ -125,6 +125,17 @@ const initDb = async () => {
       END IF;
     END $$;
 
+    -- Supabase exposes the public schema through its REST API with the public
+    -- anon key. RLS with no policies closes that door; the backend connects as
+    -- the table owner, which bypasses RLS, so the API keeps working.
+    ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE donors ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE hospitals ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE donations ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE blood_inventory ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE blood_requests ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
     -- Haversine Distance Function
     CREATE OR REPLACE FUNCTION calculate_distance(lat1 FLOAT, lon1 FLOAT, lat2 FLOAT, lon2 FLOAT)
     RETURNS FLOAT AS $$
