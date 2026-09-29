@@ -173,7 +173,7 @@ const initDb = async () => {
         delta_lambda FLOAT := (lon2 - lon1) * PI() / 180;
         a FLOAT := SIN(delta_phi / 2) * SIN(delta_phi / 2) + COS(phi1) * COS(phi2) * SIN(delta_lambda / 2) * SIN(delta_lambda / 2);
         c FLOAT := 2 * ATAN2(SQRT(a), SQRT(1 - a));
-        r FLOAT := 3959; -- Radius of earth in miles
+        r FLOAT := 6371; -- Radius of earth in km
     BEGIN
         RETURN r * c;
     END;

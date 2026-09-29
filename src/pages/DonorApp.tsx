@@ -14,7 +14,7 @@ interface NetworkAlert {
   blood_group_needed: string;
   urgency: string;
   units_required: number;
-  distance_miles: number | null;
+  distance_km: number | null;
   alerted_at: string | null;
   accept_url: string | null;
   decline_url: string;
@@ -425,8 +425,8 @@ function DashboardView({
                 <span className="text-3xl font-black text-[#ee2b2b]">{req.blood_group_needed}</span>
               </div>
               <div className="flex flex-wrap items-center gap-4 text-sm text-slate-500 mb-5">
-                {req.distance_miles != null && (
-                  <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">near_me</span> {req.distance_miles} miles</span>
+                {req.distance_km != null && (
+                  <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">near_me</span> {req.distance_km} km</span>
                 )}
                 <span className="flex items-center gap-1"><span className="material-symbols-outlined text-sm">water_drop</span> {req.units_required} unit(s) needed</span>
                 {req.alerted_at && (
@@ -505,7 +505,7 @@ function DashboardView({
                 ) : (
                   donations.map((donation) => (
                     <tr key={donation.id} className="group">
-                      <td className="py-4 text-sm font-medium text-slate-900">{new Date(donation.donation_date).toLocaleDateString()}</td>
+                      <td className="py-4 text-sm font-medium text-slate-900">{new Date(donation.donation_date).toLocaleDateString('en-IN')}</td>
                       <td className="py-4 text-sm text-slate-600">{donation.hospital_name || 'Hospital'}</td>
                       <td className="py-4 text-sm text-slate-600">{donation.units} Units</td>
                       <td className="py-4">

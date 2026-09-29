@@ -24,7 +24,8 @@ const sent = (fetchMock: ReturnType<typeof fakeNetwork>, i: number) => {
 };
 
 test('toE164 accepts international numbers and treats bare 10-digit numbers as Indian', () => {
-    assert.equal(toE164('+14155550100'), '+14155550100');
+    // An NRI donor registering with a UAE mobile keeps their own country code
+    assert.equal(toE164('+971 50 123 4567'), '+971501234567');
     assert.equal(toE164('98765 43210'), '+919876543210');
     assert.equal(toE164('09876543210'), '+919876543210');
     assert.equal(toE164('919876543210'), '+919876543210');

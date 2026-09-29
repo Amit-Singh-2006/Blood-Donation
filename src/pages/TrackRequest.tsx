@@ -229,7 +229,7 @@ function RequestView({ status }: { status: RequestStatus }) {
           <ul className="space-y-2">
             {status.confirmed_donors.map((d, i) => (
               <li key={i} className="flex items-center justify-between text-sm bg-slate-50 rounded-xl px-4 py-3">
-                <span><strong>{d.blood_group}</strong> donor{d.distance_miles != null ? ` · ${d.distance_miles} mi away` : ''}</span>
+                <span><strong>{d.blood_group}</strong> donor{d.distance_km != null ? ` · ${d.distance_km} km away` : ''}</span>
                 <span className={`text-xs font-bold ${d.state === 'donated' ? 'text-green-700' : 'text-blue-700'}`}>{d.state}</span>
               </li>
             ))}

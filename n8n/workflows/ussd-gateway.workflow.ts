@@ -81,7 +81,7 @@ const loadAlerts = node({
     },
     position: [660, 300]
   },
-  output: [{ id: 9, request_id: 1, donor_id: 5, status: 'notified', response_token: 'c10a893e-c001-45a6-a6d6-cb5319951683', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', request_blood_group: 'AB+', urgency: 'Emergency', distance_miles: 41.7, notified_at: '2026-09-29T10:00:00.000Z' }]
+  output: [{ id: 9, request_id: 1, donor_id: 5, status: 'notified', response_token: 'c10a893e-c001-45a6-a6d6-cb5319951683', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', request_blood_group: 'AB+', urgency: 'Emergency', distance_km: 41.7, notified_at: '2026-09-29T10:00:00.000Z' }]
 });
 
 const ussdMenu = node({
@@ -106,6 +106,8 @@ const steps = s.steps;
 const now = Date.now();
 const invalid = 'END Invalid choice. Please dial again.';
 const firstName = (n) => String(n ?? '').trim().split(' ')[0] || 'donor';
+// Indian date format for text shown on the handset: DD/MM/YYYY
+const dmy = (iso) => { const [y, m, d] = String(iso).slice(0, 10).split('-'); return d + '/' + m + '/' + y; };
 const out = { action: 'none', reply: invalid };
 
 if (s.phone === 'invalid') {
@@ -136,7 +138,7 @@ if (s.phone === 'invalid') {
   const eligibleFrom = donor.last_donation_date
     ? Date.parse(donor.last_donation_date + 'T00:00:00Z') + (DEFERRAL_DAYS[donor.gender] ?? DEFERRAL_DAYS.female) * DAY
     : null;
-  const describe = (m) => m.urgency + ' ' + m.request_blood_group + ' - ' + m.hospital_name + (m.distance_miles != null ? ' (' + m.distance_miles + ' mi)' : '');
+  const describe = (m) => m.urgency + ' ' + m.request_blood_group + ' - ' + m.hospital_name + (m.distance_km != null ? ' (' + m.distance_km + ' km)' : '');
 
   if (steps.length === 0) {
     out.reply = 'CON Welcome ' + (donor.source === 'ussd' ? 'back' : firstName(donor.name)) + ' (' + donor.blood_group + ' donor)\\n1. Blood requests for you (' + alerts.length + ')\\n2. My eligibility\\n3. Alerts: ' + (donor.available ? 'ON' : 'OFF');
@@ -155,9 +157,9 @@ if (s.phone === 'invalid') {
     }
   } else if (steps[0] === '2' && steps.length === 1) {
     out.reply = 'END ' + donor.blood_group + ' donor. '
-      + (donor.last_donation_date ? 'Last donation ' + donor.last_donation_date + '. ' : 'No donation recorded yet. ')
+      + (donor.last_donation_date ? 'Last donation ' + dmy(donor.last_donation_date) + '. ' : 'No donation recorded yet. ')
       + (committed ? 'You are booked for a request today.'
-        : eligibleFrom && eligibleFrom > now ? 'You can donate again from ' + new Date(eligibleFrom).toISOString().slice(0, 10) + '.'
+        : eligibleFrom && eligibleFrom > now ? 'You can donate again from ' + dmy(new Date(eligibleFrom).toISOString()) + '.'
           : 'You can donate now.');
   } else if (steps[0] === '3') {
     if (steps.length === 1) {

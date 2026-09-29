@@ -23,7 +23,7 @@ export interface RequestStatus {
   donors_declined: number;
   donors_no_response: number;
   donors_on_standby: number;
-  confirmed_donors: { blood_group: string; distance_miles: number | null; state: string }[];
+  confirmed_donors: { blood_group: string; distance_km: number | null; state: string }[];
   next_check_at: string | null;
   next_step: string;
   timeline: { at: string; event: string }[];

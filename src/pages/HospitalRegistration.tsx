@@ -14,6 +14,17 @@ const passwordProblems = (p: string) => [
     !/[^A-Za-z0-9]/.test(p) && 'a special character',
 ].filter(Boolean) as string[];
 
+// 28 states and 8 union territories
+const INDIAN_STATES = [
+    'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Goa', 'Gujarat', 'Haryana',
+    'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
+    'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana',
+    'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+    'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu', 'Delhi',
+    'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
+];
+const PIN_CODE = /^[1-9][0-9]{5}$/;
+
 export default function HospitalRegistration() {
     const navigate = useNavigate();
     const [currentStep, setCurrentStep] = useState<Step>('basic');
@@ -78,7 +89,7 @@ export default function HospitalRegistration() {
             return formData.hospitalName.trim() !== '' && formData.registrationId.trim() !== '' && formData.hospitalType !== '';
         }
         if (currentStep === 'location') {
-            return formData.address.trim() !== '' && formData.city.trim() !== '' && formData.state.trim() !== '' && formData.zipCode.trim() !== '';
+            return formData.address.trim() !== '' && formData.city.trim() !== '' && formData.state !== '' && PIN_CODE.test(formData.zipCode);
         }
         if (currentStep === 'contact') {
             return formData.email.trim() !== '' && formData.phone.trim() !== '' && passwordProblems(formData.password).length === 0;
@@ -240,7 +251,7 @@ export default function HospitalRegistration() {
                                                 value={formData.hospitalName}
                                                 onChange={(e) => updateFormData('hospitalName', e.target.value)}
                                                 className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
-                                                placeholder="City General Hospital"
+                                                placeholder="e.g. District Hospital, Nashik"
                                             />
                                         </div>
                                     </div>
@@ -253,7 +264,7 @@ export default function HospitalRegistration() {
                                                 value={formData.registrationId}
                                                 onChange={(e) => updateFormData('registrationId', e.target.value)}
                                                 className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
-                                                placeholder="HOSP-2024-XXXX"
+                                                placeholder="Clinical Establishment reg. or blood centre licence no."
                                             />
                                         </div>
                                     </div>
@@ -262,7 +273,7 @@ export default function HospitalRegistration() {
                                 <div className="space-y-1.5">
                                     <label className="text-sm font-bold text-slate-700 ml-1">Establishment Type</label>
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                        {['Government', 'Private', 'NGO', 'Public-Private'].map(type => (
+                                        {['Government', 'Private', 'Trust / NGO', 'Public-Private'].map(type => (
                                             <button
                                                 key={type}
                                                 onClick={() => updateFormData('hospitalType', type)}
@@ -317,22 +328,30 @@ export default function HospitalRegistration() {
                                         />
                                     </div>
                                     <div className="space-y-1.5">
-                                        <label className="text-sm font-bold text-slate-700 ml-1">State</label>
-                                        <input
-                                            type="text"
+                                        <label className="text-sm font-bold text-slate-700 ml-1">State / UT</label>
+                                        <select
                                             value={formData.state}
                                             onChange={(e) => updateFormData('state', e.target.value)}
-                                            className="w-full px-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
-                                        />
+                                            className="w-full px-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900"
+                                        >
+                                            <option value="">Select</option>
+                                            {INDIAN_STATES.map((st) => <option key={st}>{st}</option>)}
+                                        </select>
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-bold text-slate-700 ml-1">PIN Code</label>
                                         <input
                                             type="text"
+                                            inputMode="numeric"
+                                            maxLength={6}
                                             value={formData.zipCode}
-                                            onChange={(e) => updateFormData('zipCode', e.target.value)}
+                                            onChange={(e) => updateFormData('zipCode', e.target.value.replace(/\D/g, ''))}
                                             className="w-full px-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
+                                            placeholder="e.g. 422001"
                                         />
+                                        {formData.zipCode !== '' && !PIN_CODE.test(formData.zipCode) && (
+                                            <p className="text-xs font-bold text-amber-700 ml-1">A PIN code has 6 digits and does not start with 0.</p>
+                                        )}
                                     </div>
                                 </div>
 
@@ -378,7 +397,7 @@ export default function HospitalRegistration() {
                                                 value={formData.email}
                                                 onChange={(e) => updateFormData('email', e.target.value)}
                                                 className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900"
-                                                placeholder="contact@hospital.com"
+                                                placeholder="bloodbank@yourhospital.in"
                                             />
                                         </div>
                                     </div>
@@ -406,7 +425,8 @@ export default function HospitalRegistration() {
                                             type="tel"
                                             value={formData.phone}
                                             onChange={(e) => updateFormData('phone', e.target.value)}
-                                            className="w-full px-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900"
+                                            className="w-full px-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
+                                            placeholder="+91 98765 43210"
                                         />
                                     </div>
                                     <div className="space-y-1.5">
@@ -416,7 +436,7 @@ export default function HospitalRegistration() {
                                             value={formData.website}
                                             onChange={(e) => updateFormData('website', e.target.value)}
                                             className="w-full px-4 py-3.5 bg-slate-50 border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900"
-                                            placeholder="https://www.hospital.com"
+                                            placeholder="https://www.yourhospital.in"
                                         />
                                     </div>
                                 </div>

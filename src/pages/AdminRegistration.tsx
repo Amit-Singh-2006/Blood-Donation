@@ -120,7 +120,7 @@ export default function AdminRegistration() {
                             type="text"
                             value={name}
                             onChange={(e) => setName(e.target.value)}
-                            placeholder="John Doe"
+                            placeholder="e.g. Rahul Verma"
                             className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
                         />
                     </div>
@@ -134,7 +134,7 @@ export default function AdminRegistration() {
                             type="email"
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            placeholder="admin@gmail.com"
+                            placeholder="you@example.com"
                             className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
                         />
                     </div>

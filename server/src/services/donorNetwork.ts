@@ -127,7 +127,7 @@ export interface HospitalDonorView {
     name: string;
     phone: string | null;
     blood_group: string;
-    distance_miles: number | null;
+    distance_km: number | null;
     status: 'accepted' | 'donated' | 'no_show';
     responded_at: string | null;
     donated_url: string | null;

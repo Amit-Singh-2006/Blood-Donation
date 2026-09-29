@@ -45,8 +45,8 @@ export const getMatchedRequests = async (req: AuthRequest, res: Response) => {
         let queryParams: any[] = [recipientGroupsFor(donor.blood_group)];
 
         if (donor.latitude != null && donor.longitude != null) {
-            // Match within ~50 miles radius
-            matchesQuery += ` AND calculate_distance(h.latitude, h.longitude, $2, $3) < 50 `;
+            // Match within 80 km, the same radius the donor network uses
+            matchesQuery += ` AND calculate_distance(h.latitude, h.longitude, $2, $3) < 80 `;
             queryParams.push(donor.latitude, donor.longitude);
         } else {
             // Fallback to city

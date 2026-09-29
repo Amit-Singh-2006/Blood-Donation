@@ -42,8 +42,8 @@ These rules are shared with `server/src/utils/bloodCompatibility.ts`. `server/te
 
 - **ABO/Rh compatibility:** red cells and whole blood. O- is the universal donor and AB+ the universal recipient.
 - **Eligibility:** the donor must be available, not committed to another request, and past their deferral window (90 days for men, 120 days otherwise).
-- **Distance:** within 50 miles. A donor with no coordinates counts if they are in the hospital's city.
-- **Ranking:** by 10-mile proximity band first, then ABO-identical donors, with O- last for non-O- patients (preserves O- supply), then longest time since eligible, then XP.
+- **Distance:** within 80 km. A donor with no coordinates counts if they are in the hospital's city.
+- **Ranking:** by 15 km proximity band first, then ABO-identical donors, with O- last for non-O- patients (preserves O- supply), then longest time since eligible, then XP.
 
 ### Escalation
 

@@ -99,7 +99,7 @@ const loadMatches = node({
     },
     position: [880, 200]
   },
-  output: [{ id: 11, request_id: 1, donor_id: 3, donor_blood_group: 'O+', distance_miles: 8.9, status: 'accepted', notified_at: '2026-09-29T10:00:00.000Z', responded_at: '2026-09-29T10:05:00.000Z' }]
+  output: [{ id: 11, request_id: 1, donor_id: 3, donor_blood_group: 'O+', distance_km: 14.3, status: 'accepted', notified_at: '2026-09-29T10:00:00.000Z', responded_at: '2026-09-29T10:05:00.000Z' }]
 });
 
 const loadDonors = node({
@@ -161,7 +161,7 @@ const views = wanted.map(({ request_id, hospital_token }) => {
         name: firstName(d.name),
         phone: d.phone ?? null,
         blood_group: m.donor_blood_group,
-        distance_miles: m.distance_miles ?? null,
+        distance_km: m.distance_km ?? null,
         status: m.status,
         responded_at: m.responded_at ?? null,
         donated_url: m.status === 'accepted' ? link(m, 'donated') : null,

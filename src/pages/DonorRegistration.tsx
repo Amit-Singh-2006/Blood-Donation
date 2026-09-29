@@ -134,7 +134,7 @@ export default function DonorRegistration() {
                 name="name"
                 value={formData.name}
                 onChange={handleChange}
-                placeholder="John Doe"
+                placeholder="e.g. Priya Sharma"
                 className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
               />
             </div>
@@ -235,7 +235,7 @@ export default function DonorRegistration() {
                 name="email"
                 value={formData.email}
                 onChange={handleChange}
-                placeholder="john@example.com"
+                placeholder="priya.sharma@example.com"
                 className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
               />
             </div>
@@ -266,7 +266,7 @@ export default function DonorRegistration() {
               name="city"
               value={formData.city}
               onChange={handleChange}
-              placeholder="e.g. Seattle"
+              placeholder="e.g. Pune"
               className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
             />
           </div>

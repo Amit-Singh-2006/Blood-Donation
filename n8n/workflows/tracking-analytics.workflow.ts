@@ -65,7 +65,7 @@ const loadTrackingMatches = node({
     },
     position: [660, 200]
   },
-  output: [{ id: 1, request_id: 1, donor_blood_group: 'O+', distance_miles: 8.9, status: 'accepted', notified_at: '2026-09-29T10:00:00.000Z', responded_at: '2026-09-29T10:05:00.000Z' }]
+  output: [{ id: 1, request_id: 1, donor_blood_group: 'O+', distance_km: 14.3, status: 'accepted', notified_at: '2026-09-29T10:00:00.000Z', responded_at: '2026-09-29T10:05:00.000Z' }]
 });
 
 const buildTracking = node({
@@ -143,7 +143,7 @@ const summary = {
   donors_no_response: count('expired'),
   donors_on_standby: count('queued'),
   confirmed_donors: matches.filter((m) => ['accepted', 'donated'].includes(m.status))
-    .map((m) => ({ blood_group: m.donor_blood_group, distance_miles: m.distance_miles, state: m.status === 'donated' ? 'donated' : 'on the way' })),
+    .map((m) => ({ blood_group: m.donor_blood_group, distance_km: m.distance_km, state: m.status === 'donated' ? 'donated' : 'on the way' })),
   next_check_at: nextCheck,
   next_step: NEXT_STEP[req.status] ?? '',
   timeline,
@@ -157,7 +157,7 @@ const body = '<div class="card"><div class="brand">LifeLink</div><h1>' + esc(req
   + '<div class="grid"><div class="stat"><b>' + summary.compatible_donors_found + '</b>compatible donors found</div><div class="stat"><b>' + alerted.length + '</b>alerted so far</div>'
   + '<div class="stat"><b>' + summary.donors_on_standby + '</b>on standby</div><div class="stat"><b>' + summary.donors_no_response + '</b>no reply yet</div></div></div>'
   + '<div class="card"><b>What happens next</b><p>' + esc(summary.next_step) + '</p>' + (nextCheck ? '<p class="muted">Next check: ' + esc(fmt(nextCheck)) + ' IST</p>' : '') + '</div>'
-  + (summary.confirmed_donors.length ? '<div class="card"><b>Confirmed donors</b><ol>' + summary.confirmed_donors.map((d) => '<li>' + esc(d.blood_group) + ' donor' + (d.distance_miles != null ? ', ' + esc(d.distance_miles) + ' mi away' : '') + ' &middot; ' + esc(d.state) + '</li>').join('') + '</ol></div>' : '')
+  + (summary.confirmed_donors.length ? '<div class="card"><b>Confirmed donors</b><ol>' + summary.confirmed_donors.map((d) => '<li>' + esc(d.blood_group) + ' donor' + (d.distance_km != null ? ', ' + esc(d.distance_km) + ' km away' : '') + ' &middot; ' + esc(d.state) + '</li>').join('') + '</ol></div>' : '')
   + '<div class="card"><b>Timeline</b><ol>' + timeline.map((t) => '<li>' + esc(t.event) + '<br><span class="muted">' + esc(fmt(t.at)) + ' IST</span></li>').join('') + '</ol>'
   + '<p class="muted">This page refreshes every 2 minutes and never shows donor identities.</p></div>';
 

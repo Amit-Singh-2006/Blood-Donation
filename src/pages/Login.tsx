@@ -174,7 +174,7 @@ export default function Login() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-slate-200 rounded-lg focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] transition-all text-slate-900 placeholder:text-slate-400"
-                      placeholder="John Doe"
+                      placeholder="e.g. Priya Sharma"
                     />
                   </div>
                 </div>

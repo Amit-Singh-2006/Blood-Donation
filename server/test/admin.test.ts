@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { fakeRes } from './helpers';
 import * as db from '../src/config/db';
 import { getDonors, getOverview } from '../src/controllers/adminController';
+import { inviteCodeMatches } from '../src/controllers/authController';
 
 afterEach(() => {
     mock.restoreAll();
@@ -50,4 +51,14 @@ test('donor list never selects password hashes', async () => {
     const sql = queryMock.mock.calls[0]!.arguments[0] as string;
     assert.doesNotMatch(sql, /password/i);
     assert.match(sql, /LIMIT 500/);
+});
+
+test('admin invite code must match exactly, and sign-up is closed when it is unset', () => {
+    assert.equal(inviteCodeMatches('Ab3-xyz', 'Ab3-xyz'), true);
+    assert.equal(inviteCodeMatches('ab3-xyz', 'Ab3-xyz'), false);
+    assert.equal(inviteCodeMatches('Ab3-xyz ', 'Ab3-xyz'), false);
+    assert.equal(inviteCodeMatches('', 'Ab3-xyz'), false);
+    assert.equal(inviteCodeMatches(undefined, 'Ab3-xyz'), false);
+    assert.equal(inviteCodeMatches({ $ne: '' }, 'Ab3-xyz'), false);
+    assert.equal(inviteCodeMatches('anything', ''), false);
 });

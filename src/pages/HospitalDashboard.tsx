@@ -35,7 +35,7 @@ interface LiveDonor {
   name: string;
   phone: string | null;
   blood_group: string;
-  distance_miles: number | null;
+  distance_km: number | null;
   status: 'accepted' | 'donated' | 'no_show';
   responded_at: string | null;
   donated_url: string | null;
@@ -818,7 +818,7 @@ function RequestCard({ req, open, onToggle, onRefresh }: { req: HospitalRequest;
                         <div>
                           <p className="font-black text-slate-900">
                             {d.name} <span className="text-[#ee2b2b]">{d.blood_group}</span>
-                            {d.distance_miles != null && <span className="text-xs font-bold text-slate-400"> · {d.distance_miles} mi away</span>}
+                            {d.distance_km != null && <span className="text-xs font-bold text-slate-400"> · {d.distance_km} km away</span>}
                           </p>
                           <p className="text-xs text-slate-500">
                             {d.status === 'donated' ? 'Donated' : d.status === 'no_show' ? 'Did not come' : 'On the way'}

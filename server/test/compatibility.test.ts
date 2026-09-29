@@ -47,7 +47,7 @@ test('getPotentialDonors searches every compatible group, applies the deferral w
     assert.deepEqual(params.slice(2), [28.56, 77.21]);
     assert.ok(sql.includes('d.blood_group = ANY($1)'));
     assert.ok(sql.includes(ELIGIBILITY_WINDOW_SQL));
-    assert.match(sql, /ORDER BY distance_miles ASC NULLS LAST, \(d\.blood_group = \$2\) DESC/);
+    assert.match(sql, /ORDER BY distance_km ASC NULLS LAST, \(d\.blood_group = \$2\) DESC/);
 });
 
 test('getPotentialDonors falls back to the hospital city without coordinates', async () => {
@@ -62,7 +62,7 @@ test('getPotentialDonors falls back to the hospital city without coordinates', a
 
     assert.deepEqual(calls[1]!.params, [['O-', 'O+'], 'O+', 7]);
     assert.ok(calls[1]!.sql.includes('d.city = (SELECT city FROM hospitals WHERE user_id = $3)'));
-    assert.ok(calls[1]!.sql.includes('NULL AS distance_miles'));
+    assert.ok(calls[1]!.sql.includes('NULL AS distance_km'));
 });
 
 test('getMatchedRequests shows a donor every open request their blood is compatible with', async () => {

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { createHash, timingSafeEqual } from 'crypto';
 import { query } from '../config/db';
 import { authCookieOptions } from '../utils/authCookie';
 import { enrolDonor } from '../services/donorNetwork';
@@ -16,6 +17,13 @@ import {
 dotenv.config();
 
 const JWT_EXPIRY_MS = 30 * 60 * 1000; // 30 minutes in milliseconds
+
+// Constant-time check of the admin invite code; unset means admin sign-up is closed
+export const inviteCodeMatches = (given: unknown, expected = process.env.ADMIN_INVITE_CODE) => {
+    if (!expected || typeof given !== 'string' || !given) return false;
+    const digest = (v: string) => createHash('sha256').update(v).digest();
+    return timingSafeEqual(digest(given), digest(expected));
+};
 
 /**
  * POST /auth/register
@@ -42,9 +50,7 @@ export const register = async (req: Request, res: Response) => {
         // Requires secret invite code + enforces single-admin constraint.
         // Prevents: Privilege Escalation, Vertical Access Control Bypass
         if (role === 'admin') {
-            const inviteCode = req.body.admin_invite_code;
-            const validCode = process.env.ADMIN_INVITE_CODE;
-            if (!inviteCode || inviteCode !== validCode) {
+            if (!inviteCodeMatches(req.body.admin_invite_code)) {
                 logSecurityEvent('MASS_ASSIGN', req, 'Admin registration attempt without valid invite code');
                 return res.status(403).json({ message: 'Invalid or missing admin invite code' });
             }

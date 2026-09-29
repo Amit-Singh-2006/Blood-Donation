@@ -241,8 +241,8 @@ const compatibilityEngine = node({
       language: 'javaScript',
       jsCode: `// Same rules as server/src/utils/bloodCompatibility.ts: ABO/Rh-compatible,
 // available donors past their deferral window and not already committed to
-// another request, within 50 miles (or the hospital's city). Ranked by
-// proximity (10-mile bands), then ABO-identical donors first and universal O-
+// another request, within 80 km (or the hospital's city). Ranked by
+// proximity (15 km bands), then ABO-identical donors first and universal O-
 // last (O- is kept for patients who can only take O-), then longest since
 // eligible, then XP. The top wave is alerted now; the rest wait in the queue.
 const crypto = require('crypto');
@@ -261,16 +261,17 @@ const COMPATIBLE_DONORS = {
   'AB+': ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'],
 };
 const DEFERRAL_DAYS = { male: 90, female: 120 };
-const RADIUS_MILES = 50;
-const CITY_ESTIMATE_MILES = 10;
+const RADIUS_KM = 80;
+const BAND_KM = 15;
+const CITY_ESTIMATE_KM = 15;
 const DAY = 86400000;
 const now = Date.now();
 
 const toRad = (deg) => (deg * Math.PI) / 180;
-const distanceMiles = (lat1, lon1, lat2, lon2) => {
+const distanceKm = (lat1, lon1, lat2, lon2) => {
   const a = Math.sin(toRad(lat2 - lat1) / 2) ** 2
     + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(toRad(lon2 - lon1) / 2) ** 2;
-  return 3959 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 const eligibleFrom = (d) => d.last_donation_date
   ? Date.parse(d.last_donation_date + 'T00:00:00Z') + (DEFERRAL_DAYS[d.gender] ?? DEFERRAL_DAYS.female) * DAY
@@ -296,8 +297,8 @@ for (const item of $input.all()) {
 
   let distance = null;
   if (hasCoords && d.latitude != null && d.longitude != null) {
-    distance = distanceMiles(d.latitude, d.longitude, request.latitude, request.longitude);
-    if (distance >= RADIUS_MILES) continue;
+    distance = distanceKm(d.latitude, d.longitude, request.latitude, request.longitude);
+    if (distance >= RADIUS_KM) continue;
   } else if (!sameCity(d.city)) {
     continue;
   }
@@ -306,7 +307,7 @@ for (const item of $input.all()) {
     d,
     distance,
     tier,
-    band: Math.floor((distance ?? CITY_ESTIMATE_MILES) / 10),
+    band: Math.floor((distance ?? CITY_ESTIMATE_KM) / BAND_KM),
     daysEligible: from === null ? 3650 : Math.floor((now - from) / DAY),
   });
 }
@@ -316,7 +317,7 @@ const summary = {
   request_id: saved.id,
   compatible_groups: compatible,
   compatible_donors: candidates.length,
-  match_rule: hasCoords ? 'within ' + RADIUS_MILES + ' miles' : 'same city',
+  match_rule: hasCoords ? 'within ' + RADIUS_KM + ' km' : 'same city',
   matched_in_ms: Date.now() - validated.received_at_ms,
 };
 if (candidates.length === 0) return [{ json: { matched: false, ...summary } }];
@@ -333,7 +334,7 @@ return candidates.map((c, i) => {
       donor_blood_group: c.d.blood_group,
       request_blood_group: request.blood_group,
       rank: i + 1,
-      distance_miles: c.distance === null ? null : Math.round(c.distance * 10) / 10,
+      distance_km: c.distance === null ? null : Math.round(c.distance * 10) / 10,
       exact_match: c.tier === 0,
       status: alertNow ? 'notified' : 'queued',
       response_token: crypto.randomUUID(),
@@ -350,7 +351,7 @@ return candidates.map((c, i) => {
     },
     position: [1100, 300]
   },
-  output: [{ matched: true, request_id: 1, compatible_groups: ['O-', 'O+'], compatible_donors: 9, match_rule: 'within 50 miles', matched_in_ms: 420, donor_id: 3, donor_blood_group: 'O+', request_blood_group: 'AB+', rank: 1, distance_miles: 8.9, exact_match: false, status: 'notified', response_token: 'c3', channel: 'whatsapp', contact: '+915550000103', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', urgency: 'Emergency', units_required: 2, notified_at: '2026-09-29T10:00:00.000Z' }]
+  output: [{ matched: true, request_id: 1, compatible_groups: ['O-', 'O+'], compatible_donors: 9, match_rule: 'within 80 km', matched_in_ms: 420, donor_id: 3, donor_blood_group: 'O+', request_blood_group: 'AB+', rank: 1, distance_km: 14.3, exact_match: false, status: 'notified', response_token: 'c3', channel: 'whatsapp', contact: '+915550000103', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', urgency: 'Emergency', units_required: 2, notified_at: '2026-09-29T10:00:00.000Z' }]
 });
 
 const anyDonors = ifElse({
@@ -465,7 +466,7 @@ const saveMatches = node({
           donor_blood_group: expr('{{ $json.donor_blood_group }}'),
           request_blood_group: expr('{{ $json.request_blood_group }}'),
           rank: expr('{{ $json.rank }}'),
-          distance_miles: expr('{{ $json.distance_miles }}'),
+          distance_km: expr('{{ $json.distance_km }}'),
           exact_match: expr('{{ $json.exact_match }}'),
           status: expr('{{ $json.status }}'),
           response_token: expr('{{ $json.response_token }}'),
@@ -484,7 +485,7 @@ const saveMatches = node({
           { id: 'donor_blood_group', displayName: 'donor_blood_group', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
           { id: 'request_blood_group', displayName: 'request_blood_group', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
           { id: 'rank', displayName: 'rank', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: true },
-          { id: 'distance_miles', displayName: 'distance_miles', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: true },
+          { id: 'distance_km', displayName: 'distance_km', required: false, defaultMatch: false, display: true, type: 'number', canBeUsedToMatch: true },
           { id: 'exact_match', displayName: 'exact_match', required: false, defaultMatch: false, display: true, type: 'boolean', canBeUsedToMatch: true },
           { id: 'status', displayName: 'status', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
           { id: 'response_token', displayName: 'response_token', required: false, defaultMatch: false, display: true, type: 'string', canBeUsedToMatch: true },
@@ -501,7 +502,7 @@ const saveMatches = node({
     },
     position: [1540, 200]
   },
-  output: [{ id: 11, request_id: 1, donor_id: 3, donor_blood_group: 'O+', request_blood_group: 'AB+', rank: 1, distance_miles: 8.9, status: 'notified', response_token: 'c3', channel: 'whatsapp', contact: '+915550000103', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', urgency: 'Emergency', units_required: 2, notified_at: '2026-09-29T10:00:00.000Z' }]
+  output: [{ id: 11, request_id: 1, donor_id: 3, donor_blood_group: 'O+', request_blood_group: 'AB+', rank: 1, distance_km: 14.3, status: 'notified', response_token: 'c3', channel: 'whatsapp', contact: '+915550000103', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', urgency: 'Emergency', units_required: 2, notified_at: '2026-09-29T10:00:00.000Z' }]
 });
 
 const firstWave = node({
@@ -518,7 +519,7 @@ const firstWave = node({
     },
     position: [1760, 100]
   },
-  output: [{ id: 11, request_id: 1, donor_id: 3, donor_blood_group: 'O+', request_blood_group: 'AB+', rank: 1, distance_miles: 8.9, status: 'notified', response_token: 'c3', channel: 'whatsapp', contact: '+915550000103', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', urgency: 'Emergency', units_required: 2, notified_at: '2026-09-29T10:00:00.000Z' }]
+  output: [{ id: 11, request_id: 1, donor_id: 3, donor_blood_group: 'O+', request_blood_group: 'AB+', rank: 1, distance_km: 14.3, status: 'notified', response_token: 'c3', channel: 'whatsapp', contact: '+915550000103', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', urgency: 'Emergency', units_required: 2, notified_at: '2026-09-29T10:00:00.000Z' }]
 });
 
 const composeAlert = node({
@@ -539,9 +540,9 @@ const composeAlert = node({
           { id: 'a-accept', name: 'accept_url', value: expr('https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=accept'), type: 'string' },
           { id: 'a-decline', name: 'decline_url', value: expr('https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=decline'), type: 'string' },
           { id: 'a-title', name: 'title', value: expr('{{ $json.urgency }}: {{ $json.request_blood_group }} blood needed at {{ $json.hospital_name }}'), type: 'string' },
-          { id: 'a-message', name: 'message', value: expr('{{ $json.hospital_name }} ({{ $json.hospital_city }}) needs {{ $json.units_required }} unit(s) for {{ /^[AO]/.test($json.request_blood_group) ? "an" : "a" }} {{ $json.request_blood_group }} patient{{ $json.distance_miles != null ? ", " + $json.distance_miles + " miles from you" : "" }}. Your {{ $json.donor_blood_group }} blood is compatible. Can you donate today? Tap YES or NO.'), type: 'string' },
-          { id: 'a-sms', name: 'sms_text', value: expr('LifeLink {{ $json.urgency }}: {{ $json.request_blood_group }} blood needed at {{ $json.hospital_name }}{{ $json.distance_miles != null ? " (" + $json.distance_miles + " mi)" : "" }}. Can you donate today? YES: https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=accept NO: https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=decline'), type: 'string' },
-          { id: 'a-whatsapp', name: 'wa_text', value: expr('🩸 *LifeLink {{ $json.urgency }} request*\n{{ $json.request_blood_group }} blood is needed at *{{ $json.hospital_name }}* ({{ $json.hospital_city }}){{ $json.distance_miles != null ? ", " + $json.distance_miles + " miles from you" : "" }}.\nYour {{ $json.donor_blood_group }} blood is compatible. Can you donate today?\n\n✅ YES: https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=accept\n❌ NO: https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=decline'), type: 'string' },
+          { id: 'a-message', name: 'message', value: expr('{{ $json.hospital_name }} ({{ $json.hospital_city }}) needs {{ $json.units_required }} unit(s) for {{ /^[AO]/.test($json.request_blood_group) ? "an" : "a" }} {{ $json.request_blood_group }} patient{{ $json.distance_km != null ? ", " + $json.distance_km + " km from you" : "" }}. Your {{ $json.donor_blood_group }} blood is compatible. Can you donate today? Tap YES or NO.'), type: 'string' },
+          { id: 'a-sms', name: 'sms_text', value: expr('LifeLink {{ $json.urgency }}: {{ $json.request_blood_group }} blood needed at {{ $json.hospital_name }}{{ $json.distance_km != null ? " (" + $json.distance_km + " km)" : "" }}. Can you donate today? YES: https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=accept NO: https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=decline'), type: 'string' },
+          { id: 'a-whatsapp', name: 'wa_text', value: expr('🩸 *LifeLink {{ $json.urgency }} request*\n{{ $json.request_blood_group }} blood is needed at *{{ $json.hospital_name }}* ({{ $json.hospital_city }}){{ $json.distance_km != null ? ", " + $json.distance_km + " km from you" : "" }}.\nYour {{ $json.donor_blood_group }} blood is compatible. Can you donate today?\n\n✅ YES: https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=accept\n❌ NO: https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=decline'), type: 'string' },
           { id: 'a-hospital', name: 'hospital_name', value: expr('{{ $json.hospital_name }}'), type: 'string' },
           { id: 'a-group', name: 'request_blood_group', value: expr('{{ $json.request_blood_group }}'), type: 'string' }
         ]
@@ -735,7 +736,7 @@ const respondDispatched = node({
     name: 'Respond: Request Dispatched',
     parameters: {
       respondWith: 'json',
-      responseBody: expr('{{ { status: "dispatched", request_id: $("Create Request").first().json.id, blood_group: $("Create Request").first().json.blood_group, urgency: $("Create Request").first().json.urgency, units_required: $("Create Request").first().json.units_required, compatible_groups: $("Compatibility Engine").first().json.compatible_groups, match_rule: $("Compatibility Engine").first().json.match_rule, matched_in_ms: $("Compatibility Engine").first().json.matched_in_ms, compatible_donors: $("Compatibility Engine").all().length, donors_alerted: $("Save Ranked Matches").all().filter(i => i.json.status === "notified").map(i => ({ rank: i.json.rank, blood_group: i.json.donor_blood_group, distance_miles: i.json.distance_miles, channel: i.json.channel })), donors_on_standby: $("Save Ranked Matches").all().filter(i => i.json.status === "queued").length, escalation_minutes: $("Create Request").first().json.escalation_minutes, next_escalation_at: $now.plus({ minutes: $("Create Request").first().json.escalation_minutes }).toISO(), tracking_url: "https://amitsingh7291.app.n8n.cloud/webhook/lifelink/request-status?token=" + $("Create Request").first().json.status_token, hospital_token: $("Create Request").first().json.hospital_token, hospital_actions: "Confirm a donation: GET /webhook/lifelink/donor-response?m=<match_id>&h=<hospital_token>&a=donated (or a=no_show). Cancel: /webhook/lifelink/donor-response?r=<request_id>&h=<hospital_token>&a=cancel" } }}'),
+      responseBody: expr('{{ { status: "dispatched", request_id: $("Create Request").first().json.id, blood_group: $("Create Request").first().json.blood_group, urgency: $("Create Request").first().json.urgency, units_required: $("Create Request").first().json.units_required, compatible_groups: $("Compatibility Engine").first().json.compatible_groups, match_rule: $("Compatibility Engine").first().json.match_rule, matched_in_ms: $("Compatibility Engine").first().json.matched_in_ms, compatible_donors: $("Compatibility Engine").all().length, donors_alerted: $("Save Ranked Matches").all().filter(i => i.json.status === "notified").map(i => ({ rank: i.json.rank, blood_group: i.json.donor_blood_group, distance_km: i.json.distance_km, channel: i.json.channel })), donors_on_standby: $("Save Ranked Matches").all().filter(i => i.json.status === "queued").length, escalation_minutes: $("Create Request").first().json.escalation_minutes, next_escalation_at: $now.plus({ minutes: $("Create Request").first().json.escalation_minutes }).toISO(), tracking_url: "https://amitsingh7291.app.n8n.cloud/webhook/lifelink/request-status?token=" + $("Create Request").first().json.status_token, hospital_token: $("Create Request").first().json.hospital_token, hospital_actions: "Confirm a donation: GET /webhook/lifelink/donor-response?m=<match_id>&h=<hospital_token>&a=donated (or a=no_show). Cancel: /webhook/lifelink/donor-response?r=<request_id>&h=<hospital_token>&a=cancel" } }}'),
       options: { responseCode: 201 }
     },
     position: [1980, 420]
@@ -946,7 +947,7 @@ const applyUpdates = node({
     },
     position: [3520, 380]
   },
-  output: [{ id: 17, request_id: 1, donor_id: 9, status: 'notified', response_token: 'd4', urgency: 'Emergency', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', request_blood_group: 'AB+', donor_blood_group: 'A+', units_required: 2, distance_miles: null, channel: 'sms', contact: '+915550000109' }]
+  output: [{ id: 17, request_id: 1, donor_id: 9, status: 'notified', response_token: 'd4', urgency: 'Emergency', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', request_blood_group: 'AB+', donor_blood_group: 'A+', units_required: 2, distance_km: null, channel: 'sms', contact: '+915550000109' }]
 });
 
 const newlyNotified = node({
@@ -963,7 +964,7 @@ const newlyNotified = node({
     },
     position: [3740, 380]
   },
-  output: [{ id: 17, request_id: 1, donor_id: 3, donor_blood_group: 'O+', request_blood_group: 'AB+', rank: 1, distance_miles: 8.9, status: 'notified', response_token: 'c3', channel: 'whatsapp', contact: '+915550000103', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', urgency: 'Emergency', units_required: 2, notified_at: '2026-09-29T10:00:00.000Z' }]
+  output: [{ id: 17, request_id: 1, donor_id: 3, donor_blood_group: 'O+', request_blood_group: 'AB+', rank: 1, distance_km: 14.3, status: 'notified', response_token: 'c3', channel: 'whatsapp', contact: '+915550000103', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', urgency: 'Emergency', units_required: 2, notified_at: '2026-09-29T10:00:00.000Z' }]
 });
 
 const nextStep = switchCase({

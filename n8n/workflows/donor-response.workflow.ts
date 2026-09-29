@@ -65,7 +65,7 @@ const findMatch = node({
     },
     position: [440, 400]
   },
-  output: [{ id: 11, request_id: 1, donor_id: 3, donor_blood_group: 'O+', request_blood_group: 'AB+', rank: 1, distance_miles: 8.9, status: 'notified', response_token: '6f1c2b3a-1111-4222-8333-944455556666', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi' }]
+  output: [{ id: 11, request_id: 1, donor_id: 3, donor_blood_group: 'O+', request_blood_group: 'AB+', rank: 1, distance_km: 14.3, status: 'notified', response_token: '6f1c2b3a-1111-4222-8333-944455556666', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi' }]
 });
 
 const findRequest = node({
@@ -264,7 +264,7 @@ if (!donorLinkOk && !hospitalLinkOk) {
     hospitalNote(
       'donor_accepted',
       'Donor confirmed for ' + req.blood_group + ' (' + committed + '/' + req.units_required + ' units)',
-      firstName(donor.name) + ' (' + match.donor_blood_group + (match.distance_miles != null ? ', ' + match.distance_miles + ' mi away' : '')
+      firstName(donor.name) + ' (' + match.donor_blood_group + (match.distance_km != null ? ', ' + match.distance_km + ' km away' : '')
         + ', phone ' + (donor.phone || 'n/a') + ') accepted ' + minutes + ' min after the request.'
         + (fulfilled ? ' All units are now covered.' : '') + hospitalLinks(match),
     );

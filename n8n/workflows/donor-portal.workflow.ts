@@ -116,7 +116,7 @@ const loadAlerts = node({
     },
     position: [880, 200]
   },
-  output: [{ id: 11, request_id: 1, donor_id: 3, request_blood_group: 'AB+', distance_miles: 8.9, status: 'notified', response_token: 'c3', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', urgency: 'Emergency', units_required: 2, notified_at: '2026-09-29T10:00:00.000Z', responded_at: null }]
+  output: [{ id: 11, request_id: 1, donor_id: 3, request_blood_group: 'AB+', distance_km: 14.3, status: 'notified', response_token: 'c3', hospital_name: 'AIIMS Trauma Centre', hospital_city: 'Delhi', urgency: 'Emergency', units_required: 2, notified_at: '2026-09-29T10:00:00.000Z', responded_at: null }]
 });
 
 const buildView = node({
@@ -171,7 +171,7 @@ const alerts = matches
     blood_group_needed: m.request_blood_group,
     urgency: m.urgency,
     units_required: m.units_required,
-    distance_miles: m.distance_miles,
+    distance_km: m.distance_km,
     alerted_at: m.notified_at,
     accept_url: m.status === 'notified' ? link(m, 'accept') : null,
     // After accepting, the decline link withdraws and alerts the next donor

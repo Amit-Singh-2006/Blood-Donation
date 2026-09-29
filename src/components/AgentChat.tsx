@@ -150,7 +150,7 @@ async function executeTool(name: string, args: any, onAction?: (action: string, 
                 const data = await apiFetch('/hospital/donations');
                 if (!data || data.length === 0) return 'No donations recorded for this hospital yet.';
                 const lines = data.slice(0, 5).map((d: any) =>
-                    `• ${d.donor_name}: ${d.units} unit(s) on ${new Date(d.donation_date).toLocaleDateString()}`
+                    `• ${d.donor_name}: ${d.units} unit(s) on ${new Date(d.donation_date).toLocaleDateString('en-IN')}`
                 ).join('\n');
                 return `Recent donations received by your hospital:\n${lines}\n\nSYSTEM: You MUST list these donors and their donation dates in your final response.`;
             }
@@ -166,7 +166,7 @@ async function executeTool(name: string, args: any, onAction?: (action: string, 
                 const alerts = ((await apiFetch('/donor/network')).alerts ?? []).filter((a: any) => a.status === 'awaiting_reply');
                 if (alerts.length === 0) return 'There are no blood requests waiting for this donor right now.';
                 const lines = alerts.map((a: any, i: number) =>
-                    `${i + 1}. ${a.units_required} unit(s) of ${a.blood_group_needed} at ${a.hospital_name}, ${a.hospital_city} (${a.urgency}${a.distance_miles != null ? `, ${a.distance_miles} miles away` : ''})`
+                    `${i + 1}. ${a.units_required} unit(s) of ${a.blood_group_needed} at ${a.hospital_name}, ${a.hospital_city} (${a.urgency}${a.distance_km != null ? `, ${a.distance_km} km away` : ''})`
                 ).join('\n');
                 return `Requests waiting for the donor's reply:\n${lines}\n\nSYSTEM INSTRUCTION: List these requests to the user and ask whether they want to accept the first one.`;
             }
@@ -311,7 +311,7 @@ export default function AgentChat({ isOpen, onClose, context, onAction }: AgentC
                 id: '0',
                 role: 'assistant',
                 text: `👋 Hi! I'm **LifeLink AI** — your ${contextLabels[context]} assistant.\n\nI can take real actions: check inventory, raise emergency requests, view data, and more. Just ask me anything!`,
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
             }]);
         }
     }, [isOpen]);
@@ -328,7 +328,7 @@ export default function AgentChat({ isOpen, onClose, context, onAction }: AgentC
         setMessages(prev => [...prev, {
             ...msg,
             id: Date.now().toString() + Math.random(),
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
         }]);
     };
 

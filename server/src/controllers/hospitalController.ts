@@ -294,14 +294,14 @@ export const getPotentialDonors = async (req: AuthRequest, res: Response) => {
         }
 
         // 2. Compatibility engine: ABO/Rh-compatible donors who are eligible and past
-        //    their deferral window, within 50 miles (or in the hospital's city)
+        //    their deferral window, within 80 km (or in the hospital's city)
         const queryParams: any[] = [compatibleDonorGroups(request.blood_group), request.blood_group];
         let distanceSql = 'NULL';
         let locationFilter: string;
 
         if (request.latitude != null && request.longitude != null) {
             distanceSql = 'calculate_distance(d.latitude, d.longitude, $3, $4)';
-            locationFilter = `d.latitude IS NOT NULL AND ${distanceSql} < 50`;
+            locationFilter = `d.latitude IS NOT NULL AND ${distanceSql} < 80`;
             queryParams.push(request.latitude, request.longitude);
         } else {
             // Fallback to hospital city
@@ -313,14 +313,14 @@ export const getPotentialDonors = async (req: AuthRequest, res: Response) => {
         // the patients who can only take O-), then XP
         const matchesQuery = `
              SELECT u.name, d.blood_group, d.city, d.phone, d.is_eligible, d.xp_points,
-                    ${distanceSql} AS distance_miles
+                    ${distanceSql} AS distance_km
              FROM donors d
              JOIN users u ON d.user_id = u.id
              WHERE d.blood_group = ANY($1)
              AND d.is_eligible = TRUE
              AND ${ELIGIBILITY_WINDOW_SQL}
              AND ${locationFilter}
-             ORDER BY distance_miles ASC NULLS LAST, (d.blood_group = $2) DESC, d.xp_points DESC NULLS LAST`;
+             ORDER BY distance_km ASC NULLS LAST, (d.blood_group = $2) DESC, d.xp_points DESC NULLS LAST`;
 
         const donors = await query(matchesQuery, queryParams);
 

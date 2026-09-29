@@ -13,7 +13,7 @@ const STEPS = [
   {
     icon: 'join_inner',
     title: 'We find compatible, eligible donors nearby',
-    text: 'Donors are matched on red-cell compatibility (ABO and Rh), within 50 miles or in the same city, and only if they are past the rest period of 90 days for men or 120 days for women since their last donation. Exact-group donors are asked first and O- donors last, so O- stays available for patients who can only take O-.',
+    text: 'Donors are matched on red-cell compatibility (ABO and Rh), within 80 km or in the same city, and only if they are past the rest period of 90 days for men or 120 days for women since their last donation. Exact-group donors are asked first and O- donors last, so O- stays available for patients who can only take O-.',
   },
   {
     icon: 'sms',

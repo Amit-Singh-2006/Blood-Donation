@@ -645,7 +645,7 @@ function SettingsView({ user, overview }: { user: any; overview: Overview | null
 
       <div className="bg-white rounded-2xl border border-slate-200 p-6 text-sm text-slate-600 space-y-2">
         <h3 className="text-lg font-black text-slate-900">Matching rules in force</h3>
-        <p>ABO/Rh red-cell compatibility; donors within 50 miles or in the hospital's city; rest period of 90 days for men and 120 for women; O- kept for patients who need it.</p>
+        <p>ABO/Rh red-cell compatibility; donors within 80 km or in the hospital's city; rest period of 90 days for men and 120 for women; O- kept for patients who need it.</p>
         <p>Escalation: Emergency every 10 minutes, Urgent every 20, Normal every 60 (10 minutes when blood is needed within 2 hours). Requests stop escalating after 12 hours.</p>
       </div>
     </div>
