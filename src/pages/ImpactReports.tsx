@@ -2,9 +2,11 @@ import React, { useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { BarChart3, ArrowLeft } from 'lucide-react';
+import { formatMinutes, useNetworkAnalytics } from '../lib/network';
 
 export default function ImpactReports() {
     const navigate = useNavigate();
+    const { data: stats, error } = useNetworkAnalytics();
 
     useEffect(() => {
         window.scrollTo(0, 0);
@@ -37,28 +39,25 @@ export default function ImpactReports() {
                     </div>
                     <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
                         <p className="text-lg text-slate-600 leading-relaxed overflow-hidden">
-                            We believe in radical transparency. Our impact reports reflect the tangible difference our network has made across the country.
+                            These numbers come live from the LifeLink donor network, not from a brochure.
                         </p>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
-                            <div className="text-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                <h3 className="text-3xl font-black text-slate-900">42K</h3>
-                                <p className="text-xs font-bold text-slate-500 uppercase mt-1">Lives Saved</p>
-                            </div>
-                            <div className="text-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                <h3 className="text-3xl font-black text-slate-900">14K</h3>
-                                <p className="text-xs font-bold text-slate-500 uppercase mt-1">Active Donors</p>
-                            </div>
-                            <div className="text-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                <h3 className="text-3xl font-black text-slate-900">120+</h3>
-                                <p className="text-xs font-bold text-slate-500 uppercase mt-1">Hospitals</p>
-                            </div>
-                            <div className="text-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                <h3 className="text-3xl font-black text-[#ee2b2b]">12m</h3>
-                                <p className="text-xs font-bold text-slate-500 uppercase mt-1">Avg Response</p>
-                            </div>
+                            {[
+                                ['Registered Donors', stats?.donor_pool.registered],
+                                ['Eligible Now', stats?.donor_pool.eligible_now],
+                                ['Requests Covered', stats?.requests.covered_pct != null ? Math.round(stats.requests.covered_pct) + '%' : undefined],
+                                ['Donations Logged', stats?.responses.donations_logged],
+                            ].map(([label, value]) => (
+                                <div key={label as string} className="text-center p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <h3 className="text-3xl font-black text-slate-900">{value ?? '–'}</h3>
+                                    <p className="text-xs font-bold text-slate-500 uppercase mt-1">{label}</p>
+                                </div>
+                            ))}
                         </div>
                         <p className="text-sm text-slate-500 text-center mt-6">
-                            Our network successfully matches 94% of requested emergency blood types within the critical first hour. By tracking donations longitudinally, we ensure hospitals never hit zero-inventory on critical blood markers.
+                            {stats
+                                ? <>Median time to the first confirmed donor: <strong>{formatMinutes(stats.requests.median_minutes_to_first_donor)}</strong>. <Link to="/analytics" className="text-[#ee2b2b] font-bold hover:underline">See the full analytics</Link>.</>
+                                : error || 'Loading live figures…'}
                         </p>
                     </div>
                 </motion.section>

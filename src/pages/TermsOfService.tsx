@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { CONTACT_EMAIL } from '../lib/contact';
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
     <motion.div
@@ -105,7 +106,9 @@ export default function TermsOfService() {
                         <li>Providing false medical or personal information</li>
                         <li>Behavior that endangers other users or patients</li>
                     </ul>
-                    <p>You may delete your account at any time by contacting <a href="mailto:support@lifelink.ai" className="text-[#ee2b2b] font-bold hover:underline">support@lifelink.ai</a>.</p>
+                    <p>You may delete your account at any time by {CONTACT_EMAIL
+                        ? <>contacting <a href={`mailto:${CONTACT_EMAIL}`} className="text-[#ee2b2b] font-bold hover:underline">{CONTACT_EMAIL}</a></>
+                        : <>using the contact options on our <Link to="/support" className="text-[#ee2b2b] font-bold hover:underline">Support page</Link></>}.</p>
                 </Section>
 
                 <Section title="Changes to Terms">
@@ -115,8 +118,9 @@ export default function TermsOfService() {
                 <Section title="Contact & Disputes">
                     <p>For questions or legal concerns regarding these Terms:</p>
                     <ul className="list-disc pl-5 space-y-1">
-                        <li>📧 <a href="mailto:legal@lifelink.ai" className="text-[#ee2b2b] font-bold hover:underline">legal@lifelink.ai</a></li>
-                        <li>📞 +1 (800) 555-0199</li>
+                        <li>{CONTACT_EMAIL
+                            ? <>📧 <a href={`mailto:${CONTACT_EMAIL}`} className="text-[#ee2b2b] font-bold hover:underline">{CONTACT_EMAIL}</a></>
+                            : <>See our <Link to="/support" className="text-[#ee2b2b] font-bold hover:underline">Support page</Link></>}</li>
                         <li>Disputes shall be governed by the laws of the State of California, USA</li>
                     </ul>
                 </Section>

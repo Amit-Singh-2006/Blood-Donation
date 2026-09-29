@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { CONTACT_EMAIL } from '../lib/contact';
 
 const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
     <motion.div
@@ -69,20 +70,21 @@ export default function PrivacyPolicy() {
                 </Section>
 
                 <Section title="Data Security">
-                    <p>We employ industry-leading security measures to protect your information:</p>
+                    <p>We protect your information with these measures:</p>
                     <ul className="list-disc pl-5 space-y-1">
-                        <li>End-to-end AES-256 encryption for all sensitive data in transit and at rest</li>
-                        <li>HIPAA-compliant medical data handling protocols</li>
-                        <li>Regular third-party security audits and penetration testing</li>
-                        <li>Role-based access control — only authorized personnel can view your records</li>
-                        <li>Two-factor authentication available for all accounts</li>
+                        <li>All traffic to LifeLink is encrypted in transit (HTTPS)</li>
+                        <li>Passwords are stored only as salted bcrypt hashes, never in plain text</li>
+                        <li>Sessions use secure, HttpOnly cookies that scripts on the page cannot read</li>
+                        <li>The database is closed to direct public access; only the LifeLink server can read it</li>
+                        <li>Role-based access control: donors, hospitals and admins only see what their role needs</li>
                     </ul>
                 </Section>
 
                 <Section title="Data Sharing">
                     <p>Your data is shared only in limited circumstances:</p>
                     <ul className="list-disc pl-5 space-y-1">
-                        <li><strong>Hospitals:</strong> Only your blood type and availability status are shared during active emergencies</li>
+                        <li><strong>Hospitals:</strong> When you are alerted for a request, the hospital sees your blood group and distance. If you accept, it also sees your first name and phone number so it can coordinate your donation.</li>
+                        <li><strong>Patients' families:</strong> They see request progress only (counts, blood groups, distances), never donor names or phone numbers</li>
                         <li><strong>Legal Requirements:</strong> We may disclose data when required by law or to protect public safety</li>
                         <li><strong>Service Providers:</strong> Trusted partners who help operate our platform (subject to strict data agreements)</li>
                     </ul>
@@ -96,7 +98,9 @@ export default function PrivacyPolicy() {
                         <li><strong>Deletion:</strong> Request account and data deletion (subject to legal retention requirements)</li>
                         <li><strong>Opt-out:</strong> Unsubscribe from non-critical communications at any time</li>
                     </ul>
-                    <p>To exercise these rights, contact: <a href="mailto:privacy@lifelink.ai" className="text-[#ee2b2b] font-bold hover:underline">privacy@lifelink.ai</a></p>
+                    <p>To exercise these rights, {CONTACT_EMAIL
+                        ? <>contact: <a href={`mailto:${CONTACT_EMAIL}`} className="text-[#ee2b2b] font-bold hover:underline">{CONTACT_EMAIL}</a></>
+                        : <>use the contact options on our <Link to="/support" className="text-[#ee2b2b] font-bold hover:underline">Support page</Link>.</>}</p>
                 </Section>
 
                 <Section title="Cookies & Tracking">
@@ -110,11 +114,9 @@ export default function PrivacyPolicy() {
 
                 <Section title="Contact Us">
                     <p>For any privacy-related questions or concerns:</p>
-                    <ul className="list-disc pl-5 space-y-1">
-                        <li>📧 <a href="mailto:privacy@lifelink.ai" className="text-[#ee2b2b] font-bold hover:underline">privacy@lifelink.ai</a></li>
-                        <li>📞 +1 (800) 555-0199 (Privacy Hotline — 24/7)</li>
-                        <li>📍 LifeLink AI Privacy Team, 123 Lifesaver Blvd, San Francisco, CA 94105</li>
-                    </ul>
+                    <p>{CONTACT_EMAIL
+                        ? <>📧 <a href={`mailto:${CONTACT_EMAIL}`} className="text-[#ee2b2b] font-bold hover:underline">{CONTACT_EMAIL}</a></>
+                        : <>See our <Link to="/support" className="text-[#ee2b2b] font-bold hover:underline">Support page</Link>.</>}</p>
                 </Section>
             </main>
 

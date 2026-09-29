@@ -1,15 +1,53 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { CONTACT_EMAIL, EMERGENCY } from '../lib/contact';
 
 export default function Support() {
     const [formSent, setFormSent] = useState(false);
     const [form, setForm] = useState({ name: '', email: '', subject: 'General Inquiry', message: '' });
 
+    // There is no message backend, so the form hands the message to the
+    // user's own email app, addressed to the project's inbox.
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
+        const body = `${form.message}\n\n— ${form.name} (${form.email})`;
+        window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('[LifeLink] ' + form.subject)}&body=${encodeURIComponent(body)}`;
         setFormSent(true);
     };
+
+    const contactCards = [
+        {
+            icon: 'emergency',
+            title: 'Medical Emergency',
+            desc: `LifeLink is not an emergency service. For a life-threatening emergency call ${EMERGENCY.allEmergencies}, or ${EMERGENCY.ambulance} for an ambulance.`,
+            value: `${EMERGENCY.allEmergencies} (all emergencies)`,
+            action: `tel:${EMERGENCY.allEmergencies}`,
+            cta: `Call ${EMERGENCY.allEmergencies}`,
+            color: 'bg-red-50 border-red-200 text-[#ee2b2b]',
+            btnColor: 'bg-[#ee2b2b] text-white hover:bg-[#ee2b2b]/90',
+        },
+        {
+            icon: 'bloodtype',
+            title: 'Need Blood for a Patient?',
+            desc: 'Ask the treating hospital to raise a LifeLink request, then follow it live with the code they give you.',
+            value: 'Hospital-verified requests only',
+            action: '/track',
+            cta: 'Track a request',
+            color: 'bg-rose-50 border-rose-200 text-rose-600',
+            btnColor: 'bg-rose-600 text-white hover:bg-rose-700',
+        },
+        ...(CONTACT_EMAIL ? [{
+            icon: 'mail',
+            title: 'General Support',
+            desc: 'Questions about your account, donations, hospital partnerships or the platform.',
+            value: CONTACT_EMAIL,
+            action: `mailto:${CONTACT_EMAIL}`,
+            cta: 'Send Email',
+            color: 'bg-blue-50 border-blue-200 text-blue-600',
+            btnColor: 'bg-blue-600 text-white hover:bg-blue-700',
+        }] : []),
+    ];
 
     return (
         <div className="min-h-screen bg-[#f8f6f6] flex flex-col">
@@ -23,7 +61,7 @@ export default function Support() {
                 </Link>
                 <Link to="/" className="flex items-center gap-1 text-sm font-bold text-slate-500 hover:text-[#ee2b2b] transition-colors">
                     <span className="material-symbols-outlined text-base">arrow_back</span>
-                    Back to Login
+                    Home
                 </Link>
             </header>
 
@@ -35,45 +73,14 @@ export default function Support() {
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="relative z-10">
                     <span className="material-symbols-outlined text-6xl mb-4 block opacity-70">support_agent</span>
                     <h1 className="text-4xl font-black mb-3">Contact & Support</h1>
-                    <p className="text-slate-400 max-w-xl mx-auto text-base">We're here around the clock. Reach our team through any of the channels below — for emergencies, call us directly.</p>
+                    <p className="text-slate-400 max-w-xl mx-auto text-base">Reach our team through the channels below. LifeLink is not an emergency service: in a medical emergency, call {EMERGENCY.allEmergencies}.</p>
                 </motion.div>
             </div>
 
             {/* Contact Cards */}
             <section className="max-w-5xl mx-auto w-full py-16 px-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
-                    {[
-                        {
-                            icon: 'emergency',
-                            title: 'Emergency Hotline',
-                            desc: 'For critical blood shortage emergencies — available 24/7.',
-                            value: '+1 (800) 555-0199',
-                            action: 'tel:+18005550199',
-                            cta: 'Call Now',
-                            color: 'bg-red-50 border-red-200 text-[#ee2b2b]',
-                            btnColor: 'bg-[#ee2b2b] text-white hover:bg-[#ee2b2b]/90',
-                        },
-                        {
-                            icon: 'mail',
-                            title: 'General Support',
-                            desc: 'Questions about your account, donations, or the platform.',
-                            value: 'support@lifelink.ai',
-                            action: 'mailto:support@lifelink.ai',
-                            cta: 'Send Email',
-                            color: 'bg-blue-50 border-blue-200 text-blue-600',
-                            btnColor: 'bg-blue-600 text-white hover:bg-blue-700',
-                        },
-                        {
-                            icon: 'business',
-                            title: 'Hospital Partnerships',
-                            desc: 'For medical institutions looking to join our network.',
-                            value: 'partners@lifelink.ai',
-                            action: 'mailto:partners@lifelink.ai',
-                            cta: 'Contact Partners Team',
-                            color: 'bg-emerald-50 border-emerald-200 text-emerald-600',
-                            btnColor: 'bg-emerald-600 text-white hover:bg-emerald-700',
-                        },
-                    ].map((card, i) => (
+                    {contactCards.map((card, i) => (
                         <motion.div
                             key={i}
                             initial={{ opacity: 0, y: 20 }}
@@ -111,9 +118,9 @@ export default function Support() {
                     </h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         {[
-                            { label: 'Emergency Line', hours: '24 / 7 / 365', note: 'Always available', color: 'text-[#ee2b2b]' },
-                            { label: 'General Support (Email)', hours: 'Mon – Fri, 9AM – 8PM', note: 'Response within 4 hours', color: 'text-blue-600' },
-                            { label: 'Partnership Inquiries', hours: 'Mon – Fri, 10AM – 6PM', note: 'Response within 24 hours', color: 'text-emerald-600' },
+                            { label: 'Medical Emergencies', hours: `${EMERGENCY.allEmergencies} · ${EMERGENCY.ambulance}`, note: 'Government emergency numbers, 24/7', color: 'text-[#ee2b2b]' },
+                            { label: 'Donor Alerts & Matching', hours: '24 / 7, automatic', note: 'Requests reach donors without waiting for office hours', color: 'text-blue-600' },
+                            { label: 'Email Support', hours: 'Mon – Fri', note: 'We reply as soon as we can', color: 'text-emerald-600' },
                         ].map((item, i) => (
                             <div key={i} className="p-5 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
                                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{item.label}</p>
@@ -136,16 +143,31 @@ export default function Support() {
                         <p className="text-slate-500">Fill out the form and we'll get back to you as soon as possible.</p>
                     </div>
 
-                    {formSent ? (
+                    <div className="mb-6 bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-900 flex gap-3">
+                        <span className="material-symbols-outlined text-[#ee2b2b]">warning</span>
+                        <p>
+                            <strong>Need blood urgently? Don't use this form.</strong> Ask the treating hospital to raise a LifeLink request and{' '}
+                            <Link to="/track" className="font-bold underline">track it here</Link>. In a medical emergency call {EMERGENCY.allEmergencies}.
+                        </p>
+                    </div>
+
+                    {!CONTACT_EMAIL ? (
+                        <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center shadow-sm">
+                            <span className="material-symbols-outlined text-5xl text-slate-300 mb-3 block">mail_lock</span>
+                            <h3 className="text-xl font-black text-slate-900 mb-2">Our support inbox is being set up</h3>
+                            <p className="text-slate-500 text-sm">Messages can't be sent from here yet. For a blood request, please contact the treating hospital.</p>
+                        </div>
+                    ) : formSent ? (
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             className="bg-white rounded-2xl border border-emerald-200 p-12 text-center shadow-sm"
                         >
                             <span className="material-symbols-outlined text-5xl text-emerald-500 mb-4 block">mark_email_read</span>
-                            <h3 className="text-2xl font-black text-slate-900 mb-2">Message Sent!</h3>
+                            <h3 className="text-2xl font-black text-slate-900 mb-2">Almost done</h3>
                             <p className="text-slate-500">
-                                Thank you, <strong>{form.name}</strong>. We've received your message and will reply to <strong>{form.email}</strong> shortly.
+                                Thank you, <strong>{form.name}</strong>. Your email app should have opened with the message ready: press send there.
+                                If it didn't, email us at <a href={`mailto:${CONTACT_EMAIL}`} className="font-bold text-[#ee2b2b]">{CONTACT_EMAIL}</a>.
                             </p>
                         </motion.div>
                     ) : (
@@ -190,7 +212,6 @@ export default function Support() {
                                     <option>Account & Login Issues</option>
                                     <option>Donation Process</option>
                                     <option>Hospital Partnership Inquiry</option>
-                                    <option>Emergency Blood Request</option>
                                     <option>Report a Technical Issue</option>
                                     <option>Privacy or Data Concern</option>
                                 </select>

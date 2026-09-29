@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Activity, ArrowLeft } from 'lucide-react';
+import { EMERGENCY } from '../lib/contact';
 
 export default function EmergencyNetwork() {
     const navigate = useNavigate();
@@ -41,14 +42,19 @@ export default function EmergencyNetwork() {
                         </p>
                         <div className="grid md:grid-cols-2 gap-6">
                             <div className="bg-red-50 p-6 rounded-2xl border border-red-100">
-                                <h4 className="font-bold text-red-900 mb-2">Live Geolocation</h4>
-                                <p className="text-sm text-red-800">Donors are notified strictly based on their real-time proximity to the affected hospital to ensure the fastest response times possible.</p>
+                                <h4 className="font-bold text-red-900 mb-2">Nearest Donors First</h4>
+                                <p className="text-sm text-red-800">Compatible donors are ranked by distance from the hospital, using the location they registered with, so the closest ones are asked first.</p>
                             </div>
                             <div className="bg-red-50 p-6 rounded-2xl border border-red-100">
                                 <h4 className="font-bold text-red-900 mb-2">Instant Dispatch</h4>
                                 <p className="text-sm text-red-800">Hospitals can trigger a live SOS which completely bypasses standard queues, pinging the most eligible donors' devices immediately.</p>
                             </div>
                         </div>
+                        <p className="text-sm text-slate-600 mt-6">
+                            Family of a patient? Ask the treating hospital for the tracking code and{' '}
+                            <Link to="/track" className="font-bold text-[#ee2b2b] hover:underline">follow the request live</Link>.
+                            In a medical emergency, call {EMERGENCY.allEmergencies}.
+                        </p>
                     </div>
                 </motion.section>
             </main>

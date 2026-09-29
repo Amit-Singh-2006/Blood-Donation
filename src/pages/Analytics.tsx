@@ -1,171 +1,171 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { NetworkAnalytics, fetchNetworkAnalytics, formatMinutes } from '../lib/network';
+
+const GROUPS = ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'];
+const pct = (v: number | null | undefined) => (v == null ? '–' : `${Math.round(v)}%`);
 
 export default function Analytics() {
+  const [data, setData] = useState<NetworkAnalytics | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setData(await fetchNetworkAnalytics());
+      setError('');
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const r = data?.requests;
+  const pool = data?.donor_pool;
+  const resp = data?.responses;
+  const maxRegistered = Math.max(1, ...GROUPS.map((g) => pool?.by_blood_group[g]?.registered ?? 0));
+  const shortages = GROUPS.filter((g) => pool && (pool.by_blood_group[g]?.eligible_now ?? 0) === 0);
+  const statusRows: [string, number, string][] = r ? [
+    ['Open (finding donors)', r.open, 'bg-amber-400'],
+    ['Fulfilled (donors on the way)', r.fulfilled, 'bg-blue-500'],
+    ['Completed (donated)', r.completed, 'bg-green-500'],
+    ['Exhausted (no donors left)', r.exhausted, 'bg-red-500'],
+    ['Cancelled', r.cancelled, 'bg-slate-400'],
+  ] : [];
+
   return (
     <div className="flex-1 p-8 max-w-[1400px] mx-auto w-full">
-      {/* Header Section */}
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">System Analytics & Insights</h2>
-          <p className="text-slate-500 mt-1">Real-time monitoring of global blood supply and regional demand.</p>
+          <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Network Analytics</h2>
+          <p className="text-slate-500 mt-1">Live from the LifeLink donor network: requests, donor pool and response rates.</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors">
-            <span className="material-symbols-outlined text-lg">download</span>
-            Export Data
+          {data && (
+            <span className="text-xs text-slate-400 flex items-center gap-1">
+              <span className="material-symbols-outlined text-xs">sync</span>
+              Updated {new Date(data.generated_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+          <button onClick={load} disabled={loading} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+            <span className="material-symbols-outlined text-lg">refresh</span>
+            {loading ? 'Loading…' : 'Refresh'}
           </button>
         </div>
       </header>
 
-      {/* Filter Controls */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 flex flex-wrap items-center gap-4 mb-8">
-        <div className="flex items-center gap-2 text-slate-500">
-          <span className="material-symbols-outlined">filter_list</span>
-          <span className="text-sm font-bold uppercase tracking-wider">Filters:</span>
-        </div>
-        <button className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-sm font-medium text-slate-700">
-          Region: <span className="text-[#ee2b2b]">North America</span>
-          <span className="material-symbols-outlined text-lg">expand_more</span>
-        </button>
-        <button className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg text-sm font-medium text-slate-700">
-          Period: <span className="text-[#ee2b2b]">Last 30 Days</span>
-          <span className="material-symbols-outlined text-lg">expand_more</span>
-        </button>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-slate-400 flex items-center gap-1">
-            <span className="material-symbols-outlined text-xs">sync</span>
-            Last updated: 2 mins ago
-          </span>
-        </div>
-      </div>
+      {error && (
+        <div className="mb-8 bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">{error}</div>
+      )}
 
-      {/* KPI Cards */}
+      {/* KPI cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-xl border border-slate-200">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-              <span className="material-symbols-outlined">group</span>
-            </div>
-            <span className="text-green-500 text-xs font-bold bg-green-50 px-2 py-1 rounded-full">+12.5%</span>
-          </div>
-          <p className="text-slate-500 text-sm font-medium">Total Active Donors</p>
-          <h3 className="text-2xl font-bold text-slate-900 mt-1">24,840</h3>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-slate-200">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-2 bg-orange-50 text-orange-600 rounded-lg">
-              <span className="material-symbols-outlined">pending_actions</span>
-            </div>
-            <span className="text-red-500 text-xs font-bold bg-red-50 px-2 py-1 rounded-full">-3.2%</span>
-          </div>
-          <p className="text-slate-500 text-sm font-medium">Pending Requests</p>
-          <h3 className="text-2xl font-bold text-slate-900 mt-1">1,156</h3>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-slate-200 border-b-[#ee2b2b]/40 border-b-4">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-2 bg-[#ee2b2b]/10 text-[#ee2b2b] rounded-lg">
-              <span className="material-symbols-outlined">check_circle</span>
-            </div>
-            <span className="text-green-500 text-xs font-bold bg-green-50 px-2 py-1 rounded-full">+4.1%</span>
-          </div>
-          <p className="text-slate-500 text-sm font-medium">Fulfillment Rate</p>
-          <h3 className="text-2xl font-bold text-slate-900 mt-1">94.2%</h3>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-slate-200 bg-gradient-to-br from-white to-red-50">
-          <div className="flex justify-between items-start mb-4">
-            <div className="p-2 bg-red-100 text-red-600 rounded-lg">
-              <span className="material-symbols-outlined">warning</span>
-            </div>
-            <span className="text-red-600 text-xs font-bold bg-white px-2 py-1 rounded-full shadow-sm">CRITICAL</span>
-          </div>
-          <p className="text-slate-500 text-sm font-medium">Critical Shortages</p>
-          <h3 className="text-2xl font-bold text-slate-900 mt-1">12</h3>
-        </div>
+        <Kpi icon="group" tone="bg-blue-50 text-blue-600" label="Registered donors" value={pool?.registered} sub={pool && `${pool.available} marked available`} />
+        <Kpi icon="bloodtype" tone="bg-green-50 text-green-600" label="Eligible to donate now" value={pool?.eligible_now} sub={pool && `${pool.committed_now} committed to a request`} />
+        <Kpi icon="check_circle" tone="bg-[#ee2b2b]/10 text-[#ee2b2b]" label="Requests covered" value={r && pct(r.covered_pct)} sub={r && `${r.total} requests in total`} />
+        <Kpi icon="timer" tone="bg-orange-50 text-orange-600" label="Median time to first donor" value={r && formatMinutes(r.median_minutes_to_first_donor)} sub={r && `${pct(r.first_donor_within_15_min_pct)} within 15 min`} />
       </div>
 
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        {/* Blood Type Distribution */}
-        <div className="lg:col-span-1 bg-white p-6 rounded-xl border border-slate-200">
-          <div className="flex justify-between items-center mb-6">
-            <h4 className="font-bold text-slate-900">Blood Type Distribution</h4>
-            <span className="material-symbols-outlined text-slate-400 cursor-pointer">more_vert</span>
-          </div>
-          <div className="flex justify-center mb-6">
-            <div className="relative w-48 h-48 rounded-full flex items-center justify-center" style={{ background: 'conic-gradient(#ee2b2b 0% 35%, #fca5a5 35% 60%, #fee2e2 60% 85%, #991b1b 85% 100%)' }}>
-              <div className="bg-white w-32 h-32 rounded-full flex flex-col items-center justify-center shadow-inner">
-                <span className="text-2xl font-bold text-slate-900">8,402</span>
-                <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Units Total</span>
-              </div>
-            </div>
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-[#ee2b2b]"></div>
-                <span className="text-sm font-semibold text-slate-700">O Positive</span>
-              </div>
-              <span className="text-sm font-bold">35%</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-400"></div>
-                <span className="text-sm font-semibold text-slate-700">A Positive</span>
-              </div>
-              <span className="text-sm font-bold">25%</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-200"></div>
-                <span className="text-sm font-semibold text-slate-700">O Negative</span>
-              </div>
-              <span className="text-sm font-bold">25%</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-800"></div>
-                <span className="text-sm font-semibold text-slate-700">AB Negative</span>
-              </div>
-              <span className="text-sm font-bold">15%</span>
-            </div>
-          </div>
+      {shortages.length > 0 && (
+        <div className="mb-8 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+          <span className="material-symbols-outlined text-red-600">warning</span>
+          <p className="text-sm text-red-900">
+            <strong>No eligible donors right now for {shortages.join(', ')}.</strong> Requests for these groups can still be covered by compatible groups, but recruiting donors here would reduce risk.
+          </p>
         </div>
+      )}
 
-        {/* Fulfillment Rate Chart (Bar) */}
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h4 className="font-bold text-slate-900">Request Fulfillment Rate</h4>
-              <p className="text-xs text-slate-500">Comparing Supply Availability vs Hospital Demand</p>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-sm bg-slate-200"></div>
-                <span className="text-xs font-semibold text-slate-500 uppercase">Demand</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-sm bg-[#ee2b2b]"></div>
-                <span className="text-xs font-semibold text-slate-500 uppercase">Supply</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-end justify-between h-64 gap-2 pb-2 border-b border-slate-100">
-            {['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'].map((type, i) => (
-              <div key={type} className="flex-1 flex flex-col items-center gap-2">
-                <div className="w-full flex items-end justify-center gap-1 h-full">
-                  <div className="w-4 bg-slate-200 rounded-t" style={{ height: `${Math.random() * 50 + 40}%` }}></div>
-                  <div className="w-4 bg-[#ee2b2b] rounded-t" style={{ height: `${Math.random() * 50 + 30}%` }}></div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        {/* Donor pool by blood group */}
+        <section className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200">
+          <h4 className="font-bold text-slate-900">Donor pool by blood group</h4>
+          <p className="text-xs text-slate-500 mb-6">Eligible now (dark) vs registered (light)</p>
+          <div className="space-y-3">
+            {GROUPS.map((g) => {
+              const row = pool?.by_blood_group[g] ?? { registered: 0, eligible_now: 0 };
+              return (
+                <div key={g} className="flex items-center gap-3">
+                  <span className="w-10 text-sm font-black text-slate-700">{g}</span>
+                  <div className="relative flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="absolute inset-y-0 left-0 bg-red-200 rounded-full" style={{ width: `${(row.registered / maxRegistered) * 100}%` }} />
+                    <div className="absolute inset-y-0 left-0 bg-[#ee2b2b] rounded-full" style={{ width: `${(row.eligible_now / maxRegistered) * 100}%` }} />
+                  </div>
+                  <span className="w-16 text-right text-sm font-semibold text-slate-600 tabular-nums">{row.eligible_now} / {row.registered}</span>
                 </div>
-                <span className="text-[10px] font-bold text-slate-500 uppercase">{type}</span>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Requests by status */}
+        <section className="bg-white p-6 rounded-xl border border-slate-200">
+          <h4 className="font-bold text-slate-900 mb-6">Requests by status</h4>
+          <div className="space-y-4">
+            {statusRows.map(([label, value, color]) => (
+              <div key={label}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="text-slate-600">{label}</span>
+                  <span className="font-bold text-slate-900">{value}</span>
+                </div>
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full ${color}`} style={{ width: `${r && r.total ? (value / r.total) * 100 : 0}%` }} />
+                </div>
               </div>
             ))}
+            {!r && <p className="text-sm text-slate-400">{loading ? 'Loading…' : 'No data'}</p>}
           </div>
-          <div className="mt-6 p-4 bg-slate-50 rounded-lg border border-dashed border-slate-200 flex items-center gap-4">
-            <span className="material-symbols-outlined text-[#ee2b2b]">info</span>
-            <p className="text-sm text-slate-600">Demand for <span className="font-bold text-slate-900">O-Negative</span> has spiked by 18% in the last 48 hours. Dispatching reserves to Central General Hospital.</p>
-          </div>
-        </div>
+        </section>
       </div>
+
+      {/* Donor responses */}
+      <section className="bg-white p-6 rounded-xl border border-slate-200">
+        <h4 className="font-bold text-slate-900 mb-6">Donor responses</h4>
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+          {([
+            ['Alerts sent', resp?.alerts_sent],
+            ['Response rate', resp && pct(resp.response_rate_pct)],
+            ['Acceptance rate', resp && pct(resp.acceptance_rate_pct)],
+            ['Median reply time', resp && formatMinutes(resp.median_response_minutes)],
+            ['No reply', resp?.no_response],
+            ['Donations logged', resp?.donations_logged],
+            ['No-shows', resp?.no_shows],
+          ] as [string, React.ReactNode][]).map(([label, value]) => (
+            <div key={label} className="bg-slate-50 rounded-xl p-4">
+              <p className="text-xl font-black text-slate-900">{value ?? '–'}</p>
+              <p className="text-xs text-slate-500 mt-1">{label}</p>
+            </div>
+          ))}
+        </div>
+        {resp && (
+          <div className="mt-6 flex flex-wrap gap-2 text-xs">
+            {Object.entries(resp.alerts_by_channel).map(([channel, count]) => (
+              <span key={channel} className="px-3 py-1 rounded-full bg-slate-100 text-slate-700 font-semibold">{channel.replace('_', '-')}: {count}</span>
+            ))}
+          </div>
+        )}
+        {data && data.compatibility.accepted_from_other_compatible_groups > 0 && (
+          <p className="mt-6 text-sm text-slate-600 bg-slate-50 rounded-lg p-4 border border-dashed border-slate-200">
+            <strong>{data.compatibility.accepted_from_other_compatible_groups}</strong> accepted donors ({pct(data.compatibility.share_of_accepted_pct)}) had a different but compatible blood group.
+            Matching only identical groups would have missed them.
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function Kpi({ icon, tone, label, value, sub }: { icon: string; tone: string; label: string; value: React.ReactNode; sub?: React.ReactNode }) {
+  return (
+    <div className="bg-white p-6 rounded-xl border border-slate-200">
+      <div className={`p-2 rounded-lg w-fit mb-4 ${tone}`}>
+        <span className="material-symbols-outlined">{icon}</span>
+      </div>
+      <p className="text-slate-500 text-sm font-medium">{label}</p>
+      <h3 className="text-2xl font-bold text-slate-900 mt-1">{value ?? '–'}</h3>
+      {sub && <p className="text-xs text-slate-400 mt-1">{sub}</p>}
     </div>
   );
 }

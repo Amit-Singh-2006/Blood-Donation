@@ -19,10 +19,11 @@ export default function Layout() {
     }
   }, [location.pathname]); // Update when navigating in case user changes
 
-  const hideNav = ['/', '/login', '/register-donor', '/register-hospital', '/register-admin', '/how-it-works', '/emergency-network', '/impact-reports', '/privacy', '/terms', '/partnership', '/support'].includes(location.pathname);
+  const hideNav = ['/', '/login', '/register-donor', '/register-hospital', '/register-admin', '/how-it-works', '/emergency-network', '/impact-reports', '/privacy', '/terms', '/partnership', '/support', '/track'].includes(location.pathname)
+    || location.pathname.startsWith('/track/');
 
   // Determine layout type based on path
-  const isSidebarLayout = location.pathname.startsWith('/admin') || location.pathname.startsWith('/hospital') || location.pathname.startsWith('/analytics') || location.pathname.startsWith('/tracking');
+  const isSidebarLayout = location.pathname.startsWith('/admin') || location.pathname.startsWith('/hospital') || location.pathname.startsWith('/analytics');
   const isDonorLayout = location.pathname.startsWith('/donor');
 
   // Close notifications when clicking outside
@@ -77,7 +78,7 @@ export default function Layout() {
               <>
                 <NavLink to="/hospital" icon="dashboard" label="Dashboard" />
                 <NavLink to="/hospital/requests" icon="notifications_active" label="Emergency Requests" />
-                <NavLink to="/tracking" icon="map" label="Live Tracking" />
+                <NavLink to="/track" icon="map" label="Track a Request" />
                 <NavLink to="/hospital/inventory" icon="inventory_2" label="Inventory" />
                 <NavLink to="/analytics" icon="analytics" label="Analytics" />
               </>

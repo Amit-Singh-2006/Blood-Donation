@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, useInView } from 'framer-motion';
+import { formatMinutes, useNetworkAnalytics } from '../lib/network';
+import { EMERGENCY } from '../lib/contact';
 
 /* ── Animated counter ── */
 function Counter({ to, suffix = '' }: { to: number; suffix?: string }) {
@@ -26,6 +28,7 @@ const stagger = { show: { transition: { staggerChildren: 0.12 } } };
 
 export default function HomePage() {
     const [menuOpen, setMenuOpen] = useState(false);
+    const { data: stats } = useNetworkAnalytics();
 
     return (
         <div className="min-h-screen bg-[#fafafa] text-slate-900 overflow-x-hidden font-sans">
@@ -43,9 +46,10 @@ export default function HomePage() {
 
                     {/* Desktop nav */}
                     <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-600">
+                        <a href="#need-blood" className="hover:text-[#ee2b2b] transition-colors">Need Blood?</a>
                         <a href="#how-it-works" className="hover:text-[#ee2b2b] transition-colors">How It Works</a>
                         <a href="#features" className="hover:text-[#ee2b2b] transition-colors">Features</a>
-                        <a href="#impact" className="hover:text-[#ee2b2b] transition-colors">Impact</a>
+                        <Link to="/track" className="hover:text-[#ee2b2b] transition-colors">Track a Request</Link>
                         <Link to="/support" className="hover:text-[#ee2b2b] transition-colors">Support</Link>
                     </nav>
 
@@ -139,12 +143,21 @@ export default function HomePage() {
                         </Link>
                     </motion.div>
 
+                    <motion.a
+                        href="#need-blood"
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }}
+                        className="inline-flex items-center gap-1 mt-6 text-sm font-bold text-slate-600 hover:text-[#ee2b2b] transition-colors"
+                    >
+                        Need blood for a patient? Here's what to do
+                        <span className="material-symbols-outlined text-base">arrow_downward</span>
+                    </motion.a>
+
                     {/* Trust badges */}
                     <motion.div
                         initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }}
                         className="mt-12 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400 font-semibold"
                     >
-                        {['HIPAA Compliant', 'AES-256 Encrypted', 'Verified Donors Only', '24/7 Emergency Network'].map(t => (
+                        {['ABO/Rh-safe matching', 'Hospital-verified requests', 'Donor details never shown to families', 'Automatic alerts, day and night'].map(t => (
                             <span key={t} className="flex items-center gap-1.5">
                                 <span className="material-symbols-outlined text-sm text-emerald-400">verified</span>
                                 {t}
@@ -163,26 +176,86 @@ export default function HomePage() {
                 </motion.div>
             </section>
 
-            {/* ── STATS ── */}
+            {/* ── LIVE STATS (from the donor network) ── */}
             <section id="impact" className="bg-[#ee2b2b] py-20 px-6">
+                <p className="text-center text-white/70 text-xs font-black uppercase tracking-widest mb-10 flex items-center justify-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                    Live from the LifeLink network
+                </p>
                 <motion.div
                     variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
                     className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-white text-center"
                 >
                     {[
-                        { value: 12847, suffix: '+', label: 'Lives Saved' },
-                        { value: 156, suffix: '+', label: 'Partner Hospitals' },
-                        { value: 98, suffix: '%', label: 'AI Match Accuracy' },
-                        { value: 12, suffix: ' min', label: 'Avg. Response Time' },
-                    ].map(({ value, suffix, label }) => (
+                        { label: 'Registered Donors', value: stats && <Counter to={stats.donor_pool.registered} /> },
+                        { label: 'Eligible to Donate Now', value: stats && <Counter to={stats.donor_pool.eligible_now} /> },
+                        { label: 'Requests Covered', value: stats?.requests.covered_pct != null && <Counter to={Math.round(stats.requests.covered_pct)} suffix="%" /> },
+                        { label: 'Median Time to First Donor', value: stats && formatMinutes(stats.requests.median_minutes_to_first_donor) },
+                    ].map(({ label, value }) => (
                         <motion.div key={label} variants={fadeUp}>
-                            <p className="text-4xl md:text-5xl font-black mb-2">
-                                <Counter to={value} suffix={suffix} />
-                            </p>
+                            <p className="text-3xl md:text-5xl font-black mb-2 min-h-[1.2em]">{value || '–'}</p>
                             <p className="text-white/70 text-sm font-bold uppercase tracking-wider">{label}</p>
                         </motion.div>
                     ))}
                 </motion.div>
+            </section>
+
+            {/* ── NEED BLOOD (patients and families) ── */}
+            <section id="need-blood" className="py-24 px-6 bg-[#fff5f5]">
+                <div className="max-w-5xl mx-auto">
+                    <motion.div variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true }} className="text-center mb-12">
+                        <p className="text-[#ee2b2b] text-xs font-black uppercase tracking-widest mb-3">For Patients & Families</p>
+                        <h2 className="text-4xl font-black">Need blood for a patient?</h2>
+                        <p className="text-slate-500 mt-3 max-w-2xl mx-auto">
+                            LifeLink works through hospitals, so every request is medically verified before donors are alerted.
+                        </p>
+                    </motion.div>
+
+                    <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
+                        className="grid grid-cols-1 md:grid-cols-3 gap-6"
+                    >
+                        <motion.div variants={fadeUp} className="bg-white rounded-3xl p-7 border border-slate-100 shadow-sm">
+                            <span className="material-symbols-outlined text-3xl text-[#ee2b2b]">local_hospital</span>
+                            <h3 className="font-black text-lg mt-3 mb-2">1. Ask the treating hospital</h3>
+                            <p className="text-sm text-slate-500 leading-relaxed">
+                                Ask the doctor or the hospital's blood bank to raise a LifeLink request. Compatible donors nearby are alerted within minutes, and more are added automatically if nobody answers.
+                            </p>
+                        </motion.div>
+                        <motion.div variants={fadeUp} className="bg-white rounded-3xl p-7 border border-slate-100 shadow-sm">
+                            <span className="material-symbols-outlined text-3xl text-[#ee2b2b]">location_searching</span>
+                            <h3 className="font-black text-lg mt-3 mb-2">2. Track it live</h3>
+                            <p className="text-sm text-slate-500 leading-relaxed mb-4">
+                                The hospital gives you a tracking code. See how many donors have confirmed and what happens next. Donor identities stay private.
+                            </p>
+                            <Link to="/track" className="inline-flex items-center gap-1 text-sm font-black text-[#ee2b2b] hover:underline">
+                                Track a request <span className="material-symbols-outlined text-base">arrow_forward</span>
+                            </Link>
+                        </motion.div>
+                        <motion.div variants={fadeUp} className="bg-white rounded-3xl p-7 border border-slate-100 shadow-sm">
+                            <span className="material-symbols-outlined text-3xl text-[#ee2b2b]">search</span>
+                            <h3 className="font-black text-lg mt-3 mb-2">3. Check blood banks too</h3>
+                            <p className="text-sm text-slate-500 leading-relaxed mb-4">
+                                While donors respond, look up blood stock at blood banks near you on the Government of India's e-RaktKosh portal.
+                            </p>
+                            <a href={EMERGENCY.bloodBankSearchUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-sm font-black text-[#ee2b2b] hover:underline">
+                                Open e-RaktKosh <span className="material-symbols-outlined text-base">open_in_new</span>
+                            </a>
+                        </motion.div>
+                    </motion.div>
+
+                    <div className="mt-8 bg-white border border-red-200 rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-4">
+                        <p className="text-sm font-semibold text-slate-700 flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[#ee2b2b]">emergency</span>
+                            LifeLink is not an emergency service. In a medical emergency, call{' '}
+                            <a href={`tel:${EMERGENCY.allEmergencies}`} className="font-black text-[#ee2b2b]">{EMERGENCY.allEmergencies}</a>
+                            {' '}or{' '}
+                            <a href={`tel:${EMERGENCY.ambulance}`} className="font-black text-[#ee2b2b]">{EMERGENCY.ambulance}</a> (ambulance).
+                        </p>
+                        <Link to="/register-donor" className="text-sm font-black text-slate-700 hover:text-[#ee2b2b] whitespace-nowrap">
+                            Family and friends can register as donors →
+                        </Link>
+                    </div>
+                </div>
             </section>
 
             {/* ── HOW IT WORKS ── */}
@@ -231,12 +304,12 @@ export default function HomePage() {
                         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
                     >
                         {[
-                            { icon: 'psychology', color: 'bg-violet-50 text-violet-600', title: 'Intelligent Matching', desc: 'AI ranks donors by compatibility, proximity, donation history, and response rate — not just blood type.' },
-                            { icon: 'insights', color: 'bg-blue-50 text-blue-600', title: 'Demand Forecasting', desc: 'Predicts regional blood shortages up to 7 days in advance using hospital load and seasonal models.' },
-                            { icon: 'notifications_active', color: 'bg-amber-50 text-amber-600', title: 'Emergency Alerts', desc: 'Instant push, SMS, and email alerts during critical shortages — with one-tap confirmation.' },
+                            { icon: 'psychology', color: 'bg-violet-50 text-violet-600', title: 'Intelligent Matching', desc: 'Finds every ABO/Rh-compatible donor who is past their rest period, then ranks them by distance and exact blood-group match, keeping rare O- blood for patients who need it.' },
+                            { icon: 'insights', color: 'bg-blue-50 text-blue-600', title: 'Shortage Insights', desc: 'Live counts of donors eligible right now for each blood group, so gaps show up before an emergency does.' },
+                            { icon: 'notifications_active', color: 'bg-amber-50 text-amber-600', title: 'Emergency Alerts', desc: 'SMS, WhatsApp and in-app alerts with one-tap YES/NO. If nobody answers, the next donors are alerted automatically.' },
                             { icon: 'token', color: 'bg-emerald-50 text-emerald-600', title: 'Donor Rewards (XP)', desc: 'Donors earn XP tokens for every verified donation, redeemable for healthcare benefits and discounts.' },
                             { icon: 'bar_chart', color: 'bg-[#ee2b2b]/10 text-[#ee2b2b]', title: 'Real-Time Analytics', desc: 'Hospitals and admins get live dashboards showing inventory, match rates, and regional demand.' },
-                            { icon: 'verified_user', color: 'bg-teal-50 text-teal-600', title: 'HIPAA-Grade Security', desc: 'End-to-end AES-256 encryption, role-based access, and regular third-party audits keep data safe.' },
+                            { icon: 'verified_user', color: 'bg-teal-50 text-teal-600', title: 'Privacy by Design', desc: 'Families see progress, never donor names or numbers. Passwords are hashed, sessions use secure cookies, and access is limited by role.' },
                         ].map(({ icon, color, title, desc }) => (
                             <motion.div key={title} variants={fadeUp}
                                 className="bg-white rounded-2xl border border-slate-100 p-7 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all"
@@ -313,39 +386,6 @@ export default function HomePage() {
                 </div>
             </section>
 
-            {/* ── TESTIMONIALS ── */}
-            <section className="py-24 px-6 bg-slate-900 text-white">
-                <div className="max-w-5xl mx-auto">
-                    <motion.div variants={fadeUp} initial="hidden" whileInView="show" viewport={{ once: true }} className="text-center mb-16">
-                        <p className="text-[#ee2b2b] text-xs font-black uppercase tracking-widest mb-3">Stories</p>
-                        <h2 className="text-4xl font-black">Real People. Real Impact.</h2>
-                    </motion.div>
-
-                    <motion.div variants={stagger} initial="hidden" whileInView="show" viewport={{ once: true }}
-                        className="grid grid-cols-1 md:grid-cols-3 gap-6"
-                    >
-                        {[
-                            { name: 'Dr. Ananya Mehta', role: 'Chief of Surgery, Apollo Hospital', quote: '"LifeLink AI matched a rare AB- donor for our emergency case in under 8 minutes. It was nothing short of miraculous."', avatar: 'https://i.pravatar.cc/100?img=47' },
-                            { name: 'Rohan Verma', role: 'Blood Donor, Diamond Rank', quote: '"I\'ve donated 14 times through LifeLink AI. The XP system keeps me motivated and knowing I\'ve saved lives is priceless."', avatar: 'https://i.pravatar.cc/100?img=12' },
-                            { name: 'Sarah Chen', role: 'Network Administrator', quote: '"The admin dashboard gives us complete visibility into regional supply chains. The AI demand forecast has been 97% accurate this quarter."', avatar: 'https://i.pravatar.cc/100?img=31' },
-                        ].map(({ name, role, quote, avatar }) => (
-                            <motion.div key={name} variants={fadeUp}
-                                className="bg-white/5 border border-white/10 rounded-2xl p-7 hover:bg-white/10 transition-colors"
-                            >
-                                <p className="text-sm text-slate-300 leading-relaxed mb-6 italic">{quote}</p>
-                                <div className="flex items-center gap-3">
-                                    <img src={avatar} alt={name} className="w-10 h-10 rounded-full object-cover" />
-                                    <div>
-                                        <p className="font-black text-sm">{name}</p>
-                                        <p className="text-xs text-slate-400">{role}</p>
-                                    </div>
-                                </div>
-                            </motion.div>
-                        ))}
-                    </motion.div>
-                </div>
-            </section>
-
             {/* ── FINAL CTA ── */}
             <section className="py-28 px-6 bg-gradient-to-br from-[#ee2b2b] to-rose-700 text-white text-center relative overflow-hidden">
                 <div className="absolute inset-0 opacity-10">
@@ -405,8 +445,9 @@ export default function HomePage() {
                             </div>
                             <div className="space-y-3">
                                 <p className="text-white font-black text-xs uppercase tracking-widest">Help</p>
+                                <Link to="/track" className="block hover:text-[#ee2b2b] transition-colors">Track a Request</Link>
                                 <Link to="/support" className="block hover:text-[#ee2b2b] transition-colors">Support</Link>
-                                <a href="mailto:emergency@lifelink.ai" className="block hover:text-[#ee2b2b] transition-colors">Emergency Line</a>
+                                <a href={`tel:${EMERGENCY.allEmergencies}`} className="block hover:text-[#ee2b2b] transition-colors">Medical emergency: call {EMERGENCY.allEmergencies}</a>
                             </div>
                         </div>
                     </div>
@@ -415,7 +456,7 @@ export default function HomePage() {
                         <p className="text-xs">© 2026 LifeLink AI. All rights reserved.</p>
                         <div className="flex items-center gap-2 text-xs">
                             <span className="material-symbols-outlined text-emerald-400 text-sm">verified_user</span>
-                            HIPAA Compliant &nbsp;·&nbsp; AES-256 Encrypted &nbsp;·&nbsp; 24/7 Emergency Network
+                            Hospital-verified requests &nbsp;·&nbsp; Donor details never shown to families
                         </div>
                     </div>
                 </div>
