@@ -74,12 +74,14 @@ Once enough donors have confirmed, the loop only watches for withdrawals or no-s
 | Credential (n8n) | Used by |
 |---|---|
 | `Header Auth account` (header `X-LifeLink-Key`) | `emergency-request` and `donors` webhooks. Callers must send the header; anything else gets 403. |
-| `Twilio account` | Donor SMS alerts (`emergency-dispatch`) and hospital texts (`donor-response`) |
+| `Twilio account` | Donor SMS and WhatsApp alerts (`emergency-dispatch`) and hospital texts (`donor-response`) |
+
+A donor's `preferred_channel` (`sms`, `whatsapp`, `push` or `in_app`) picks the delivery node; every alert is also written to `lifelink_notifications`. Donors whose channel is `push` but who have no FCM token get SMS instead.
 
 Still to do before real launch:
 
 - **Use a long random webhook key.** Generate one with `openssl rand -hex 32`, put it in the Header Auth credential and in the backend's environment. Never commit it.
 - **Restrict `ussd`** to your USSD gateway's IP range (webhook option *IP whitelist*).
 - **Twilio trial limits.** A trial account only delivers to verified numbers and prefixes messages with "Sent from your Twilio trial account". Upgrade before real donors are on it.
-- **WhatsApp.** Business-initiated messages need a pre-approved template. With the Meta node use `lifelink_blood_request` (4 body parameters: blood group, hospital, YES link, NO link); with Twilio, the sandbox works for testing only.
+- **WhatsApp.** Alerts go from the Twilio WhatsApp sandbox (`+14155238886`), which only reaches phones that have sent the sandbox join code, and only for 24 hours after their last message. For real donors, register your own WhatsApp sender in Twilio (needs Meta business verification) and send alerts from an approved template.
 - **Push (FCM).** Needs a Google service-account credential and the Firebase project ID; the node stays disabled until then.

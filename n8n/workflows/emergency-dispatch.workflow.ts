@@ -539,8 +539,9 @@ const composeAlert = node({
           { id: 'a-accept', name: 'accept_url', value: expr('https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=accept'), type: 'string' },
           { id: 'a-decline', name: 'decline_url', value: expr('https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=decline'), type: 'string' },
           { id: 'a-title', name: 'title', value: expr('{{ $json.urgency }}: {{ $json.request_blood_group }} blood needed at {{ $json.hospital_name }}'), type: 'string' },
-          { id: 'a-message', name: 'message', value: expr('{{ $json.hospital_name }} ({{ $json.hospital_city }}) needs {{ $json.units_required }} unit(s) for a {{ $json.request_blood_group }} patient{{ $json.distance_miles != null ? ", " + $json.distance_miles + " miles from you" : "" }}. Your {{ $json.donor_blood_group }} blood is compatible. Can you donate today? Tap YES or NO.'), type: 'string' },
+          { id: 'a-message', name: 'message', value: expr('{{ $json.hospital_name }} ({{ $json.hospital_city }}) needs {{ $json.units_required }} unit(s) for {{ /^[AO]/.test($json.request_blood_group) ? "an" : "a" }} {{ $json.request_blood_group }} patient{{ $json.distance_miles != null ? ", " + $json.distance_miles + " miles from you" : "" }}. Your {{ $json.donor_blood_group }} blood is compatible. Can you donate today? Tap YES or NO.'), type: 'string' },
           { id: 'a-sms', name: 'sms_text', value: expr('LifeLink {{ $json.urgency }}: {{ $json.request_blood_group }} blood needed at {{ $json.hospital_name }}{{ $json.distance_miles != null ? " (" + $json.distance_miles + " mi)" : "" }}. Can you donate today? YES: https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=accept NO: https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=decline'), type: 'string' },
+          { id: 'a-whatsapp', name: 'wa_text', value: expr('🩸 *LifeLink {{ $json.urgency }} request*\n{{ $json.request_blood_group }} blood is needed at *{{ $json.hospital_name }}* ({{ $json.hospital_city }}){{ $json.distance_miles != null ? ", " + $json.distance_miles + " miles from you" : "" }}.\nYour {{ $json.donor_blood_group }} blood is compatible. Can you donate today?\n\n✅ YES: https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=accept\n❌ NO: https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response?m={{ $json.id }}&t={{ $json.response_token }}&a=decline'), type: 'string' },
           { id: 'a-hospital', name: 'hospital_name', value: expr('{{ $json.hospital_name }}'), type: 'string' },
           { id: 'a-group', name: 'request_blood_group', value: expr('{{ $json.request_blood_group }}'), type: 'string' }
         ]
@@ -639,38 +640,24 @@ const sendSms = node({
 });
 
 const sendWhatsApp = node({
-  type: 'n8n-nodes-base.whatsApp',
-  version: 1.1,
+  type: 'n8n-nodes-base.twilio',
+  version: 1,
   config: {
-    name: 'Send WhatsApp (Business API)',
-    disabled: true,
+    name: 'Send WhatsApp (Twilio)',
     onError: 'continueRegularOutput',
     parameters: {
-      resource: 'message',
-      operation: 'sendTemplate',
-      phoneNumberId: placeholder('WhatsApp Business phone number ID'),
-      recipientPhoneNumber: expr('{{ $json.contact }}'),
-      template: placeholder('Approved template, e.g. lifelink_blood_request|en'),
-      components: {
-        component: [
-          {
-            type: 'body',
-            bodyParameters: {
-              parameter: [
-                { type: 'text', text: expr('{{ $json.request_blood_group }}') },
-                { type: 'text', text: expr('{{ $json.hospital_name }}') },
-                { type: 'text', text: expr('{{ $json.accept_url }}') },
-                { type: 'text', text: expr('{{ $json.decline_url }}') }
-              ]
-            }
-          }
-        ]
-      }
+      resource: 'sms',
+      operation: 'send',
+      from: placeholder('Your Twilio WhatsApp sender, e.g. the sandbox +14155238886'),
+      to: expr('{{ $json.contact }}'),
+      toWhatsapp: true,
+      message: expr('{{ $json.wa_text }}'),
+      options: {}
     },
-    credentials: { whatsAppApi: newCredential('WhatsApp Business') },
+    credentials: { twilioApi: newCredential('Twilio account') },
     position: [2420, 240]
   },
-  output: [{ messaging_product: 'whatsapp' }]
+  output: [{ sid: 'SM2', status: 'queued' }]
 });
 
 const sendPush = node({
@@ -1084,9 +1071,9 @@ const alertExhausted = node({
   output: [{ id: 30, type: 'donors_exhausted' }]
 });
 
-const overview = sticky("## LifeLink emergency dispatch (spec stages 3-6)\n1. **Request initiation** – hospital posts the request (dashboard, AI agent or API).\n2. **Compatibility engine** – ABO/Rh rules, deferral window, availability, ranked by proximity then eligibility.\n3. **Notification engine** – in-app always; SMS / WhatsApp / push nodes are ready but **disabled until you add their credentials**.\n4. **Auto-escalation** – waits the urgency window, expires silent alerts and alerts the next ranked donors; alerts the hospital when nobody is left.\n\nDonor replies, fulfilment and donation logging live in **LifeLink – Donor Response & Fulfilment**.", [requestWebhook, validateRequest], { color: 5, position: [-40, -40], width: 640, height: 320 });
+const overview = sticky("## LifeLink emergency dispatch (spec stages 3-6)\n1. **Request initiation** – hospital posts the request (dashboard, AI agent or API).\n2. **Compatibility engine** – ABO/Rh rules, deferral window, availability, ranked by proximity then eligibility.\n3. **Notification engine** – in-app always, plus SMS and WhatsApp through Twilio; push is disabled until an FCM credential is added.\n4. **Auto-escalation** – waits the urgency window, expires silent alerts and alerts the next ranked donors; alerts the hospital when nobody is left.\n\nDonor replies, fulfilment and donation logging live in **LifeLink – Donor Response & Fulfilment**.", [requestWebhook, validateRequest], { color: 5, position: [-40, -40], width: 640, height: 320 });
 
-const channelNote = sticky("### Enable real delivery\nAdd a Twilio, WhatsApp Business or Google service-account (FCM) credential, fill the placeholder, then enable the node. Seed donors use invalid +91 555… numbers so tests can never text a real person.", [sendSms, sendWhatsApp, sendPush], { color: 4, position: [2380, -120], width: 360, height: 180 });
+const channelNote = sticky("### Delivery channels\n**SMS** and **WhatsApp** go through the `Twilio account` credential. WhatsApp uses the Twilio sandbox sender (+1 415 523 8886) until you register your own WhatsApp sender; each tester must first send the sandbox join code to that number.\n**Push** stays disabled until a Google service-account (FCM) credential is added. Seed donors use invalid +91 555… numbers so tests can never text a real person.", [sendSms, sendWhatsApp, sendPush], { color: 4, position: [2380, -120], width: 380, height: 220 });
 
 export default workflow('lifelink-emergency-dispatch-v2', 'LifeLink – Emergency Blood Request Dispatch')
   .add(requestWebhook)
@@ -1118,7 +1105,7 @@ export default workflow('lifelink-emergency-dispatch-v2', 'LifeLink – Emergenc
   .group('Validate request', [validateRequest, isRequestValid], { description: 'Backend schema rules plus hospital contact, patient reference, deadline and escalation window.' })
   .group('Compatibility engine', [createRequest, loadRegistry, compatibilityEngine], { description: 'Stores the request, then ranks ABO/Rh-compatible, eligible, available donors by proximity and eligibility.' })
   .group('No compatible donors', [markNoDonors, alertNoDonors, respondNoDonors], { description: 'Closes the request as exhausted, alerts the hospital and answers 201 with the tracking link.' })
-  .group('Notification engine', [composeAlert, createInApp, routeChannel, sendSms, sendWhatsApp, sendPush], { description: 'One-tap YES/NO alert per donor: in-app always, plus SMS / WhatsApp / push once credentials exist.' })
+  .group('Notification engine', [composeAlert, createInApp, routeChannel, sendSms, sendWhatsApp, sendPush], { description: 'One-tap YES/NO alert per donor: in-app always, SMS and WhatsApp via Twilio, push once an FCM credential exists.' })
   .group('Confirm dispatch', [recordDispatch, respondDispatched], { description: 'Records how many donors were found and alerted, and returns 201 with the tracking link.' })
   .group('Auto-escalation loop', [loadRequestState, loadMatches, reloadRegistry, planEscalation], { description: 'After each window, re-reads replies and availability and plans who to alert next.' })
   .group('Apply escalation', [splitUpdates, applyUpdates, newlyNotified], { description: 'Expires silent alerts, skips donors no longer eligible, and alerts the next ranked donors.' })
