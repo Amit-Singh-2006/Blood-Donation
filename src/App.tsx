@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -9,9 +9,6 @@ import AdminRegistration from './pages/AdminRegistration';
 import HowItWorks from './pages/HowItWorks';
 import EmergencyNetwork from './pages/EmergencyNetwork';
 import ImpactReports from './pages/ImpactReports';
-import AdminDashboard from './pages/AdminDashboard';
-import HospitalDashboard from './pages/HospitalDashboard';
-import DonorApp from './pages/DonorApp';
 import Analytics from './pages/Analytics';
 import TrackRequest from './pages/TrackRequest';
 import PrivacyPolicy from './pages/PrivacyPolicy';
@@ -20,8 +17,18 @@ import HospitalPartnership from './pages/HospitalPartnership';
 import Support from './pages/Support';
 import ProtectedRoute from './components/ProtectedRoute';
 
+// Signed-in dashboards pull in PDF/QR libraries; load them only when visited
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const HospitalDashboard = lazy(() => import('./pages/HospitalDashboard'));
+const DonorApp = lazy(() => import('./pages/DonorApp'));
+
+const Loading = () => (
+  <div className="min-h-screen flex items-center justify-center text-sm font-bold text-slate-400">Loading…</div>
+);
+
 export default function App() {
   return (
+    <Suspense fallback={<Loading />}>
     <Routes>
       {/* Public routes - wrapped in Layout (has public navbar/sidebar) */}
       <Route path="/" element={<Layout />}>
@@ -74,5 +81,6 @@ export default function App() {
 
 
     </Routes>
+    </Suspense>
   );
 }

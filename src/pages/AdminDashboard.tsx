@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
@@ -6,6 +6,24 @@ import autoTable from 'jspdf-autotable';
 import { cn } from '../lib/utils';
 import { apiFetch } from '../lib/api';
 import { signOut } from '../lib/auth';
+import { NetworkAnalytics, formatMinutes, useNetworkAnalytics } from '../lib/network';
+import Analytics from './Analytics';
+
+const BLOOD_TYPES = ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'];
+
+interface Overview {
+  donors: number;
+  hospitals: number;
+  hospitals_verified: number;
+  requests: number;
+  requests_active: number;
+  requests_completed: number;
+  requests_exhausted: number;
+  requests_not_dispatched: number;
+  donations: number;
+  donations_30d: number;
+  network_configured: boolean;
+}
 
 export default function AdminDashboard() {
   const location = useLocation();
@@ -16,16 +34,26 @@ export default function AdminDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState([
-    { id: 1, title: 'Critical Shortage', msg: 'Sector 4 reporting O- deficit', time: '2m ago', type: 'urgent' },
-    { id: 2, title: 'New Facility', msg: 'Westside Med joined the network', time: '1h ago', type: 'info' },
-    { id: 3, title: 'System Update', msg: 'AI Engine v2.4 deployed', time: '5h ago', type: 'system' }
-  ]);
+  const [overview, setOverview] = useState<Overview | null>(null);
+  const [overviewError, setOverviewError] = useState('');
+  const { data: network } = useNetworkAnalytics();
+
+  const loadOverview = useCallback(async () => {
+    try {
+      setOverview(await apiFetch('/admin/overview'));
+      setOverviewError('');
+    } catch (err: any) {
+      setOverviewError(err.message || 'Could not load the overview.');
+    }
+  }, []);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
     if (savedUser) setUser(JSON.parse(savedUser));
+    loadOverview();
+  }, [loadOverview]);
 
+  useEffect(() => {
     if (location.pathname.includes('/hospitals')) setActiveTab('hospitals');
     else if (location.pathname.includes('/donors')) setActiveTab('donors');
     else if (location.pathname.includes('/analytics')) setActiveTab('analytics');
@@ -46,84 +74,27 @@ export default function AdminDashboard() {
     { id: 'settings', label: 'Settings', icon: 'settings_suggest' },
   ];
 
-  const handleExportPDF = () => {
+  // Things an admin should act on, from real data
+  const shortages = network ? BLOOD_TYPES.filter((g) => (network.donor_pool.by_blood_group[g]?.eligible_now ?? 0) === 0) : [];
+  const pendingHospitals = overview ? overview.hospitals - overview.hospitals_verified : 0;
+  const notifications = [
+    pendingHospitals > 0 && { id: 'pending', title: `${pendingHospitals} hospital(s) awaiting verification`, msg: 'They cannot alert donors until you verify them.', tab: 'hospitals' },
+    overview && overview.requests_not_dispatched > 0 && { id: 'dispatch', title: `${overview.requests_not_dispatched} request(s) never reached the network`, msg: 'The donor network was unreachable or rejected them when they were raised.', tab: 'overview' },
+    overview && !overview.network_configured && { id: 'network', title: 'Donor network not configured', msg: 'Set N8N_WEBHOOK_KEY on the backend so requests can alert donors.', tab: 'settings' },
+    shortages.length > 0 && { id: 'shortage', title: `No eligible donors for ${shortages.join(', ')}`, msg: 'Consider a donor recruitment drive for these groups.', tab: 'analytics' },
+  ].filter(Boolean) as { id: string; title: string; msg: string; tab: string }[];
+
+  const handleExportPDF = async () => {
     setIsExporting(true);
-    const doc = new jsPDF();
-    const timestamp = new Date().toLocaleString();
-
-    // Branded Header
-    doc.setFillColor(238, 43, 43); // #ee2b2b
-    doc.rect(0, 0, 210, 40, 'F');
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(24);
-    doc.setFont('helvetica', 'bold');
-    doc.text('LifeLink AI', 20, 20);
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Monthly Network Performance Report', 20, 30);
-    doc.text(`Generated: ${timestamp}`, 140, 20);
-
-    // Section 1: Summary Statistics
-    doc.setTextColor(15, 23, 42); // slate-900
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Network Health Summary', 20, 55);
-
-    autoTable(doc, {
-      startY: 60,
-      head: [['Metric', 'Current Value', 'Growth', 'Network Status']],
-      body: [
-        ['Total Active Donors', '12,402', '+12%', 'Healthy'],
-        ['Hospital Partners', '156 Facilities', '+5%', 'Expanding'],
-        ['Successful Life-Saves', '8,920', '+18%', 'Active'],
-        ['Avg. Response Time', '12.4 Minutes', '-15%', 'Optimal'],
-        ['AI Prediction Accuracy', '98.2%', '+0.4%', 'High Performance']
-      ],
-      theme: 'grid',
-      headStyles: { fillColor: [15, 23, 42] },
-      margin: { left: 20, right: 20 }
-    });
-
-    // Section 2: Regional Demand (from Analytics View data)
-    doc.setFontSize(16);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Regional Demand Forecast (Next 7 Days)', 20, (doc as any).lastAutoTable.finalY + 20);
-
-    autoTable(doc, {
-      startY: (doc as any).lastAutoTable.finalY + 25,
-      head: [['Region', 'Hospital Load', 'Risk Level', 'Supply Buffer']],
-      body: [
-        ['North District', '75%', 'Moderate', '84 Hours'],
-        ['South Harbor', '95%', 'CRITICAL', '12 Hours'],
-        ['East Bay', '40%', 'Low', '120 Hours'],
-        ['West Hill', '65%', 'Moderate', '62 Hours']
-      ],
-      headStyles: { fillColor: [238, 43, 43] },
-      margin: { left: 20, right: 20 }
-    });
-
-    // Section 3: System Insights
-    const finalY = (doc as any).lastAutoTable.finalY + 20;
-    doc.setFontSize(14);
-    doc.setFont('helvetica', 'italic');
-    doc.setTextColor(100, 116, 139); // slate-400
-    doc.text('Note: This report is generated by LifeLink AI engine based on real-time network telemetry.', 20, finalY);
-    doc.text('Contains personal data: share only with authorised staff.', 20, finalY + 7);
-
-    // Footer
-    const pageCount = doc.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-      doc.setPage(i);
-      doc.setFontSize(8);
-      doc.text(`Page ${i} of ${pageCount}`, 180, 285);
-    }
-
-    doc.save(`LifeLink-Network-Report-${new Date().toISOString().split('T')[0]}.pdf`);
-
-    setTimeout(() => {
+    try {
+      const [hospitals] = await Promise.all([apiFetch('/admin/hospitals').catch(() => [])]);
+      exportReport(overview, network, hospitals);
+    } finally {
       setIsExporting(false);
-    }, 1000);
+    }
   };
+
+  const displayName = user?.name || user?.email?.split('@')[0] || 'Administrator';
 
   return (
     <div className="flex min-h-screen bg-[#f8f6f6] overflow-hidden">
@@ -147,24 +118,19 @@ export default function AdminDashboard() {
                 onClick={() => setActiveTab(item.id)}
                 className={cn(
                   'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all relative group',
-                  activeTab === item.id
-                    ? 'bg-slate-900 shadow-lg shadow-slate-200 text-white'
-                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                  activeTab === item.id ? 'bg-slate-900 shadow-lg shadow-slate-200 text-white' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                 )}
               >
                 {activeTab === item.id && (
-                  <motion.div
-                    layoutId="admin-sidebar-active"
-                    className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[#ee2b2b] rounded-full"
-                  />
+                  <motion.div layoutId="admin-sidebar-active" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[#ee2b2b] rounded-full" />
                 )}
-                <span className={cn(
-                  'material-symbols-outlined text-xl transition-colors',
-                  activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-slate-600'
-                )}>
+                <span className={cn('material-symbols-outlined text-xl transition-colors', activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-slate-600')}>
                   {item.icon}
                 </span>
                 {item.label}
+                {item.id === 'hospitals' && pendingHospitals > 0 && (
+                  <span className="ml-auto text-[10px] font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{pendingHospitals}</span>
+                )}
               </button>
             ))}
           </nav>
@@ -172,12 +138,12 @@ export default function AdminDashboard() {
 
         <div className="mt-auto p-8 pt-4 space-y-3">
           <div className="bg-slate-100 rounded-2xl p-5 border border-slate-200 shadow-sm">
-            <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">System Info</h4>
+            <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Signed in</h4>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-[10px] font-black">SA</div>
-              <div>
-                <p className="text-[11px] font-bold truncate w-32">System Admin</p>
-                <p className="text-[9px] text-[#ee2b2b] font-black uppercase tracking-tighter">Root Access</p>
+              <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-[10px] font-black">{displayName.slice(0, 2).toUpperCase()}</div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-bold truncate w-32">{displayName}</p>
+                <p className="text-[9px] text-[#ee2b2b] font-black uppercase tracking-tighter">Administrator</p>
               </div>
             </div>
           </div>
@@ -194,29 +160,18 @@ export default function AdminDashboard() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20 shrink-0">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-black text-slate-900 capitalize">{activeTab} Panel</h1>
-            <div className="h-6 w-px bg-slate-200 mx-2"></div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-[#ee2b2b]/5 text-[#ee2b2b] rounded-full text-[10px] font-bold uppercase tracking-wider">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#ee2b2b] animate-pulse"></span>
-              Network Security Active
-            </div>
-          </div>
+          <h1 className="text-xl font-black text-slate-900">{navItems.find((n) => n.id === activeTab)?.label}</h1>
 
           <div className="flex items-center gap-4 relative">
             {showSearch && (
-              <motion.div
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 240, opacity: 1 }}
-                className="relative"
-              >
+              <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 240, opacity: 1 }} className="relative">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
                 <input
                   type="text"
                   autoFocus
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Universal Search..."
+                  placeholder="Search hospitals and donors…"
                   className="w-full pl-9 pr-4 py-2 bg-slate-100 border-none rounded-xl text-xs focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all outline-none"
                 />
               </motion.div>
@@ -225,13 +180,11 @@ export default function AdminDashboard() {
             <div className="relative">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
-                className={cn(
-                  "w-10 h-10 rounded-xl flex items-center justify-center transition-all relative",
-                  showNotifications ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                )}
+                className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-all relative', showNotifications ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}
+                aria-label="Notifications"
               >
                 <span className="material-symbols-outlined text-lg">notifications</span>
-                <span className="absolute top-2 right-2 w-2 h-2 bg-[#ee2b2b] rounded-full border-2 border-white"></span>
+                {notifications.length > 0 && <span className="absolute top-2 right-2 w-2 h-2 bg-[#ee2b2b] rounded-full border-2 border-white"></span>}
               </button>
 
               <AnimatePresence>
@@ -242,19 +195,17 @@ export default function AdminDashboard() {
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-[100] overflow-hidden"
                   >
-                    <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-                      <h4 className="font-black text-slate-900 text-xs uppercase tracking-widest">Notifications</h4>
-                      <button className="text-[10px] font-bold text-[#ee2b2b]">Mark all read</button>
+                    <div className="p-4 border-b border-slate-100">
+                      <h4 className="font-black text-slate-900 text-xs uppercase tracking-widest">Needs attention</h4>
                     </div>
                     <div className="max-h-96 overflow-y-auto">
-                      {notifications.map(n => (
-                        <div key={n.id} className="p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 cursor-pointer">
-                          <div className="flex justify-between items-start mb-1">
-                            <p className="font-bold text-slate-900 text-xs">{n.title}</p>
-                            <span className="text-[9px] font-medium text-slate-400">{n.time}</span>
-                          </div>
-                          <p className="text-[10px] text-slate-500 font-medium">{n.msg}</p>
-                        </div>
+                      {notifications.length === 0 ? (
+                        <p className="p-6 text-center text-xs text-slate-400 font-bold">Nothing needs attention right now.</p>
+                      ) : notifications.map(n => (
+                        <button key={n.id} onClick={() => { setActiveTab(n.tab); setShowNotifications(false); }} className="w-full text-left p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0">
+                          <p className="font-bold text-slate-900 text-xs">{n.title}</p>
+                          <p className="text-[10px] text-slate-500 font-medium mt-1">{n.msg}</p>
+                        </button>
                       ))}
                     </div>
                   </motion.div>
@@ -264,16 +215,14 @@ export default function AdminDashboard() {
 
             <button
               onClick={() => setShowSearch(!showSearch)}
-              className={cn(
-                "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
-                showSearch ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              )}
+              className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-all', showSearch ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}
+              aria-label="Search"
             >
               <span className="material-symbols-outlined text-lg">search</span>
             </button>
             <button
               onClick={handleExportPDF}
-              disabled={isExporting}
+              disabled={isExporting || !overview}
               className="flex items-center gap-2 px-4 py-2.5 bg-[#ee2b2b] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#ee2b2b]/90 shadow-lg shadow-[#ee2b2b]/10 transition-all disabled:opacity-50"
             >
               <span className="material-symbols-outlined text-sm">{isExporting ? 'sync' : 'description'}</span>
@@ -289,39 +238,17 @@ export default function AdminDashboard() {
               initial={{ opacity: 0, scale: 0.98, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.98, y: -10 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
+              transition={{ duration: 0.25, ease: 'easeOut' }}
               className="max-w-7xl mx-auto w-full"
             >
-              <div className="flex justify-between items-end mb-8">
-                <div>
-                  <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-                    {activeTab === 'overview' && "Network Health Overview"}
-                    {activeTab === 'hospitals' && "Hospital Network Management"}
-                    {activeTab === 'donors' && "Donor Database"}
-                    {activeTab === 'analytics' && "Regional Analytics & Planning"}
-                    {activeTab === 'settings' && "System Settings"}
-                  </h2>
-                  <p className="text-slate-500 font-medium mt-1">
-                    {activeTab === 'overview' && "Real-time status of LifeLink AI donor-hospital connectivity."}
-                    {activeTab === 'hospitals' && "Monitor and manage registered medical facilities."}
-                    {activeTab === 'donors' && "Overview of active blood donors in the network."}
-                    {activeTab === 'analytics' && "Analysis of regional hospital demand vs. donor availability."}
-                    {activeTab === 'settings' && "Configure system-wide parameters and AI thresholds."}
-                  </p>
-                </div>
-                {activeTab === 'overview' && (
-                  <div className="flex bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm gap-2">
-                    <span className="material-symbols-outlined text-slate-400 text-sm">calendar_today</span>
-                    <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Last 30 Days Tracking</span>
-                  </div>
-                )}
-              </div>
-
-              {activeTab === 'overview' && <OverviewView />}
-              {activeTab === 'hospitals' && <HospitalsView initialSearch={searchQuery} />}
+              {overviewError && activeTab === 'overview' && (
+                <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">{overviewError}</div>
+              )}
+              {activeTab === 'overview' && <OverviewView overview={overview} network={network} onGo={setActiveTab} />}
+              {activeTab === 'hospitals' && <HospitalsView initialSearch={searchQuery} onChange={loadOverview} />}
               {activeTab === 'donors' && <DonorsView initialSearch={searchQuery} />}
-              {activeTab === 'analytics' && <RegionalAnalyticsView />}
-              {activeTab === 'settings' && <SettingsView />}
+              {activeTab === 'analytics' && <div className="-m-8"><Analytics /></div>}
+              {activeTab === 'settings' && <SettingsView user={user} overview={overview} />}
             </motion.div>
           </AnimatePresence>
         </div>
@@ -330,520 +257,158 @@ export default function AdminDashboard() {
   );
 }
 
-function SettingsView() {
-  const [notifications, setNotifications] = useState({ email: true, sms: false, push: true, critical: true });
-  const [aiSettings, setAiSettings] = useState({ autoMatch: true, predictiveDemand: true, anomalyDetection: false, learningMode: true });
-  const [showToast, setShowToast] = useState(false);
-  const [toastMsg, setToastMsg] = useState('');
+/** PDF report built only from real figures at the moment of export. */
+function exportReport(overview: Overview | null, network: NetworkAnalytics | null, hospitals: any[]) {
+  const doc = new jsPDF();
+  const generated = new Date().toLocaleString('en-IN');
 
-  const showSuccess = (msg: string) => {
-    setToastMsg(msg);
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
-  };
+  doc.setFillColor(238, 43, 43);
+  doc.rect(0, 0, 210, 40, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(24);
+  doc.setFont('helvetica', 'bold');
+  doc.text('LifeLink AI', 20, 20);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Network Report', 20, 30);
+  doc.text(`Generated: ${generated}`, 130, 20);
 
-  const Toggle = ({ value, onChange }: { value: boolean; onChange: () => void }) => (
-    <button
-      onClick={onChange}
-      className={`relative w-12 h-6 rounded-full transition-all duration-300 ${value ? 'bg-[#ee2b2b]' : 'bg-slate-200'
-        }`}
-    >
-      <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-md transition-all duration-300 ${value ? 'left-7' : 'left-1'
-        }`} />
-    </button>
-  );
+  doc.setTextColor(15, 23, 42);
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Website accounts and requests', 20, 55);
+  autoTable(doc, {
+    startY: 60,
+    head: [['Metric', 'Value']],
+    body: overview ? [
+      ['Registered donors', String(overview.donors)],
+      ['Hospitals (verified / total)', `${overview.hospitals_verified} / ${overview.hospitals}`],
+      ['Blood requests (active / total)', `${overview.requests_active} / ${overview.requests}`],
+      ['Requests completed', String(overview.requests_completed)],
+      ['Requests with no donors left', String(overview.requests_exhausted)],
+      ['Donations recorded (last 30 days / total)', `${overview.donations_30d} / ${overview.donations}`],
+    ] : [['Unavailable', '']],
+    theme: 'grid',
+    headStyles: { fillColor: [15, 23, 42] },
+    margin: { left: 20, right: 20 },
+  });
 
-  return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300 relative">
+  let y = (doc as any).lastAutoTable.finalY + 15;
+  doc.text('Donor network (all channels)', 20, y);
+  autoTable(doc, {
+    startY: y + 5,
+    head: [['Blood group', 'Eligible now', 'Registered']],
+    body: network ? BLOOD_TYPES.map((g) => [g, String(network.donor_pool.by_blood_group[g]?.eligible_now ?? 0), String(network.donor_pool.by_blood_group[g]?.registered ?? 0)]) : [['Unavailable', '', '']],
+    headStyles: { fillColor: [238, 43, 43] },
+    margin: { left: 20, right: 20 },
+  });
+  if (network) {
+    y = (doc as any).lastAutoTable.finalY + 8;
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Requests covered: ${network.requests.covered_pct ?? '-'}%   Median time to first donor: ${formatMinutes(network.requests.median_minutes_to_first_donor)}   Response rate: ${network.responses.response_rate_pct ?? '-'}%`, 20, y);
+  }
 
-      {showToast && (
-        <div className="fixed top-8 right-8 bg-slate-900 text-white px-6 py-3 rounded-xl shadow-2xl z-[100] flex items-center gap-3 animate-in slide-in-from-right duration-300">
-          <span className="material-symbols-outlined text-emerald-400">check_circle</span>
-          <span className="text-sm font-bold">{toastMsg}</span>
-        </div>
-      )}
+  y = (doc as any).lastAutoTable.finalY + 20;
+  doc.setFontSize(14);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Hospitals', 20, y);
+  autoTable(doc, {
+    startY: y + 5,
+    head: [['Hospital', 'City', 'Registration no.', 'Verified']],
+    body: hospitals.length ? hospitals.map((h: any) => [h.hospital_name, h.city || '', h.registration_number || '', h.is_verified ? 'Yes' : 'No']) : [['None registered', '', '', '']],
+    headStyles: { fillColor: [15, 23, 42] },
+    margin: { left: 20, right: 20 },
+  });
 
-      {/* Account Profile */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-8 py-6 border-b border-slate-100 flex items-center gap-3">
-          <span className="material-symbols-outlined text-[#ee2b2b]">manage_accounts</span>
-          <h3 className="text-lg font-black text-slate-900">Account Profile</h3>
-        </div>
-        <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Full Name</label>
-            <input defaultValue="System Administrator" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b]/40 transition-all" />
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</label>
-            <input type="email" placeholder="you@example.com" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b]/40 transition-all" />
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phone Number</label>
-            <input defaultValue="+1 (555) 000-0000" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b]/40 transition-all" />
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Timezone</label>
-            <select className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all">
-              <option>UTC-8 (Pacific Time)</option>
-              <option>UTC-5 (Eastern Time)</option>
-              <option>UTC+0 (GMT)</option>
-              <option>UTC+5:30 (IST)</option>
-            </select>
-          </div>
-          <div className="md:col-span-2 flex justify-end">
-            <button onClick={() => showSuccess('Profile updated successfully!')} className="px-8 py-3 bg-[#ee2b2b] text-white rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#ee2b2b]/90 shadow-lg shadow-[#ee2b2b]/20 transition-all active:scale-95">
-              Save Profile
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Notification Preferences */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-8 py-6 border-b border-slate-100 flex items-center gap-3">
-          <span className="material-symbols-outlined text-blue-500">notifications</span>
-          <h3 className="text-lg font-black text-slate-900">Notification Preferences</h3>
-        </div>
-        <div className="p-8 space-y-6">
-          {[
-            { key: 'email', label: 'Email Notifications', desc: 'Receive alerts and reports via email', icon: 'mail' },
-            { key: 'sms', label: 'SMS Alerts', desc: 'Critical emergency alerts via text message', icon: 'sms' },
-            { key: 'push', label: 'Push Notifications', desc: 'In-app dashboard push alerts', icon: 'notifications_active' },
-            { key: 'critical', label: 'Critical Only Mode', desc: 'Only send alerts for supply deficits and emergencies', icon: 'emergency' },
-          ].map(item => (
-            <div key={item.key} className="flex items-center justify-between p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-slate-200 transition-all">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-500 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-lg">{item.icon}</span>
-                </div>
-                <div>
-                  <p className="font-black text-slate-800 text-sm">{item.label}</p>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5">{item.desc}</p>
-                </div>
-              </div>
-              <Toggle value={(notifications as any)[item.key]} onChange={() => setNotifications(p => ({ ...p, [item.key]: !(p as any)[item.key] }))} />
-            </div>
-          ))}
-          <div className="flex justify-end">
-            <button onClick={() => showSuccess('Notification preferences saved!')} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-wider hover:bg-slate-700 transition-all active:scale-95">
-              Save Preferences
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* AI Engine Configuration */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="material-symbols-outlined text-[#ee2b2b]">auto_awesome</span>
-            <h3 className="text-lg font-black text-slate-900">AI Engine Configuration</h3>
-          </div>
-          <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-full">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span className="text-[10px] font-black text-emerald-700 uppercase">Engine Online</span>
-          </div>
-        </div>
-        <div className="p-8 space-y-6">
-          {[
-            { key: 'autoMatch', label: 'Autonomous Donor Matching', desc: 'AI automatically pairs donors with hospital requests', icon: 'hub' },
-            { key: 'predictiveDemand', label: 'Predictive Demand Forecasting', desc: 'Forecast regional blood demands 7 days ahead', icon: 'insights' },
-            { key: 'anomalyDetection', label: 'Anomaly Detection', desc: 'Flag unusual network activity or supply chain gaps', icon: 'policy' },
-            { key: 'learningMode', label: 'Continuous Learning Mode', desc: 'Allow AI to learn from match outcomes to improve accuracy', icon: 'model_training' },
-          ].map(item => (
-            <div key={item.key} className="flex items-center justify-between p-5 rounded-2xl bg-slate-50 border border-slate-100 hover:border-[#ee2b2b]/20 transition-all">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-[#ee2b2b]/10 text-[#ee2b2b] flex items-center justify-center">
-                  <span className="material-symbols-outlined text-lg">{item.icon}</span>
-                </div>
-                <div>
-                  <p className="font-black text-slate-800 text-sm">{item.label}</p>
-                  <p className="text-xs text-slate-400 font-medium mt-0.5">{item.desc}</p>
-                </div>
-              </div>
-              <Toggle value={(aiSettings as any)[item.key]} onChange={() => setAiSettings(p => ({ ...p, [item.key]: !(p as any)[item.key] }))} />
-            </div>
-          ))}
-          <div className="p-5 rounded-2xl bg-slate-50 border border-slate-100">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">AI Confidence Threshold</label>
-            <div className="flex items-center gap-4 mt-3">
-              <input type="range" min="50" max="99" defaultValue="85" className="flex-1 accent-[#ee2b2b]" />
-              <span className="text-sm font-black text-slate-800 w-12">85%</span>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-2">Minimum confidence required before AI executes autonomous recommendations</p>
-          </div>
-          <div className="flex justify-end">
-            <button onClick={() => showSuccess('AI Engine settings updated!')} className="px-8 py-3 bg-[#ee2b2b] text-white rounded-xl font-black text-xs uppercase tracking-wider hover:bg-[#ee2b2b]/90 shadow-lg shadow-[#ee2b2b]/20 transition-all active:scale-95">
-              Apply AI Config
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Security */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-8 py-6 border-b border-slate-100 flex items-center gap-3">
-          <span className="material-symbols-outlined text-emerald-500">security</span>
-          <h3 className="text-lg font-black text-slate-900">Security & Access Control</h3>
-        </div>
-        <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Current Password</label>
-            <input type="password" placeholder="••••••••" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-all" />
-          </div>
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">New Password</label>
-            <input type="password" placeholder="••••••••" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-200 transition-all" />
-          </div>
-          <div className="md:col-span-2 flex items-center justify-between p-5 rounded-2xl bg-emerald-50 border border-emerald-100">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                <span className="material-symbols-outlined text-lg">verified_user</span>
-              </div>
-              <div>
-                <p className="font-black text-slate-800 text-sm">Two-Factor Authentication (2FA)</p>
-                <p className="text-xs text-slate-400 font-medium mt-0.5">Secure your admin account with an authenticator app</p>
-              </div>
-            </div>
-            <button className="px-5 py-2.5 border border-emerald-200 text-emerald-700 font-black text-xs uppercase rounded-xl hover:bg-emerald-100 transition-all">Enable 2FA</button>
-          </div>
-          <div className="md:col-span-2 flex justify-end">
-            <button onClick={() => showSuccess('Password updated successfully!')} className="px-8 py-3 bg-emerald-600 text-white rounded-xl font-black text-xs uppercase tracking-wider hover:bg-emerald-700 transition-all active:scale-95">
-              Update Password
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Danger Zone */}
-      <div className="bg-white rounded-2xl border border-red-100 shadow-sm overflow-hidden">
-        <div className="px-8 py-6 border-b border-red-100 flex items-center gap-3 bg-red-50/50">
-          <span className="material-symbols-outlined text-[#ee2b2b]">warning</span>
-          <h3 className="text-lg font-black text-[#ee2b2b]">Danger Zone</h3>
-        </div>
-        <div className="p-8 space-y-4">
-          <div className="flex items-center justify-between p-5 rounded-2xl bg-slate-50 border border-slate-100">
-            <div>
-              <p className="font-black text-slate-800 text-sm">Purge AI Match Cache</p>
-              <p className="text-xs text-slate-400 mt-0.5">Clear all cached predictions and reset the match queue</p>
-            </div>
-            <button onClick={() => showSuccess('AI cache purged successfully!')} className="px-5 py-2.5 border border-amber-200 bg-amber-50 text-amber-700 font-black text-xs uppercase rounded-xl hover:bg-amber-100 transition-all">Purge Cache</button>
-          </div>
-          <div className="flex items-center justify-between p-5 rounded-2xl bg-red-50/50 border border-red-100">
-            <div>
-              <p className="font-black text-red-700 text-sm">Reset Network Data</p>
-              <p className="text-xs text-red-400 mt-0.5">This will permanently reset all network statistics. Cannot be undone.</p>
-            </div>
-            <button className="px-5 py-2.5 border border-red-200 bg-white text-[#ee2b2b] font-black text-xs uppercase rounded-xl hover:bg-red-50 transition-all">Reset All</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Figures from the LifeLink database and donor network at the time of export. Contains business contact details: share only with authorised staff.', 20, 280);
+    doc.text(`Page ${i} of ${pageCount}`, 180, 287);
+  }
+  doc.save(`LifeLink-Network-Report-${new Date().toISOString().split('T')[0]}.pdf`);
 }
 
-function RegionalAnalyticsView() {
+function OverviewView({ overview, network, onGo }: { overview: Overview | null; network: NetworkAnalytics | null; onGo: (tab: string) => void }) {
+  const kpis = [
+    { label: 'Registered donors', value: overview?.donors, icon: 'group', tone: 'bg-blue-50 text-blue-600', note: network ? `${network.donor_pool.registered} on the donor network incl. SMS/USSD` : '' },
+    { label: 'Verified hospitals', value: overview ? `${overview.hospitals_verified} / ${overview.hospitals}` : undefined, icon: 'local_hospital', tone: 'bg-green-50 text-green-600', note: overview && overview.hospitals > overview.hospitals_verified ? `${overview.hospitals - overview.hospitals_verified} awaiting verification` : 'None pending' },
+    { label: 'Active requests', value: overview?.requests_active, icon: 'emergency', tone: 'bg-red-50 text-[#ee2b2b]', note: overview ? `${overview.requests} raised in total` : '' },
+    { label: 'Donations (30 days)', value: overview?.donations_30d, icon: 'volunteer_activism', tone: 'bg-amber-50 text-amber-600', note: overview ? `${overview.donations} recorded in total` : '' },
+  ];
+
   return (
     <div className="space-y-8">
-      {/* Analytics KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl border border-slate-200">
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Avg. Response Time</p>
-          <h3 className="text-2xl font-black text-slate-900 mt-1">12.4 Min</h3>
-          <p className="text-emerald-500 text-[10px] font-bold flex items-center gap-1 mt-2">
-            <span className="material-symbols-outlined text-xs">trending_down</span>
-            -15% from last week
-          </p>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-slate-200">
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">Cross-Region Efficiency</p>
-          <h3 className="text-2xl font-black text-slate-900 mt-1">92.8%</h3>
-          <div className="mt-3 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-            <div className="bg-emerald-500 h-full rounded-full" style={{ width: '92.8%' }}></div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        {kpis.map((k) => (
+          <div key={k.label} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${k.tone}`}>
+              <span className="material-symbols-outlined">{k.icon}</span>
+            </div>
+            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{k.label}</p>
+            <h3 className="text-3xl font-black text-slate-900 mt-1">{k.value ?? '–'}</h3>
+            {k.note && <p className="text-[11px] font-bold text-slate-500 mt-1">{k.note}</p>}
           </div>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-slate-200">
-          <p className="text-slate-500 text-xs font-bold uppercase tracking-wider">AI Prediction Accuracy</p>
-          <h3 className="text-2xl font-black text-slate-900 mt-1">98.2%</h3>
-          <p className="text-slate-400 text-[10px] mt-2 italic">Based on 5k+ previous matches</p>
-        </div>
-        <div className="bg-white p-6 rounded-xl border border-[#ee2b2b]/30 bg-red-50/30">
-          <p className="text-red-600 text-xs font-bold uppercase tracking-wider">Supply Deficit</p>
-          <h3 className="text-2xl font-black text-red-600 mt-1">O- / B-</h3>
-          <p className="text-red-500 text-[10px] font-bold flex items-center gap-1 mt-2 animate-pulse">
-            <span className="material-symbols-outlined text-xs">warning</span>
-            Critical in 4 sectors
-          </p>
-        </div>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Donor Availability Analysis */}
-        <div className="bg-white p-6 rounded-xl border border-slate-200">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="font-bold text-slate-900 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#ee2b2b]">person_search</span>
-              Donor Availability Index
-            </h3>
-            <div className="flex gap-2">
-              <span className="w-3 h-3 rounded-full bg-blue-500"></span>
-              <span className="text-[10px] font-bold text-slate-500 uppercase">Registered</span>
-              <span className="w-3 h-3 rounded-full bg-emerald-500 ml-2"></span>
-              <span className="text-[10px] font-bold text-slate-500 uppercase">Available Now</span>
-            </div>
-          </div>
-          <div className="space-y-6">
-            {['North District', 'South Harbor', 'East Bay', 'West Hill'].map((reg, i) => (
-              <div key={i} className="space-y-2">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="font-bold text-slate-700">{reg}</span>
-                  <span className="text-slate-500 font-medium">840 / 1,200 available</span>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+          <h4 className="font-black text-slate-900 mb-1">Request outcomes</h4>
+          <p className="text-xs text-slate-500 mb-6">Requests raised from hospital dashboards</p>
+          {overview && overview.requests > 0 ? (
+            <div className="space-y-4">
+              {([
+                ['Active (finding donors or donors on the way)', overview.requests_active, 'bg-amber-400'],
+                ['Completed (blood donated)', overview.requests_completed, 'bg-green-500'],
+                ['No donors left', overview.requests_exhausted, 'bg-red-500'],
+                ['Never reached the network', overview.requests_not_dispatched, 'bg-slate-400'],
+              ] as [string, number, string][]).map(([label, value, color]) => (
+                <div key={label}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-slate-600">{label}</span>
+                    <span className="font-bold text-slate-900">{value}</span>
+                  </div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${color}`} style={{ width: `${(value / overview.requests) * 100}%` }} />
+                  </div>
                 </div>
-                <div className="w-full bg-slate-100 h-3 rounded-lg overflow-hidden flex">
-                  <div className="bg-blue-500 h-full border-r border-white/20" style={{ width: '85%' }}></div>
-                  <div className="bg-emerald-500 h-full" style={{ width: `${Math.random() * 40 + 30}%` }}></div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Hospital Demand Forecast */}
-        <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl"></div>
-
-          <div className="flex justify-between items-start mb-8">
-            <div>
-              <h3 className="font-black text-slate-900 flex items-center gap-2 text-lg">
-                <span className="material-symbols-outlined text-blue-500">analytics</span>
-                Weekly Hospital Demand Forecast
-              </h3>
-              <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-widest">AI Projected Resource Needs</p>
-            </div>
-            <div className="flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-full border border-blue-100">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-              <span className="text-[10px] font-black text-blue-600 uppercase">Live Prediction</span>
-            </div>
-          </div>
-
-          <div className="h-[220px] flex items-end justify-between gap-3 px-2 mb-4">
-            {[
-              { day: 'MON', val: 75, trend: 'up' },
-              { day: 'TUE', val: 55, trend: 'steady' },
-              { day: 'WED', val: 40, trend: 'down' },
-              { day: 'THU', val: 65, trend: 'up' },
-              { day: 'FRI', val: 95, trend: 'peak' },
-              { day: 'SAT', val: 80, trend: 'steady' },
-              { day: 'SUN', val: 60, trend: 'down' }
-            ].map((item, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-3 group/bar h-full justify-end">
-                <div className="relative w-full h-full flex flex-col justify-end">
-                  <motion.div
-                    initial={{ height: 0 }}
-                    animate={{ height: `${item.val}%` }}
-                    transition={{ delay: i * 0.1, duration: 1, ease: "circOut" }}
-                    className={`w-full rounded-t-xl transition-all relative ${item.trend === 'peak'
-                      ? 'bg-gradient-to-t from-[#ee2b2b] to-red-400 shadow-lg shadow-red-200'
-                      : 'bg-gradient-to-t from-slate-200 to-slate-100 group-hover/bar:from-blue-100 group-hover/bar:to-blue-50'
-                      }`}
-                  >
-                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[10px] font-black px-2 py-1 rounded opacity-0 group-hover/bar:opacity-100 transition-all pointer-events-none whitespace-nowrap z-10">
-                      {item.val}% LOAD
-                    </div>
-                  </motion.div>
-                </div>
-                <span className={`text-[10px] font-black tracking-tighter ${item.trend === 'peak' ? 'text-[#ee2b2b]' : 'text-slate-400'}`}>
-                  {item.day}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-8 grid grid-cols-2 gap-4">
-            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center">
-                <span className="material-symbols-outlined text-lg">schedule</span>
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Peak Demand Window</p>
-                <p className="text-xs font-black text-slate-700 mt-0.5">Fri, 18:00 - 22:00</p>
-              </div>
-            </div>
-            <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center">
-                <span className="material-symbols-outlined text-lg">verified</span>
-              </div>
-              <div>
-                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Inventory Status</p>
-                <p className="text-xs font-black text-emerald-700 mt-0.5">Optimal (84h Buffer)</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function OverviewView() {
-  const [period, setPeriod] = useState<'monthly' | 'quarterly'>('monthly');
-
-  const chartData = {
-    monthly: {
-      labels: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
-      donors: "M0,220 Q70,200 140,150 T280,120 T420,100 T560,70 T700,50 T800,30",
-      matches: "M0,250 Q70,230 140,190 T280,160 T420,130 T560,90 T700,70 T800,40",
-      livesSaved: "M0,280 Q70,260 140,220 T280,180 T420,160 T560,110 T700,90 T800,60",
-      gradient: "M0,220 Q70,200 140,150 T280,120 T420,100 T560,70 T700,50 T800,30 L800,300 L0,300 Z",
-    },
-    quarterly: {
-      labels: ["Q1 (1/4)", "Q2 (2/4)", "Q3 (3/4)", "Q4 (4/4)"],
-      donors: "M0,180 Q200,160 400,100 T800,20",
-      matches: "M0,210 Q200,190 400,140 T800,60",
-      livesSaved: "M0,240 Q200,220 400,180 T800,100",
-      gradient: "M0,180 Q200,160 400,100 T800,20 L800,300 L0,300 Z",
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <KPICard title="Total Active Donors" value="12,402" icon="volunteer_activism" color="red" trend="+12%" progress={75} />
-        <KPICard title="Hospital Network Size" value="156 Facilities" icon="domain" color="blue" trend="+5%" progress={45} />
-        <KPICard title="Successful Matches" value="8,920" icon="bolt" color="amber" trend="+18%" progress={88} />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 flex flex-col shadow-sm">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">Network Performance Trend</h3>
-              <p className="text-sm text-slate-500">Regional impact and matching efficiency</p>
-            </div>
-            <div className="flex bg-slate-100 p-1 rounded-lg">
-              <button
-                onClick={() => setPeriod('monthly')}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${period === 'monthly' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Monthly
-              </button>
-              <button
-                onClick={() => setPeriod('quarterly')}
-                className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${period === 'quarterly' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                Quarterly
-              </button>
-            </div>
-          </div>
-          <div className="flex-1 min-h-[300px] relative">
-            <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 800 300">
-              <defs>
-                <linearGradient id="chartGradientActive" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stopColor="#ee2b2b" stopOpacity="0.1"></stop>
-                  <stop offset="100%" stopColor="#ee2b2b" stopOpacity="0"></stop>
-                </linearGradient>
-              </defs>
-
-              {/* Grid Lines */}
-              {[0, 1, 2, 3].map((v) => (
-                <line key={v} x1="0" y1={v * 100} x2="800" y2={v * 100} stroke="#f8fafc" strokeWidth="1" />
               ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">{overview ? 'No requests have been raised yet.' : 'Loading…'}</p>
+          )}
+        </div>
 
-              <motion.path
-                initial={false}
-                animate={{ d: chartData[period].gradient }}
-                transition={{ duration: 0.8, ease: "anticipate" }}
-                fill="url(#chartGradientActive)"
-              ></motion.path>
-
-              {/* Lives Saved Line - Green */}
-              <motion.path
-                initial={false}
-                animate={{ d: chartData[period].livesSaved }}
-                transition={{ duration: 0.8, ease: "anticipate" }}
-                fill="none"
-                stroke="#10b981"
-                strokeLinecap="round"
-                strokeWidth="3"
-                strokeDasharray="4 4"
-              ></motion.path>
-
-              {/* Total Matches Line - Blue */}
-              <motion.path
-                initial={false}
-                animate={{ d: chartData[period].matches }}
-                transition={{ duration: 0.8, ease: "anticipate" }}
-                fill="none"
-                stroke="#3b82f6"
-                strokeLinecap="round"
-                strokeWidth="3"
-              ></motion.path>
-
-              {/* New Donors Line - Red */}
-              <motion.path
-                initial={false}
-                animate={{ d: chartData[period].donors }}
-                transition={{ duration: 0.8, ease: "anticipate" }}
-                fill="none"
-                stroke="#ee2b2b"
-                strokeLinecap="round"
-                strokeWidth="5"
-              ></motion.path>
-
-              {/* Dynamic Labels */}
-              <div className="absolute -bottom-8 left-0 right-0 flex justify-between px-2">
-                {chartData[period].labels.map((label, i) => (
-                  <motion.span
-                    key={label}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.05 }}
-                    className="text-[9px] font-black text-slate-400 uppercase tracking-tighter"
-                  >
-                    {label}
-                  </motion.span>
+        <div className="bg-slate-900 rounded-2xl p-6 text-white">
+          <p className="text-[10px] font-black text-[#ee2b2b] uppercase tracking-[0.2em] mb-3">Donor network now</p>
+          {network ? (
+            <>
+              <p className="text-3xl font-black">{network.donor_pool.eligible_now}</p>
+              <p className="text-sm text-slate-400 mb-4">donors eligible to donate right now</p>
+              <div className="grid grid-cols-4 gap-2">
+                {BLOOD_TYPES.map((g) => (
+                  <div key={g} className="bg-white/5 rounded-lg p-2 text-center">
+                    <p className="text-[10px] font-black text-slate-400">{g}</p>
+                    <p className="font-black">{network.donor_pool.by_blood_group[g]?.eligible_now ?? 0}</p>
+                  </div>
                 ))}
               </div>
-            </svg>
-          </div>
-
-          <div className="mt-12 pt-6 border-t border-slate-100 flex items-center justify-between">
-            <div className="flex flex-wrap gap-8">
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-[#ee2b2b]"></span>
-                <span className="text-[10px] font-black text-slate-600 uppercase">New Donors</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-[#3b82f6]"></span>
-                <span className="text-[10px] font-black text-slate-600 uppercase">Total Matches</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded-full bg-[#10b981]"></span>
-                <span className="text-[10px] font-black text-slate-600 uppercase">Lives Saved</span>
-              </div>
-            </div>
-            <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-              Live Network Pulse
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl border border-slate-200 p-6 flex flex-col shadow-sm max-h-[500px]">
-          <h3 className="text-lg font-bold text-slate-900 mb-6">System Feedback</h3>
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-            <FeedbackItem name="City General Hospital" initial="CG" rating={4} text="AI prediction accuracy improved our match time by 40%. The emergency routing is seamless." role="HOSPITAL ADMIN" time="2M AGO" />
-            <FeedbackItem name="John D. (Donor)" initial="JD" rating={5} text="The donor app is very intuitive. Glad to see where my blood is making a difference." role="PLATINUM DONOR" time="15M AGO" color="red" />
-            <FeedbackItem name="St. Mary's Clinic" initial="SM" rating={5} text="Regional visibility of rare blood groups is a life-saver for our trauma unit." role="SURGICAL HEAD" time="48M AGO" color="blue" />
-            <FeedbackItem name="Alice W. (Donor)" initial="AW" rating={5} text="Love the token reward system! It's great to be recognized for contributing." role="GOLD DONOR" time="1H AGO" color="amber" />
-          </div>
+              <button onClick={() => onGo('analytics')} className="mt-4 text-xs font-black text-[#ee2b2b] hover:underline">Full analytics →</button>
+            </>
+          ) : (
+            <p className="text-sm text-slate-400">Loading…</p>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function HospitalsView({ initialSearch = '' }: { initialSearch?: string }) {
+function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: string; onChange?: () => void }) {
   const [hospitals, setHospitals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -878,6 +443,7 @@ function HospitalsView({ initialSearch = '' }: { initialSearch?: string }) {
     try {
       await apiFetch(`/admin/hospitals/${h.id}/verification`, { method: 'PUT', body: JSON.stringify({ verified }) });
       await load();
+      onChange?.();
     } catch (err: any) {
       setError(err.message || 'Could not update verification.');
     } finally {
@@ -957,485 +523,130 @@ function HospitalsView({ initialSearch = '' }: { initialSearch?: string }) {
 }
 
 function DonorsView({ initialSearch = '' }: { initialSearch?: string }) {
-  const [selectedDonor, setSelectedDonor] = useState<any>(null);
-  const [localSearch, setLocalSearch] = useState(initialSearch);
+  const [donors, setDonors] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [search, setSearch] = useState(initialSearch);
+  const [group, setGroup] = useState('');
 
+  useEffect(() => { setSearch(initialSearch); }, [initialSearch]);
   useEffect(() => {
-    setLocalSearch(initialSearch);
-  }, [initialSearch]);
+    apiFetch('/admin/donors')
+      .then((rows) => setDonors(rows))
+      .catch((err) => setError(err.message || 'Could not load donors.'))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const donors = [
-    {
-      id: 1,
-      name: "Sarah Jenkins",
-      group: "O-",
-      status: "Eligible",
-      last: "2 weeks ago",
-      location: "Seattle, WA",
-      image: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&q=80&w=400",
-      totalDonations: 12,
-      rank: "Diamond",
-      history: [
-        { date: "Feb 10, 2024", quantity: "450ml", tokens: 250, location: "City General" },
-        { date: "Nov 15, 2023", quantity: "450ml", tokens: 250, location: "Red Cross #4" },
-        { date: "Aug 22, 2023", quantity: "500ml", tokens: 300, location: "City General" },
-        { date: "May 05, 2023", quantity: "450ml", tokens: 250, location: "Regional Hub" }
-      ]
-    },
-    {
-      id: 2,
-      name: "Michael Chen",
-      group: "A+",
-      status: "Deferred",
-      last: "3 days ago",
-      location: "Bellevue, WA",
-      image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&q=80&w=400",
-      totalDonations: 8,
-      rank: "Gold",
-      history: [
-        { date: "Jan 20, 2024", quantity: "450ml", tokens: 200, location: "Eastside Med" },
-        { date: "Oct 12, 2023", quantity: "450ml", tokens: 200, location: "Eastside Med" },
-        { date: "Jul 08, 2023", quantity: "450ml", tokens: 200, location: "St. Mary's" }
-      ]
-    },
-    {
-      id: 3,
-      name: "Elena Rodriguez",
-      group: "B-",
-      status: "Eligible",
-      last: "Today",
-      location: "Redmond, WA",
-      image: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&q=80&w=400",
-      totalDonations: 15,
-      rank: "Platinum",
-      history: [
-        { date: "Feb 23, 2024", quantity: "500ml", tokens: 350, location: "Regional Hub" },
-        { date: "Dec 01, 2023", quantity: "450ml", tokens: 250, location: "Regional Hub" },
-        { date: "Sep 14, 2023", quantity: "450ml", tokens: 250, location: "City General" },
-        { date: "Jun 20, 2023", quantity: "450ml", tokens: 250, location: "City General" }
-      ]
-    },
-    {
-      id: 4,
-      name: "David Kim",
-      group: "AB+",
-      status: "Eligible",
-      last: "1 month ago",
-      location: "Seattle, WA",
-      image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&q=80&w=400",
-      totalDonations: 6,
-      rank: "Silver",
-      history: [
-        { date: "Jan 05, 2024", quantity: "450ml", tokens: 150, location: "St. Mary's" },
-        { date: "Oct 22, 2023", quantity: "450ml", tokens: 150, location: "City General" },
-        { date: "Jul 15, 2023", quantity: "450ml", tokens: 150, location: "St. Mary's" }
-      ]
-    }
-  ];
-
-  const filteredDonors = donors.filter(d =>
-    d.name.toLowerCase().includes(localSearch.toLowerCase()) ||
-    d.group.toLowerCase().includes(localSearch.toLowerCase())
+  const q = search.toLowerCase();
+  const filtered = donors.filter((d) =>
+    (!group || d.blood_group === group) &&
+    [d.name, d.email, d.city, d.phone].some((v) => String(v ?? '').toLowerCase().includes(q))
   );
-
-  if (selectedDonor) {
-    return <DonorProfileView donor={selectedDonor} onBack={() => setSelectedDonor(null)} />;
-  }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h3 className="text-xl font-bold text-slate-800">Top Network Donors</h3>
-        <div className="relative">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
-          <input
-            type="text"
-            value={localSearch}
-            onChange={(e) => setLocalSearch(e.target.value)}
-            placeholder="Search donors by name or blood group..."
-            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-72 focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all outline-none"
-          />
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        <div>
+          <h3 className="text-xl font-bold text-slate-800">Donors</h3>
+          <p className="text-xs text-slate-500 mt-1">
+            {donors.length} registered on the website. Donors who joined by SMS or USSD appear in the network analytics only.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <select value={group} onChange={(e) => setGroup(e.target.value)} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none">
+            <option value="">All groups</option>
+            {BLOOD_TYPES.map((g) => <option key={g}>{g}</option>)}
+          </select>
+          <div className="relative">
+            <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Name, email, city, phone…"
+              className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-64 focus:ring-2 focus:ring-[#ee2b2b]/20 outline-none"
+            />
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {filteredDonors.map((d) => (
-          <motion.div
-            key={d.id}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            whileHover={{ y: -5 }}
-            className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm hover:shadow-xl transition-all group"
-          >
-            <div className="h-32 bg-gradient-to-r from-[#ee2b2b] to-red-800 relative">
-              <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
-                <div className="w-20 h-20 rounded-full border-4 border-white overflow-hidden shadow-lg bg-white">
-                  <img src={d.image} alt={d.name} className="w-full h-full object-cover" />
-                </div>
-              </div>
-              <div className="absolute top-3 right-3">
-                <span className="px-2 py-1 bg-white/20 backdrop-blur-md text-white text-[10px] font-black rounded uppercase">
-                  {d.rank}
-                </span>
-              </div>
-            </div>
-            <div className="pt-12 p-6 text-center">
-              <h4 className="font-extrabold text-slate-900 group-hover:text-[#ee2b2b] transition-colors">{d.name}</h4>
-              <div className="flex items-center justify-center gap-2 mt-1">
-                <span className="text-[10px] font-black bg-red-50 text-[#ee2b2b] px-2 py-0.5 rounded border border-[#ee2b2b]/20">TYPE {d.group}</span>
-                <span className={`text-[10px] font-black px-2 py-0.5 rounded border ${d.status === 'Eligible' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-200'
-                  }`}>
-                  {d.status.toUpperCase()}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-4 flex items-center justify-center gap-1 font-medium">
-                <span className="material-symbols-outlined text-sm">location_on</span>
-                {d.location}
-              </p>
+      {error && <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">{error}</div>}
 
-              <div className="mt-6 pt-6 border-t border-slate-50 grid grid-cols-2 gap-2">
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">Donations</p>
-                  <p className="font-black text-slate-900">{d.totalDonations}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">Last Trip</p>
-                  <p className="font-black text-slate-900 text-[11px] truncate">{d.last}</p>
-                </div>
-              </div>
-
-              <button
-                onClick={() => setSelectedDonor(d)}
-                className="w-full mt-6 py-3 bg-slate-50 text-slate-600 font-black text-xs rounded-xl hover:bg-[#ee2b2b] hover:text-white transition-all active:scale-95"
-              >
-                View Profile
-              </button>
-            </div>
-          </motion.div>
-        ))}
+      <div className="bg-white rounded-2xl border border-slate-200 overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="text-[10px] uppercase tracking-widest text-slate-400 border-b border-slate-100">
+              {['Donor', 'Group', 'City', 'Phone', 'Last donation', 'Donations', 'Joined'].map((h) => <th key={h} className="px-4 py-3 font-black">{h}</th>)}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-50">
+            {loading ? (
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Loading donors…</td></tr>
+            ) : filtered.length === 0 ? (
+              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{donors.length ? 'No donors match.' : 'No donors have registered yet.'}</td></tr>
+            ) : filtered.map((d) => (
+              <tr key={d.id}>
+                <td className="px-4 py-3">
+                  <p className="font-bold text-slate-900">{d.name}</p>
+                  <p className="text-xs text-slate-500">{d.email}</p>
+                </td>
+                <td className="px-4 py-3 font-black text-[#ee2b2b]">{d.blood_group || '–'}</td>
+                <td className="px-4 py-3 text-slate-600">{d.city || '–'}</td>
+                <td className="px-4 py-3 text-slate-600">{d.phone || '–'}</td>
+                <td className="px-4 py-3 text-slate-600">{d.last_donation_date ? new Date(d.last_donation_date).toLocaleDateString('en-IN') : '–'}</td>
+                <td className="px-4 py-3 font-bold text-slate-900">{d.donations}</td>
+                <td className="px-4 py-3 text-slate-500">{new Date(d.created_at).toLocaleDateString('en-IN')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
 }
 
-function DonorProfileView({ donor, onBack }: { donor: any, onBack: () => void }) {
-  const [isVerifying, setIsVerifying] = useState(false);
-  const [verificationStatus, setVerificationStatus] = useState<'pending' | 'verified'>('pending');
-  const [showToast, setShowToast] = useState(false);
+function SettingsView({ user, overview }: { user: any; overview: Overview | null }) {
+  const [health, setHealth] = useState<{ status: string; database: { reachable: boolean; target?: string; error_code?: string } } | null>(null);
 
-  const handleVerify = () => {
-    setIsVerifying(false);
-    setVerificationStatus('verified');
-    setShowToast(true);
-    setTimeout(() => setShowToast(false), 3000);
-  };
+  useEffect(() => {
+    apiFetch('/health').then(setHealth).catch(() => setHealth({ status: 'error', database: { reachable: false } }));
+  }, []);
+
+  const rows: [string, React.ReactNode, boolean | null][] = [
+    ['Database', health ? (health.database.reachable ? `Connected (${health.database.target})` : `Unreachable${health.database.error_code ? ` (${health.database.error_code})` : ''}`) : 'Checking…', health ? health.database.reachable : null],
+    ['Donor network (n8n)', overview ? (overview.network_configured ? 'Configured' : 'N8N_WEBHOOK_KEY is not set') : 'Checking…', overview ? overview.network_configured : null],
+  ];
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-300 relative">
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-slate-500 hover:text-slate-900 font-bold transition-colors"
-      >
-        <span className="material-symbols-outlined">arrow_back</span>
-        Back to Directory
-      </button>
-
-      {/* Toast Notification */}
-      {showToast && (
-        <div className="fixed top-8 right-8 bg-slate-900 text-white px-6 py-3 rounded-xl shadow-2xl z-[150] flex items-center gap-3 animate-in slide-in-from-right duration-300">
-          <span className="material-symbols-outlined text-emerald-400">verified_user</span>
-          <span className="text-sm font-bold">Donor documents verified & encrypted!</span>
+    <div className="max-w-3xl space-y-6">
+      <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <h3 className="text-lg font-black text-slate-900 mb-4">Your account</h3>
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between py-2 border-b border-slate-50"><span className="text-slate-500 font-bold">Name</span><span className="font-black text-slate-900">{user?.name ?? '–'}</span></div>
+          <div className="flex justify-between py-2 border-b border-slate-50"><span className="text-slate-500 font-bold">Email</span><span className="font-black text-slate-900">{user?.email ?? '–'}</span></div>
+          <div className="flex justify-between py-2"><span className="text-slate-500 font-bold">Role</span><span className="font-black text-slate-900">Administrator</span></div>
         </div>
-      )}
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Side: Profile Card */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm p-8 text-center relative">
-            {verificationStatus === 'verified' && (
-              <div className="absolute top-6 right-6 text-emerald-500 bg-emerald-50 p-2 rounded-full border border-emerald-100 flex items-center justify-center animate-in zoom-in duration-500">
-                <span className="material-symbols-outlined font-black">verified</span>
-              </div>
-            )}
-            <div className="w-32 h-32 rounded-full border-4 border-slate-50 mx-auto overflow-hidden shadow-xl mb-6 relative">
-              <img src={donor.image} alt={donor.name} className="w-full h-full object-cover" />
-            </div>
-            <h2 className="text-2xl font-black text-slate-900">{donor.name}</h2>
-            <p className="text-sm font-bold text-[#ee2b2b] mt-1">{donor.rank} Member</p>
-
-            <div className="grid grid-cols-2 gap-4 mt-8">
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Blood Type</p>
-                <p className="text-2xl font-black text-[#ee2b2b]">{donor.group}</p>
-              </div>
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Total Impact</p>
-                <p className="text-2xl font-black text-slate-900">{donor.totalDonations}</p>
-              </div>
-            </div>
-
-            <div className="mt-8 space-y-3 text-left">
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl text-sm">
-                <span className="font-bold text-slate-500 uppercase text-[10px]">Eligibility Status</span>
-                <span className="font-black text-green-600">{donor.status}</span>
-              </div>
-              <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl text-sm">
-                <span className="font-bold text-slate-500 uppercase text-[10px]">Network Points</span>
-                <span className="font-black text-amber-600">4,250 PTS</span>
-              </div>
-            </div>
-          </div>
-
-          <div className={`p-8 rounded-3xl text-white shadow-xl transition-all duration-500 ${verificationStatus === 'verified' ? 'bg-emerald-900' : 'bg-slate-900'
-            }`}>
-            <h4 className="font-bold mb-4 flex items-center gap-2">
-              <span className={`material-symbols-outlined ${verificationStatus === 'verified' ? 'text-emerald-400' : 'text-[#ee2b2b]'}`}>
-                {verificationStatus === 'verified' ? 'verified_user' : 'verified'}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6">
+        <h3 className="text-lg font-black text-slate-900 mb-4">System status</h3>
+        <div className="space-y-3">
+          {rows.map(([label, value, ok]) => (
+            <div key={label} className="flex items-center justify-between p-3 rounded-xl bg-slate-50">
+              <span className="text-sm font-bold text-slate-700">{label}</span>
+              <span className={cn('text-sm font-black flex items-center gap-2', ok === null ? 'text-slate-400' : ok ? 'text-green-700' : 'text-red-700')}>
+                <span className={cn('w-2 h-2 rounded-full', ok === null ? 'bg-slate-300' : ok ? 'bg-green-500' : 'bg-red-500')} />
+                {value}
               </span>
-              {verificationStatus === 'verified' ? 'Identity Secured' : 'Admin Verification'}
-            </h4>
-            <div className="space-y-4">
-              <p className="text-xs text-white/60 leading-relaxed font-medium">
-                {verificationStatus === 'verified'
-                  ? 'All documentation has been officially reviewed and cryptographically secured in the network.'
-                  : 'Verify donor identification and medical records history before next scheduled donation session.'}
-              </p>
-              {verificationStatus === 'pending' ? (
-                <button
-                  onClick={() => setIsVerifying(true)}
-                  className="w-full py-4 bg-white/10 hover:bg-white/20 border border-white/20 rounded-2xl font-bold transition-all text-sm active:scale-95 flex items-center justify-center gap-2"
-                >
-                  <span className="material-symbols-outlined text-sm">assignment_ind</span>
-                  Verify Documentation
-                </button>
-              ) : (
-                <div className="w-full py-4 bg-emerald-500/20 rounded-2xl font-bold text-sm text-center border border-emerald-500/30 flex items-center justify-center gap-2">
-                  <span className="material-symbols-outlined text-sm">check_circle</span>
-                  Verified & Approved
-                </div>
-              )}
             </div>
-          </div>
-        </div>
-
-        {/* Right Side: Donation History */}
-        <div className="lg:col-span-2 space-y-8">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="p-8 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
-                <span className="material-symbols-outlined text-[#ee2b2b]">history</span>
-                Donation History & Performance
-              </h3>
-              <span className="text-xs font-bold text-slate-400">Total Tokens Earned: {(donor.history.reduce((a: any, b: any) => a + b.tokens, 0)).toLocaleString()}</span>
-            </div>
-
-            <div className="p-8">
-              <div className="space-y-4">
-                {donor.history.map((entry: any, i: number) => (
-                  <motion.div
-                    key={i}
-                    initial={{ x: 20, opacity: 0 }}
-                    animate={{ x: 0, opacity: 1 }}
-                    transition={{ delay: i * 0.1 }}
-                    className="group flex flex-col sm:flex-row items-center justify-between p-6 rounded-2xl bg-slate-50 border border-slate-100 hover:border-[#ee2b2b]/30 transition-all"
-                  >
-                    <div className="flex items-center gap-6 mb-4 sm:mb-0">
-                      <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex flex-col items-center justify-center">
-                        <span className="text-[10px] font-black text-slate-400 uppercase">{entry.date.split(' ')[0]}</span>
-                        <span className="text-lg font-black text-slate-900">{entry.date.split(' ')[1].replace(',', '')}</span>
-                      </div>
-                      <div>
-                        <p className="font-extrabold text-slate-900">{entry.location}</p>
-                        <p className="text-xs font-bold text-slate-400 mt-0.5">{entry.date}</p>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-12 w-full sm:w-auto justify-between sm:justify-start">
-                      <div className="text-center sm:text-right">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Quantity</p>
-                        <p className="font-black text-[#ee2b2b] text-lg">{entry.quantity}</p>
-                      </div>
-                      <div className="text-center sm:text-right">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tokens Awarded</p>
-                        <div className="flex items-center gap-1.5 sm:justify-end text-lg font-black text-amber-600">
-                          <span className="material-symbols-outlined text-sm">toll</span>
-                          {entry.tokens}
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-
-              <div className="mt-8 p-6 bg-amber-50 rounded-2xl border border-amber-100 flex items-center gap-4">
-                <div className="w-12 h-12 rounded-full bg-amber-500/10 flex items-center justify-center text-amber-600">
-                  <span className="material-symbols-outlined">emoji_events</span>
-                </div>
-                <div>
-                  <p className="font-black text-amber-900 text-sm italic">"Loyalty Impact: This donor has saved approximately {(donor.totalDonations * 3)} lives through consistent contributions."</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm">
-            <h4 className="font-black text-slate-900 mb-6 uppercase tracking-widest text-xs">Medical Insight Trends</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Avg Yield</p>
-                <p className="font-black text-slate-900 mt-1">475ml</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Recovery</p>
-                <p className="font-black text-emerald-600 mt-1">FAST</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Consistency</p>
-                <p className="font-black text-slate-900 mt-1">98%</p>
-              </div>
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Matches</p>
-                <p className="font-black text-slate-900 mt-1">4 Urgent</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Verification Modal */}
-      {isVerifying && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
-          <motion.div
-            initial={{ scale: 0.9, y: 20 }}
-            animate={{ scale: 1, y: 0 }}
-            className="bg-white w-full max-w-2xl rounded-[2.5rem] overflow-hidden shadow-2xl"
-          >
-            <div className="p-8 bg-slate-900 text-white flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <span className="material-symbols-outlined text-[#ee2b2b]">verified_user</span>
-                <div>
-                  <h4 className="font-black text-lg">Document Verification</h4>
-                  <p className="text-[10px] text-white/50 font-bold uppercase tracking-widest">Checking: {donor.name}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsVerifying(false)}
-                className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10 transition-all"
-              >
-                <span className="material-symbols-outlined text-sm">close</span>
-              </button>
-            </div>
-
-            <div className="p-10 space-y-8">
-              <div className="grid grid-cols-2 gap-6">
-                <div className="space-y-3">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">National Identity (scanned)</p>
-                  <div className="aspect-[4/3] rounded-2xl bg-slate-100 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 group hover:border-[#ee2b2b]/30 transition-all cursor-pointer">
-                    <span className="material-symbols-outlined text-4xl mb-2">badge</span>
-                    <span className="text-[10px] font-bold">CLICK TO ENLARGE ID</span>
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Medical Clearance</p>
-                  <div className="aspect-[4/3] rounded-2xl bg-slate-100 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-400 group hover:border-[#ee2b2b]/30 transition-all cursor-pointer">
-                    <span className="material-symbols-outlined text-4xl mb-2">description</span>
-                    <span className="text-[10px] font-bold">VIEW MEDICAL RECORDS</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="flex items-start gap-4 p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
-                  <span className="material-symbols-outlined text-emerald-600 mt-1">check_circle</span>
-                  <div>
-                    <p className="text-sm font-black text-emerald-900">AI Pre-Scan Passed</p>
-                    <p className="text-[11px] text-emerald-700 mt-1 font-medium">Auto-analysis detected valid document signatures and matching biometric identifiers.</p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-4 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <span className="material-symbols-outlined text-slate-400 mt-1">info</span>
-                  <div className="text-[11px] text-slate-500 leading-relaxed">
-                    By confirming verification, you agree that you have manually cross-checked the scanned documents against the donor's digital profile.
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <button
-                  onClick={() => setIsVerifying(false)}
-                  className="flex-1 py-5 bg-slate-100 text-slate-400 font-black rounded-2xl hover:bg-slate-200 hover:text-slate-600 transition-all"
-                >
-                  Reject & Flags
-                </button>
-                <button
-                  onClick={handleVerify}
-                  className="flex-[2] py-5 bg-[#ee2b2b] text-white rounded-2xl font-black shadow-xl shadow-[#ee2b2b]/20 hover:scale-[1.02] transition-all flex items-center justify-center gap-3"
-                >
-                  <span className="material-symbols-outlined">verified</span>
-                  Approve Verification
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function KPICard({ title, value, icon, color, trend, progress }: any) {
-  const colorClasses: any = {
-    red: "bg-[#ee2b2b]/10 text-[#ee2b2b]",
-    blue: "bg-blue-100 text-blue-600",
-    amber: "bg-amber-100 text-amber-600"
-  };
-  const barColors: any = {
-    red: "bg-[#ee2b2b]",
-    blue: "bg-blue-500",
-    amber: "bg-amber-500"
-  };
-
-  return (
-    <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex justify-between items-start mb-4">
-        <div className={`p-2 rounded-lg ${colorClasses[color]}`}>
-          <span className="material-symbols-outlined">{icon}</span>
-        </div>
-        <span className="flex items-center text-emerald-500 text-sm font-bold">
-          <span className="material-symbols-outlined text-sm mr-1">trending_up</span>
-          {trend}
-        </span>
-      </div>
-      <h3 className="text-slate-500 text-sm font-medium">{title}</h3>
-      <p className="text-3xl font-extrabold text-slate-900 mt-1">{value}</p>
-      <div className="mt-4 w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-        <div className={`${barColors[color]} h-full rounded-full`} style={{ width: `${progress}%` }}></div>
-      </div>
-    </div>
-  );
-}
-
-function FeedbackItem({ name, initial, rating, text, role, time, color }: any) {
-  return (
-    <div className="p-4 rounded-lg bg-slate-50 border border-slate-100 transition-all hover:border-[#ee2b2b]/30">
-      <div className="flex justify-between items-start mb-2">
-        <div className="flex items-center gap-2">
-          <div className={`w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold ${color === 'red' ? 'bg-[#ee2b2b]/20 text-[#ee2b2b]' : 'bg-slate-200'}`}>
-            {initial}
-          </div>
-          <span className="text-xs font-bold">{name}</span>
-        </div>
-        <div className="flex text-amber-400">
-          {[...Array(5)].map((_, i) => (
-            <span key={i} className={`material-symbols-outlined text-xs ${i >= rating ? 'text-slate-300' : ''}`}>star</span>
           ))}
         </div>
+        <p className="text-xs text-slate-500 mt-4">Secrets such as API keys live in the Vercel project settings and the n8n credential store, never in this dashboard.</p>
       </div>
-      <p className="text-sm text-slate-600 leading-relaxed italic">"{text}"</p>
-      <div className="mt-3 flex justify-between items-center text-[10px] text-slate-400 font-medium">
-        <span>{role}</span>
-        <span>{time}</span>
+
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 text-sm text-slate-600 space-y-2">
+        <h3 className="text-lg font-black text-slate-900">Matching rules in force</h3>
+        <p>ABO/Rh red-cell compatibility; donors within 50 miles or in the hospital's city; rest period of 90 days for men and 120 for women; O- kept for patients who need it.</p>
+        <p>Escalation: Emergency every 10 minutes, Urgent every 20, Normal every 60 (10 minutes when blood is needed within 2 hours). Requests stop escalating after 12 hours.</p>
       </div>
     </div>
   );

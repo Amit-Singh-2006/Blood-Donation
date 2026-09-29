@@ -157,7 +157,7 @@ export default function Layout() {
                     <div className="absolute right-0 top-12 w-64 bg-white rounded-xl shadow-xl border border-slate-100 overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-200">
                       <div className="p-4 border-b border-slate-50">
                         <p className="font-bold text-sm text-slate-900">{user?.name || 'User'}</p>
-                        <p className="text-xs text-slate-500">{user?.email || 'user@example.com'}</p>
+                        <p className="text-xs text-slate-500">{user?.email}</p>
                       </div>
                       <div className="p-2 space-y-1">
                         <Link to="/donor/impact" onClick={() => setShowProfile(false)} className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-700 hover:bg-slate-50 hover:text-[#ee2b2b] transition-colors">
@@ -184,7 +184,7 @@ export default function Layout() {
                 </div>
               </>
             ) : (
-              <Link to="/" className="text-sm font-bold text-slate-600 hover:text-[#ee2b2b]">Login</Link>
+              <Link to="/login" className="text-sm font-bold text-slate-600 hover:text-[#ee2b2b]">Login</Link>
             )}
           </div>
         </div>
@@ -196,11 +196,11 @@ export default function Layout() {
 
       <footer className="border-t border-slate-200 bg-white py-8 mt-auto">
         <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-slate-400 text-xs">© 2024 LifeLink AI. All rights reserved.</p>
+          <p className="text-slate-400 text-xs">© {new Date().getFullYear()} LifeLink AI. All rights reserved.</p>
           <div className="flex gap-6">
-            <a href="#" className="text-xs font-bold text-slate-500 hover:text-[#ee2b2b] transition-colors">Privacy Policy</a>
-            <a href="#" className="text-xs font-bold text-slate-500 hover:text-[#ee2b2b] transition-colors">Terms of Service</a>
-            <a href="#" className="text-xs font-bold text-slate-500 hover:text-[#ee2b2b] transition-colors">Support</a>
+            <Link to="/privacy" className="text-xs font-bold text-slate-500 hover:text-[#ee2b2b] transition-colors">Privacy Policy</Link>
+            <Link to="/terms" className="text-xs font-bold text-slate-500 hover:text-[#ee2b2b] transition-colors">Terms of Service</Link>
+            <Link to="/support" className="text-xs font-bold text-slate-500 hover:text-[#ee2b2b] transition-colors">Support</Link>
           </div>
         </div>
       </footer>

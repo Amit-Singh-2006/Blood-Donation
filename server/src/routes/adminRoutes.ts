@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getAllDonations, getAllUsers, getHospitals, setHospitalVerification } from '../controllers/adminController';
+import { getAllDonations, getAllUsers, getHospitals, setHospitalVerification, getOverview, getDonors } from '../controllers/adminController';
 import { validateRequest } from '../middleware/validateZod';
 import { hospitalVerificationSchema } from '../schemas/adminSchemas';
 import { authMiddleware } from '../middleware/authMiddleware';
@@ -16,7 +16,7 @@ const router = Router();
 // ─────────────────────────────────────────────
 const adminLimiter = rateLimit({
     windowMs: 10 * 60 * 1000, // 10 minutes
-    max: 30,
+    max: 120,
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Too many admin requests. Please slow down.' },
@@ -38,6 +38,8 @@ const auditAdminAccess = (req: Request, res: Response, next: NextFunction): void
 router.get('/donations', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getAllDonations);
 router.get('/users', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getAllUsers);
 router.get('/hospitals', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getHospitals);
+router.get('/overview', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getOverview);
+router.get('/donors', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getDonors);
 router.put('/hospitals/:id/verification', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, validateRequest(hospitalVerificationSchema), setHospitalVerification);
 
 export default router;
