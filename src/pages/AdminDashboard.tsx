@@ -8,6 +8,7 @@ import { apiFetch } from '../lib/api';
 import { signOut } from '../lib/auth';
 import { NetworkAnalytics, formatMinutes, useNetworkAnalytics } from '../lib/network';
 import Analytics from './Analytics';
+import { INDIAN_STATES } from '../lib/india';
 
 const BLOOD_TYPES = ['O-', 'O+', 'A-', 'A+', 'B-', 'B+', 'AB-', 'AB+'];
 
@@ -23,6 +24,15 @@ interface Overview {
   donations: number;
   donations_30d: number;
   network_configured: boolean;
+  jurisdiction?: string;
+}
+
+interface AdminMe {
+  id: number;
+  name: string;
+  email: string;
+  is_national: boolean;
+  jurisdiction: string;
 }
 
 export default function AdminDashboard() {
@@ -36,6 +46,7 @@ export default function AdminDashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [overviewError, setOverviewError] = useState('');
+  const [me, setMe] = useState<AdminMe | null>(null);
   const { data: network } = useNetworkAnalytics();
 
   const loadOverview = useCallback(async () => {
@@ -51,6 +62,7 @@ export default function AdminDashboard() {
     const savedUser = localStorage.getItem('user');
     if (savedUser) setUser(JSON.parse(savedUser));
     loadOverview();
+    apiFetch('/admin/me').then(setMe).catch(() => setMe(null));
   }, [loadOverview]);
 
   useEffect(() => {
@@ -58,6 +70,7 @@ export default function AdminDashboard() {
     else if (location.pathname.includes('/donors')) setActiveTab('donors');
     else if (location.pathname.includes('/analytics')) setActiveTab('analytics');
     else if (location.pathname.includes('/settings')) setActiveTab('settings');
+    else if (location.pathname.includes('/admins')) setActiveTab('admins');
     else setActiveTab('overview');
   }, [location.pathname]);
 
@@ -71,6 +84,7 @@ export default function AdminDashboard() {
     { id: 'hospitals', label: 'Hospitals', icon: 'local_hospital' },
     { id: 'donors', label: 'Donors', icon: 'group' },
     { id: 'analytics', label: 'Analytics', icon: 'monitoring' },
+    ...(me?.is_national ? [{ id: 'admins', label: 'Admins', icon: 'manage_accounts' }] : []),
     { id: 'settings', label: 'Settings', icon: 'settings_suggest' },
   ];
 
@@ -88,13 +102,13 @@ export default function AdminDashboard() {
     setIsExporting(true);
     try {
       const [hospitals] = await Promise.all([apiFetch('/admin/hospitals').catch(() => [])]);
-      exportReport(overview, network, hospitals);
+      exportReport(overview, network, hospitals, me?.jurisdiction);
     } finally {
       setIsExporting(false);
     }
   };
 
-  const displayName = user?.name || user?.email?.split('@')[0] || 'Administrator';
+  const displayName = me?.name || user?.name || user?.email?.split('@')[0] || 'Administrator';
 
   return (
     <div className="flex min-h-screen bg-[#f8f6f6] overflow-hidden">
@@ -143,9 +157,10 @@ export default function AdminDashboard() {
               <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-[10px] font-black">{displayName.slice(0, 2).toUpperCase()}</div>
               <div className="min-w-0">
                 <p className="text-[11px] font-bold truncate w-32">{displayName}</p>
-                <p className="text-[9px] text-[#ee2b2b] font-black uppercase tracking-tighter">Administrator</p>
+                <p className="text-[9px] text-[#ee2b2b] font-black uppercase tracking-wider">{me?.is_national ? 'National admin' : 'City admin'}</p>
               </div>
             </div>
+            {me && <p className="text-[11px] text-slate-600 mt-3 flex items-start gap-1"><span className="material-symbols-outlined text-sm">location_on</span>{me.jurisdiction}</p>}
           </div>
           <button
             onClick={handleSignOut}
@@ -160,7 +175,10 @@ export default function AdminDashboard() {
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20 shrink-0">
-          <h1 className="text-xl font-black text-slate-900">{navItems.find((n) => n.id === activeTab)?.label}</h1>
+          <div>
+            <h1 className="text-xl font-black text-slate-900">{navItems.find((n) => n.id === activeTab)?.label}</h1>
+            {me && <p className="text-[11px] font-bold text-slate-500">Jurisdiction: {me.jurisdiction}</p>}
+          </div>
 
           <div className="flex items-center gap-4 relative">
             {showSearch && (
@@ -248,6 +266,7 @@ export default function AdminDashboard() {
               {activeTab === 'hospitals' && <HospitalsView initialSearch={searchQuery} onChange={loadOverview} />}
               {activeTab === 'donors' && <DonorsView initialSearch={searchQuery} />}
               {activeTab === 'analytics' && <div className="-m-8"><Analytics /></div>}
+              {activeTab === 'admins' && me?.is_national && <AdminsView meId={me.id} />}
               {activeTab === 'settings' && <SettingsView user={user} overview={overview} />}
             </motion.div>
           </AnimatePresence>
@@ -258,7 +277,7 @@ export default function AdminDashboard() {
 }
 
 /** PDF report built only from real figures at the moment of export. */
-function exportReport(overview: Overview | null, network: NetworkAnalytics | null, hospitals: any[]) {
+function exportReport(overview: Overview | null, network: NetworkAnalytics | null, hospitals: any[], jurisdiction?: string) {
   const doc = new jsPDF();
   const generated = new Date().toLocaleString('en-IN');
 
@@ -270,7 +289,7 @@ function exportReport(overview: Overview | null, network: NetworkAnalytics | nul
   doc.text('LifeLink AI', 20, 20);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text('Network Report', 20, 30);
+  doc.text(`Network Report${jurisdiction ? ` · ${jurisdiction}` : ''}`, 20, 30);
   doc.text(`Generated: ${generated}`, 130, 20);
 
   doc.setTextColor(15, 23, 42);
@@ -315,8 +334,8 @@ function exportReport(overview: Overview | null, network: NetworkAnalytics | nul
   doc.text('Hospitals', 20, y);
   autoTable(doc, {
     startY: y + 5,
-    head: [['Hospital', 'City', 'Registration no.', 'Verified']],
-    body: hospitals.length ? hospitals.map((h: any) => [h.hospital_name, h.city || '', h.registration_number || '', h.is_verified ? 'Yes' : 'No']) : [['None registered', '', '', '']],
+    head: [['Hospital', 'City', 'State', 'Registration no.', 'Verified']],
+    body: hospitals.length ? hospitals.map((h: any) => [h.hospital_name, h.city || '', h.state || '', h.registration_number || '', h.is_verified ? 'Yes' : 'No']) : [['None registered', '', '', '', '']],
     headStyles: { fillColor: [15, 23, 42] },
     margin: { left: 20, right: 20 },
   });
@@ -453,7 +472,7 @@ function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: strin
 
   const q = localSearch.toLowerCase();
   const filtered = hospitals.filter(h =>
-    [h.hospital_name, h.city, h.registration_number, h.email].some(v => String(v ?? '').toLowerCase().includes(q))
+    [h.hospital_name, h.city, h.state, h.pincode, h.registration_number, h.email].some(v => String(v ?? '').toLowerCase().includes(q))
   );
   const pending = hospitals.filter(h => !h.is_verified).length;
 
@@ -500,7 +519,13 @@ function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: strin
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  {h.city || '—'} · {h.contact_number || 'no phone'} · {h.email}
+                  {[h.hospital_type, h.address, h.city, h.state, h.pincode].filter(Boolean).join(', ') || '—'}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {h.contact_number || 'no phone'} · {h.email}
+                  {h.latitude != null && h.longitude != null && (
+                    <> · <a className="font-bold text-[#ee2b2b] hover:underline" href={`https://www.google.com/maps?q=${h.latitude},${h.longitude}`} target="_blank" rel="noreferrer">map</a></>
+                  )}
                 </p>
                 <p className="text-xs text-slate-500 mt-0.5">
                   Registration no.: <span className="font-bold text-slate-700">{h.registration_number || 'not provided'}</span>
@@ -518,6 +543,263 @@ function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: strin
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+const inviteInput = 'w-full px-3 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-slate-900/10 focus:border-slate-900 outline-none';
+
+const STATUS_STYLE: Record<string, string> = {
+  pending: 'bg-amber-100 text-amber-700',
+  used: 'bg-emerald-100 text-emerald-700',
+  revoked: 'bg-slate-100 text-slate-500',
+  expired: 'bg-slate-100 text-slate-500',
+};
+
+/** National admins invite city admins (one person, one jurisdiction, one use) and can remove access. */
+function AdminsView({ meId }: { meId?: number }) {
+  const [admins, setAdmins] = useState<any[]>([]);
+  const [invites, setInvites] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [form, setForm] = useState({ name: '', email: '', national: false, state: '', cities: '', validDays: 7 });
+  const [creating, setCreating] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [issued, setIssued] = useState<{ code: string; invite: any } | null>(null);
+  const [copied, setCopied] = useState('');
+
+  const load = useCallback(async () => {
+    try {
+      const [a, i] = await Promise.all([apiFetch('/admin/admins'), apiFetch('/admin/invites')]);
+      setAdmins(a);
+      setInvites(i);
+      setError('');
+    } catch (err: any) {
+      setError(err.message || 'Could not load admins.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const createInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError('');
+    const cities = form.cities.split(',').map((c) => c.trim()).filter(Boolean);
+    if (!form.national && (!form.state || cities.length === 0)) {
+      setFormError('Choose the state and at least one city this admin will look after.');
+      return;
+    }
+    setCreating(true);
+    try {
+      const result = await apiFetch('/admin/invites', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: form.name.trim(),
+          email: form.email.trim(),
+          is_national: form.national,
+          ...(form.national ? {} : { state: form.state, cities }),
+          valid_days: form.validDays,
+        }),
+      });
+      setIssued(result);
+      setCopied('');
+      setForm({ name: '', email: '', national: false, state: '', cities: '', validDays: 7 });
+      load();
+    } catch (err: any) {
+      setFormError(err.message || 'Could not create the invite.');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const revoke = async (invite: any) => {
+    if (!window.confirm(`Cancel the invite for ${invite.name}? The code will stop working.`)) return;
+    try {
+      await apiFetch(`/admin/invites/${invite.id}/revoke`, { method: 'PUT', body: JSON.stringify({}) });
+      load();
+    } catch (err: any) {
+      setError(err.message || 'Could not cancel the invite.');
+    }
+  };
+
+  const toggleAdmin = async (admin: any) => {
+    const question = admin.active
+      ? `Remove admin access for ${admin.name}? They will be signed out of the admin dashboard straight away.`
+      : `Restore admin access for ${admin.name} (${admin.jurisdiction})?`;
+    if (!window.confirm(question)) return;
+    try {
+      await apiFetch(`/admin/admins/${admin.id}/active`, { method: 'PUT', body: JSON.stringify({ active: !admin.active }) });
+      load();
+    } catch (err: any) {
+      setError(err.message || 'Could not update access.');
+    }
+  };
+
+  const link = issued ? `${window.location.origin}/register-admin?code=${encodeURIComponent(issued.code)}` : '';
+  const expires = issued ? new Date(issued.invite.expires_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '';
+  const message = issued
+    ? `Hello ${issued.invite.name},\n\nYou are invited to be a LifeLink admin for ${issued.invite.jurisdiction}.\n\n1. Open ${link}\n2. Press "Check code" (your code is ${issued.code})\n3. Create your account with ${issued.invite.email}\n\nThe invite works once and expires on ${expires}. Please do not forward it.`
+    : '';
+  const copy = async (what: string, text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(what);
+    } catch {
+      setCopied('');
+      window.prompt('Copy this:', text);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-bold text-slate-800">Admins and jurisdictions</h3>
+        <p className="text-xs text-slate-500 mt-1">Each city admin verifies hospitals and sees donors only in their own cities. Invites are for one named person and work once.</p>
+      </div>
+
+      {error && <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">{error}</div>}
+
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
+        <form onSubmit={createInvite} className="xl:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+          <h4 className="font-black text-slate-900 flex items-center gap-2"><span className="material-symbols-outlined">person_add</span>Invite an admin</h4>
+          <div className="space-y-1">
+            <label htmlFor="inv-name" className="text-xs font-bold text-slate-600">Full name</label>
+            <input id="inv-name" required minLength={2} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className={inviteInput} placeholder="e.g. Rahul Verma" />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="inv-email" className="text-xs font-bold text-slate-600">Email (the invite only works with this address)</label>
+            <input id="inv-email" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={inviteInput} placeholder="rahul@example.com" />
+          </div>
+          <fieldset className="space-y-2">
+            <legend className="text-xs font-bold text-slate-600">Jurisdiction</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {[[false, 'City admin'], [true, 'National (All India)']].map(([value, label]) => (
+                <button
+                  key={String(value)}
+                  type="button"
+                  aria-pressed={form.national === value}
+                  onClick={() => setForm({ ...form, national: value as boolean })}
+                  className={cn('py-2 rounded-lg text-xs font-bold border-2', form.national === value ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-600')}
+                >
+                  {label as string}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          {form.national ? (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">A national admin sees every hospital and donor, and can invite and remove other admins.</p>
+          ) : (
+            <>
+              <div className="space-y-1">
+                <label htmlFor="inv-state" className="text-xs font-bold text-slate-600">State / UT</label>
+                <select id="inv-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className={inviteInput}>
+                  <option value="">Select</option>
+                  {INDIAN_STATES.map((st) => <option key={st}>{st}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="inv-cities" className="text-xs font-bold text-slate-600">Cities (comma-separated)</label>
+                <input id="inv-cities" value={form.cities} onChange={(e) => setForm({ ...form, cities: e.target.value })} className={inviteInput} placeholder="e.g. Pune, Pimpri-Chinchwad" />
+                <p className="text-[11px] text-slate-500">Matched to the city hospitals and donors enter. Add other spellings too, e.g. Bengaluru, Bangalore.</p>
+              </div>
+            </>
+          )}
+          <div className="space-y-1">
+            <label htmlFor="inv-days" className="text-xs font-bold text-slate-600">Invite valid for</label>
+            <select id="inv-days" value={form.validDays} onChange={(e) => setForm({ ...form, validDays: Number(e.target.value) })} className={inviteInput}>
+              {[1, 3, 7, 14, 30].map((d) => <option key={d} value={d}>{d} day{d > 1 ? 's' : ''}</option>)}
+            </select>
+          </div>
+          {formError && <p className="text-xs font-bold text-red-700 bg-red-50 border border-red-100 rounded-lg p-2">{formError}</p>}
+          <button type="submit" disabled={creating} className="w-full py-3 rounded-xl bg-slate-900 text-white text-sm font-black hover:bg-slate-800 disabled:opacity-50">
+            {creating ? 'Creating…' : 'Create invite'}
+          </button>
+        </form>
+
+        <div className="xl:col-span-3 space-y-6">
+          {issued && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-black text-emerald-900">Invite created for {issued.invite.name}</p>
+                  <p className="text-xs text-emerald-800">{issued.invite.email} · {issued.invite.jurisdiction} · expires {expires}</p>
+                </div>
+                <button onClick={() => setIssued(null)} aria-label="Close" className="text-emerald-700 hover:text-emerald-900"><span className="material-symbols-outlined">close</span></button>
+              </div>
+              <p className="font-mono text-xl sm:text-2xl font-black tracking-wider text-slate-900 bg-white rounded-xl border border-emerald-200 px-4 py-3 break-all">{issued.code}</p>
+              <p className="text-xs text-emerald-900"><strong>This code is shown only once.</strong> Share it privately with {issued.invite.name}, for example by phone or a direct message.</p>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => copy('code', issued.code)} className="px-3 py-2 rounded-lg bg-white border border-emerald-200 text-xs font-bold text-emerald-800 hover:bg-emerald-100">
+                  {copied === 'code' ? 'Copied ✓' : 'Copy code'}
+                </button>
+                <button onClick={() => copy('message', message)} className="px-3 py-2 rounded-lg bg-emerald-700 text-white text-xs font-bold hover:bg-emerald-800">
+                  {copied === 'message' ? 'Copied ✓' : 'Copy invite message'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-6">
+            <h4 className="font-black text-slate-900 mb-4">Invites</h4>
+            {loading ? <p className="text-sm text-slate-400">Loading…</p> : invites.length === 0 ? (
+              <p className="text-sm text-slate-400">No invites yet.</p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {invites.map((i) => (
+                  <div key={i.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 text-sm">{i.name} <span className="font-normal text-slate-500">· {i.email}</span></p>
+                      <p className="text-xs text-slate-500">
+                        {i.jurisdiction} · code …{i.code_hint} · {i.status === 'used' ? `used${i.used_by ? ` by ${i.used_by}` : ''}` : `expires ${new Date(i.expires_at).toLocaleDateString('en-IN')}`}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={cn('px-2 py-0.5 rounded-md text-[10px] font-black uppercase', STATUS_STYLE[i.status])}>{i.status}</span>
+                      {i.status === 'pending' && (
+                        <button onClick={() => revoke(i)} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50">Cancel</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-2xl border border-slate-200 p-6">
+            <h4 className="font-black text-slate-900 mb-4">Admins</h4>
+            {loading ? <p className="text-sm text-slate-400">Loading…</p> : (
+              <div className="divide-y divide-slate-100">
+                {admins.map((a) => (
+                  <div key={a.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-bold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
+                        {a.name}
+                        {a.is_national && <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-slate-900 text-white">National</span>}
+                        {!a.active && <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-red-100 text-red-700">Access removed</span>}
+                        {a.id === meId && <span className="text-[10px] font-black uppercase text-slate-400">You</span>}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {a.email} · {a.jurisdiction}
+                        {a.invited_by ? ` · invited by ${a.invited_by}` : ''}
+                        {a.last_login_at ? ` · last sign-in ${new Date(a.last_login_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}` : ' · never signed in'}
+                      </p>
+                    </div>
+                    {a.id !== meId && (
+                      <button
+                        onClick={() => toggleAdmin(a)}
+                        className={cn('px-3 py-1.5 rounded-lg text-xs font-bold shrink-0', a.active ? 'border border-red-200 text-red-700 hover:bg-red-50' : 'bg-slate-900 text-white hover:bg-slate-800')}
+                      >
+                        {a.active ? 'Remove access' : 'Restore access'}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

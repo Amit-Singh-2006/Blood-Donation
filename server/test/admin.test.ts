@@ -10,6 +10,8 @@ afterEach(() => {
     delete process.env.N8N_WEBHOOK_KEY;
 });
 
+const national = { adminScope: { userId: 1, isNational: true, state: null, cities: [] } } as any;
+
 const counts = {
     donors: 12, hospitals: 3, hospitals_verified: 2, requests: 9, requests_active: 2, requests_completed: 5,
     requests_exhausted: 1, requests_not_dispatched: 1, donations: 7, donations_30d: 4,
@@ -20,13 +22,13 @@ test('overview returns the database counts and whether the donor network is conf
     mock.method(db, 'query', async () => ({ rows: [counts], rowCount: 1 }));
 
     const res = fakeRes();
-    await getOverview({} as any, res);
+    await getOverview(national, res);
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.body, { ...counts, network_configured: false });
+    assert.deepEqual(res.body, { ...counts, network_configured: false, jurisdiction: 'All India' });
 
     process.env.N8N_WEBHOOK_KEY = 'server-key';
     const configured = fakeRes();
-    await getOverview({} as any, configured);
+    await getOverview(national, configured);
     assert.equal(configured.body.network_configured, true);
 });
 
@@ -35,7 +37,7 @@ test('overview hides database errors behind a generic 500', async () => {
     mock.method(console, 'error', () => {});
 
     const res = fakeRes();
-    await getOverview({} as any, res);
+    await getOverview(national, res);
     assert.equal(res.statusCode, 500);
     assert.deepEqual(res.body, { message: 'Internal server error.' });
 });
@@ -45,7 +47,7 @@ test('donor list never selects password hashes', async () => {
     const queryMock = mock.method(db, 'query', async () => ({ rows, rowCount: 1 }));
 
     const res = fakeRes();
-    await getDonors({} as any, res);
+    await getDonors(national, res);
     assert.equal(res.statusCode, 200);
     assert.deepEqual(res.body, rows);
     const sql = queryMock.mock.calls[0]!.arguments[0] as string;

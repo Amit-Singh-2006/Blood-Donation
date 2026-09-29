@@ -2,9 +2,11 @@ import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { createHash, timingSafeEqual } from 'crypto';
-import { query } from '../config/db';
+import pool, { query } from '../config/db';
 import { authCookieOptions } from '../utils/authCookie';
 import { enrolDonor } from '../services/donorNetwork';
+import { hashInviteCode, inviteStatus, normalizeInviteCode } from '../utils/adminInvites';
+import { describeScope } from '../utils/jurisdiction';
 import dotenv from 'dotenv';
 import {
     blacklistToken,
@@ -25,6 +27,143 @@ export const inviteCodeMatches = (given: unknown, expected = process.env.ADMIN_I
     return timingSafeEqual(digest(given), digest(expected));
 };
 
+const issueSession = (res: Response, user: { id: number; email: string; role: string }) => {
+    const token = jwt.sign(
+        { id: user.id, email: user.email, role: user.role },
+        process.env.JWT_SECRET as string,
+        { expiresIn: '30m' }
+    );
+    // HttpOnly cookie → prevents JavaScript/XSS from stealing the token
+    res.cookie('token', token, { ...authCookieOptions(), maxAge: JWT_EXPIRY_MS });
+};
+
+const INVITE_PROBLEM: Record<string, string> = {
+    used: 'This invite has already been used.',
+    revoked: 'This invite was cancelled. Ask the national admin for a new one.',
+    expired: 'This invite has expired. Ask the national admin for a new one.',
+};
+
+/**
+ * POST /auth/admin-invite/check  { code }
+ * Lets someone confirm their invite before filling in the form. It says who
+ * the invite is for and which jurisdiction it covers; nothing else.
+ */
+export const checkAdminInvite = async (req: Request, res: Response) => {
+    const { code } = req.body;
+    try {
+        // The one-time setup code (ADMIN_INVITE_CODE) creates the first, national admin
+        if (inviteCodeMatches(code)) {
+            const exists = await query(`SELECT 1 FROM users WHERE role = 'admin' LIMIT 1`);
+            if (exists.rows.length) {
+                return res.json({ valid: false, reason: 'The setup code has already been used. Ask a national admin for a personal invite.' });
+            }
+            return res.json({ valid: true, kind: 'setup', is_national: true, jurisdiction: 'All India' });
+        }
+
+        const normalized = normalizeInviteCode(code);
+        if (!normalized) {
+            return res.json({ valid: false, reason: 'That is not a LifeLink invite code. Codes look like LL-XXXX-XXXX-XXXX-XXXX.' });
+        }
+        const result = await query(
+            `SELECT name, email, is_national, state, cities, expires_at, used_at, revoked_at
+             FROM admin_invites WHERE code_hash = $1`,
+            [hashInviteCode(normalized)]
+        );
+        const invite = result.rows[0];
+        if (!invite) {
+            logSecurityEvent('BRUTE_FORCE', req, 'Unknown admin invite code checked');
+            return res.json({ valid: false, reason: 'No invite matches this code. Check it with the admin who sent it.' });
+        }
+        const status = inviteStatus(invite);
+        if (status !== 'pending') return res.json({ valid: false, reason: INVITE_PROBLEM[status] });
+
+        res.json({
+            valid: true,
+            kind: 'invite',
+            name: invite.name,
+            email: invite.email,
+            is_national: invite.is_national,
+            state: invite.state,
+            cities: invite.cities,
+            jurisdiction: describeScope(invite),
+            expires_at: invite.expires_at,
+        });
+    } catch (err: any) {
+        console.error('Invite check error:', err);
+        res.status(500).json({ message: 'Could not check the code. Please try again.' });
+    }
+};
+
+/**
+ * Admin sign-up. Either the one-time setup code (only while no admin exists)
+ * or a personal invite, which is claimed atomically so it can be used once,
+ * and only with the email address it was issued to.
+ */
+const registerAdmin = async (req: Request, res: Response) => {
+    const { name, email, password, admin_invite_code: code } = req.body;
+    const client = await pool.connect();
+    const fail = async (status: number, message: string) => {
+        await client.query('ROLLBACK');
+        return res.status(status).json({ message });
+    };
+    try {
+        await client.query('BEGIN');
+        let profile: { is_national: boolean; state: string | null; cities: string[]; invited_by: number | null };
+        let inviteId: number | null = null;
+
+        if (inviteCodeMatches(code)) {
+            const exists = await client.query(`SELECT 1 FROM users WHERE role = 'admin' LIMIT 1`);
+            if (exists.rows.length) {
+                return await fail(403, 'The setup code has already been used. Ask a national admin for a personal invite.');
+            }
+            profile = { is_national: true, state: null, cities: [], invited_by: null };
+        } else {
+            const normalized = normalizeInviteCode(code);
+            const claim = normalized && await client.query(
+                `UPDATE admin_invites SET used_at = now()
+                 WHERE code_hash = $1 AND used_at IS NULL AND revoked_at IS NULL AND expires_at > now()
+                 RETURNING id, email, is_national, state, cities, created_by`,
+                [hashInviteCode(normalized)]
+            );
+            const invite = claim ? claim.rows[0] : null;
+            if (!invite) {
+                logSecurityEvent('MASS_ASSIGN', req, 'Admin registration attempt without a valid invite');
+                return await fail(403, 'This invite code is not valid, has expired or was already used.');
+            }
+            if (String(invite.email).toLowerCase() !== String(email).toLowerCase()) {
+                return await fail(403, `This invite was issued to a different email address. Use ${invite.email}.`);
+            }
+            inviteId = invite.id;
+            profile = { is_national: invite.is_national, state: invite.state, cities: invite.cities, invited_by: invite.created_by };
+        }
+
+        const hashedPassword = await bcrypt.hash(password, 12);
+        const created = await client.query(
+            `INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, 'admin') RETURNING id, name, email, role`,
+            [name, email, hashedPassword]
+        );
+        const user = created.rows[0];
+        await client.query(
+            `INSERT INTO admin_profiles (user_id, is_national, state, cities, invited_by) VALUES ($1, $2, $3, $4, $5)`,
+            [user.id, profile.is_national, profile.state, profile.cities, profile.invited_by]
+        );
+        if (inviteId) await client.query('UPDATE admin_invites SET used_by = $1 WHERE id = $2', [user.id, inviteId]);
+        await client.query('COMMIT');
+
+        issueSession(res, user);
+        res.status(201).json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, jurisdiction: describeScope(profile) } });
+    } catch (err: any) {
+        await client.query('ROLLBACK').catch(() => { });
+        console.error('Admin registration error:', err);
+        if (err.code === '23505') {
+            return res.status(400).json({ message: 'This email is already registered. Please sign in instead.', error: 'duplicate_email' });
+        }
+        res.status(500).json({ message: 'Registration failed. Please try again.' });
+    } finally {
+        client.release();
+    }
+};
+
 /**
  * POST /auth/register
  * 
@@ -37,7 +176,8 @@ export const register = async (req: Request, res: Response) => {
     const {
         name, email, password, role,
         blood_group, city, phone, dob, gender, preferred_channel,
-        hospital_name, contact_number, registration_number, latitude, longitude
+        hospital_name, contact_number, registration_number, latitude, longitude,
+        state, address, pincode, hospital_type
     } = req.body;
 
     // Enforce allowed roles explicitly → Privilege Escalation / Vertical Access Control Bypass
@@ -45,22 +185,12 @@ export const register = async (req: Request, res: Response) => {
         return res.status(400).json({ message: 'Invalid role specified' });
     }
 
+    // ── ADMIN PROTECTION ─────────────────────────────────────────────
+    // Requires the one-time setup code or a personal invite.
+    // Prevents: Privilege Escalation, Vertical Access Control Bypass
+    if (role === 'admin') return registerAdmin(req, res);
+
     try {
-        // ── ADMIN PROTECTION ─────────────────────────────────────────────
-        // Requires secret invite code + enforces single-admin constraint.
-        // Prevents: Privilege Escalation, Vertical Access Control Bypass
-        if (role === 'admin') {
-            if (!inviteCodeMatches(req.body.admin_invite_code)) {
-                logSecurityEvent('MASS_ASSIGN', req, 'Admin registration attempt without valid invite code');
-                return res.status(403).json({ message: 'Invalid or missing admin invite code' });
-            }
-
-            const adminExists = await query(`SELECT 1 FROM users WHERE role = 'admin' LIMIT 1`);
-            if (adminExists.rows.length > 0) {
-                return res.status(403).json({ message: 'Admin account already exists. Contact the system administrator.' });
-            }
-        }
-
         const hashedPassword = await bcrypt.hash(password, 12); // cost factor 12 (stronger than 10)
         const result = await query(
             'INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
@@ -78,19 +208,15 @@ export const register = async (req: Request, res: Response) => {
             await enrolDonor({ name, phone, blood_group, city, gender }, { preferred_channel });
         } else if (role === 'hospital') {
             await query(
-                'INSERT INTO hospitals (user_id, hospital_name, city, contact_number, registration_number, latitude, longitude) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-                [user.id, hospital_name || name, city, contact_number || phone, registration_number, latitude ?? null, longitude ?? null]
+                `INSERT INTO hospitals (user_id, hospital_name, city, contact_number, registration_number, latitude, longitude,
+                                        state, address, pincode, hospital_type)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+                [user.id, hospital_name || name, city, contact_number || phone, registration_number, latitude ?? null, longitude ?? null,
+                    state ?? null, address ?? null, pincode ?? null, hospital_type ?? null]
             );
         }
 
-        const token = jwt.sign(
-            { id: user.id, email: user.email, role: user.role },
-            process.env.JWT_SECRET as string,
-            { expiresIn: '30m' }
-        );
-
-        // HttpOnly cookie → prevents JavaScript/XSS from stealing the token
-        res.cookie('token', token, { ...authCookieOptions(), maxAge: JWT_EXPIRY_MS });
+        issueSession(res, user);
 
         // ── SENSITIVE DATA EXPOSURE PREVENTION ──────────────────────────
         // Never return password_hash or internal DB fields
@@ -153,16 +279,19 @@ export const login = async (req: Request, res: Response) => {
         // Clear failed attempts on successful login
         clearFailedAttempts(ip);
 
-        const token = jwt.sign(
-            { id: user.id, email: user.email, role: user.role },
-            process.env.JWT_SECRET as string,
-            { expiresIn: '30m' }
-        );
-
-        // Track last login IP for admin accounts (anomaly detection)
+        let jurisdiction: string | undefined;
         if (user.role === 'admin') {
-            await query('UPDATE users SET last_login_ip = $1 WHERE id = $2', [ip, user.id]).catch(() => { });
+            const adminProfile = await query('SELECT is_national, state, cities, active FROM admin_profiles WHERE user_id = $1', [user.id]);
+            const p = adminProfile.rows[0];
+            if (p && !p.active) {
+                return res.status(403).json({ message: 'Your admin access has been removed. Contact the national admin.' });
+            }
+            if (p) jurisdiction = describeScope(p);
         }
+
+        // Last sign-in (admins also keep the IP, for spotting unusual access)
+        await query('UPDATE users SET last_login_at = now(), last_login_ip = $1 WHERE id = $2',
+            [user.role === 'admin' ? ip : null, user.id]).catch(() => { });
 
         let profileData = {};
         if (user.role === 'donor') {
@@ -180,7 +309,7 @@ export const login = async (req: Request, res: Response) => {
         }
 
         // HttpOnly cookie prevents XSS token theft; see authCookieOptions for SameSite
-        res.cookie('token', token, { ...authCookieOptions(), maxAge: JWT_EXPIRY_MS });
+        issueSession(res, user);
 
         res.json({
             user: {
@@ -188,7 +317,8 @@ export const login = async (req: Request, res: Response) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                ...profileData
+                ...profileData,
+                ...(jurisdiction ? { jurisdiction } : {}),
             }
         });
     } catch (err: any) {

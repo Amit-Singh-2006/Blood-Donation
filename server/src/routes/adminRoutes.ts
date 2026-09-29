@@ -1,9 +1,12 @@
 import { Router } from 'express';
-import { getAllDonations, getAllUsers, getHospitals, setHospitalVerification, getOverview, getDonors } from '../controllers/adminController';
+import {
+    getAllDonations, getAllUsers, getHospitals, setHospitalVerification, getOverview, getDonors,
+    getMe, listAdmins, setAdminActive, listInvites, createInvite, revokeInvite,
+} from '../controllers/adminController';
 import { validateRequest } from '../middleware/validateZod';
-import { hospitalVerificationSchema } from '../schemas/adminSchemas';
+import { hospitalVerificationSchema, adminActiveSchema, adminInviteSchema } from '../schemas/adminSchemas';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { requireAdmin } from '../middleware/requireAdmin';
+import { requireAdmin, requireNationalAdmin } from '../middleware/requireAdmin';
 import { botDetection, logSecurityEvent } from '../middleware/securityMiddleware';
 import rateLimit from 'express-rate-limit';
 import { Request, Response, NextFunction } from 'express';
@@ -36,10 +39,19 @@ const auditAdminAccess = (req: Request, res: Response, next: NextFunction): void
 // Covers: Privilege Escalation, JWT Tampering, Vertical Access Control Bypass
 // ─────────────────────────────────────────────
 router.get('/donations', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getAllDonations);
-router.get('/users', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getAllUsers);
+router.get('/users', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, requireNationalAdmin, getAllUsers);
 router.get('/hospitals', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getHospitals);
 router.get('/overview', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getOverview);
 router.get('/donors', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getDonors);
 router.put('/hospitals/:id/verification', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, validateRequest(hospitalVerificationSchema), setHospitalVerification);
+router.get('/me', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getMe);
+
+// Admin management: national admins invite city admins and can remove access
+const national = [adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, requireNationalAdmin];
+router.get('/admins', ...national, listAdmins);
+router.put('/admins/:id/active', ...national, validateRequest(adminActiveSchema), setAdminActive);
+router.get('/invites', ...national, listInvites);
+router.post('/invites', ...national, validateRequest(adminInviteSchema), createInvite);
+router.put('/invites/:id/revoke', ...national, revokeInvite);
 
 export default router;

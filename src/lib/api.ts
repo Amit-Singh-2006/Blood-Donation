@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000';
+// Local dev: keep the API on localhost (not 127.0.0.1) so it is the same site as
+// the Vite dev server on localhost:3000, otherwise the session cookie is dropped
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
     const headers = {

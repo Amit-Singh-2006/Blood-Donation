@@ -1,5 +1,8 @@
 import { z } from 'zod';
 import { ALERT_CHANNELS } from '../services/donorNetwork';
+import { INDIAN_STATES, PIN_CODE } from '../utils/indianStates';
+
+export const HOSPITAL_TYPES = ['Government', 'Private', 'Trust / NGO', 'Public-Private'] as const;
 
 /**
  * Strong password validation:
@@ -50,9 +53,13 @@ export const registerSchema = z.object({
     // Optional hospital coordinates so donors are ranked by distance, not just city
     latitude: z.number().min(-90).max(90).optional(),
     longitude: z.number().min(-180).max(180).optional(),
+    state: z.enum(INDIAN_STATES, { message: 'Choose a state or union territory' }).optional(),
+    address: z.string().trim().min(5, 'Enter the hospital address').max(200).optional(),
+    pincode: z.string().regex(PIN_CODE, 'A PIN code has 6 digits and does not start with 0').optional(),
+    hospital_type: z.enum(HOSPITAL_TYPES).optional(),
 
     // Admin invite code (validated server-side in controller)
-    admin_invite_code: z.string().optional(),
+    admin_invite_code: z.string().trim().max(100).optional(),
 
 }).refine(data => {
     if (data.role === 'donor') {
@@ -61,9 +68,16 @@ export const registerSchema = z.object({
     if (data.role === 'hospital') {
         return !!data.hospital_name && !!data.city && !!(data.contact_number || data.phone) && !!data.registration_number;
     }
+    if (data.role === 'admin') {
+        return !!data.admin_invite_code;
+    }
     return true;
 }, {
     message: 'Missing required fields for the selected role'
+});
+
+export const adminInviteCheckSchema = z.object({
+    code: z.string().trim().min(1, 'Enter your invite code').max(100),
 });
 
 export const loginSchema = z.object({

@@ -119,13 +119,13 @@ test('the request list still loads when the network is down', async () => {
 });
 
 test('admins verify hospitals by id', async () => {
-    fakeDb([['UPDATE hospitals SET is_verified', [{ id: 7, hospital_name: 'AIIMS', is_verified: true }]]]);
+    fakeDb([['UPDATE hospitals h SET is_verified', [{ id: 7, hospital_name: 'AIIMS', is_verified: true }]]]);
     let res = fakeRes();
-    await setHospitalVerification({ params: { id: '7' }, body: { verified: true } } as any, res);
+    await setHospitalVerification({ params: { id: '7' }, body: { verified: true }, adminScope: { userId: 1, isNational: true, state: null, cities: [] } } as any, res);
     assert.equal(res.statusCode, 200);
     assert.equal(res.body.is_verified, true);
 
     res = fakeRes();
-    await setHospitalVerification({ params: { id: 'abc' }, body: { verified: true } } as any, res);
+    await setHospitalVerification({ params: { id: 'abc' }, body: { verified: true }, adminScope: { userId: 1, isNational: true, state: null, cities: [] } } as any, res);
     assert.equal(res.statusCode, 400);
 });

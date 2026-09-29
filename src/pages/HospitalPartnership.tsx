@@ -88,8 +88,10 @@ export default function HospitalPartnership() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                         {STEPS.map((step, i) => (
                             <div key={step.title} className="rounded-2xl border border-slate-200 bg-slate-50 p-8">
-                                <span className="text-xs font-black text-[#ee2b2b]">STEP {i + 1}</span>
-                                <span className="material-symbols-outlined text-3xl text-slate-800 block my-3">{step.icon}</span>
+                                <div className="w-12 h-12 rounded-xl bg-white border border-slate-200 flex items-center justify-center mb-4">
+                                    <span className="material-symbols-outlined text-2xl text-[#ee2b2b]">{step.icon}</span>
+                                </div>
+                                <p className="text-xs font-black tracking-widest text-[#ee2b2b] mb-1">STEP {i + 1}</p>
                                 <h3 className="font-black text-slate-900 mb-2">{step.title}</h3>
                                 <p className="text-sm text-slate-500 leading-relaxed">{step.desc}</p>
                             </div>

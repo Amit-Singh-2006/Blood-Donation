@@ -152,6 +152,54 @@ const initDb = async () => {
     ALTER TABLE donations ADD COLUMN IF NOT EXISTS network_match_id INTEGER;
     CREATE UNIQUE INDEX IF NOT EXISTS donations_network_match_id_key ON donations (network_match_id);
 
+    -- Last sign-in (admins also keep the IP, for spotting unusual access)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_ip VARCHAR(64);
+
+    -- Hospital details an admin checks before verifying (state also sets jurisdiction)
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS state VARCHAR(60);
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS address VARCHAR(200);
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS pincode VARCHAR(6);
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS hospital_type VARCHAR(30);
+
+    -- Admins and their jurisdiction: a national admin sees everything; a city
+    -- admin only sees hospitals and donors in their cities
+    CREATE TABLE IF NOT EXISTS admin_profiles (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      is_national BOOLEAN NOT NULL DEFAULT FALSE,
+      state VARCHAR(60),
+      cities TEXT[] NOT NULL DEFAULT '{}',
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      invited_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+
+    -- One-time admin invites, each issued to one named person (only the hash
+    -- of the code is stored)
+    CREATE TABLE IF NOT EXISTS admin_invites (
+      id SERIAL PRIMARY KEY,
+      code_hash CHAR(64) UNIQUE NOT NULL,
+      code_hint VARCHAR(4) NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      email VARCHAR(254) NOT NULL,
+      is_national BOOLEAN NOT NULL DEFAULT FALSE,
+      state VARCHAR(60),
+      cities TEXT[] NOT NULL DEFAULT '{}',
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      used_at TIMESTAMPTZ,
+      used_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      revoked_at TIMESTAMPTZ
+    );
+
+    -- Admins created before jurisdictions existed become national admins
+    -- (runs only while no admin has a profile yet)
+    INSERT INTO admin_profiles (user_id, is_national)
+      SELECT id, TRUE FROM users
+      WHERE role = 'admin' AND NOT EXISTS (SELECT 1 FROM admin_profiles)
+      ON CONFLICT (user_id) DO NOTHING;
+
     -- Supabase exposes the public schema through its REST API with the public
     -- anon key. RLS with no policies closes that door; the backend connects as
     -- the table owner, which bypasses RLS, so the API keeps working.
@@ -162,6 +210,8 @@ const initDb = async () => {
     ALTER TABLE blood_inventory ENABLE ROW LEVEL SECURITY;
     ALTER TABLE blood_requests ENABLE ROW LEVEL SECURITY;
     ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE admin_profiles ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE admin_invites ENABLE ROW LEVEL SECURITY;
 
     -- Haversine Distance Function
     CREATE OR REPLACE FUNCTION calculate_distance(lat1 FLOAT, lon1 FLOAT, lat2 FLOAT, lon2 FLOAT)

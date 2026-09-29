@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { register, login, logout } from '../controllers/authController';
+import { register, login, logout, checkAdminInvite } from '../controllers/authController';
 import { validateRequest } from '../middleware/validateZod';
-import { registerSchema, loginSchema } from '../schemas/authSchemas';
+import { registerSchema, loginSchema, adminInviteCheckSchema } from '../schemas/authSchemas';
 import rateLimit from 'express-rate-limit';
 import { preventSessionFixation, botDetection, bruteForceDelay } from '../middleware/securityMiddleware';
 
@@ -30,6 +30,15 @@ const registerLimiter = rateLimit({
     message: { message: 'Too many accounts created from this IP, please try again after an hour' },
 });
 
+// Codes are unguessable (about 79 bits), but still no free guessing
+const inviteCheckLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many invite checks. Please try again in 15 minutes.' },
+});
+
 // ─────────────────────────────────────────────
 // Routes
 // ─────────────────────────────────────────────
@@ -56,6 +65,8 @@ router.post(
     validateRequest(loginSchema),
     login
 );
+
+router.post('/admin-invite/check', inviteCheckLimiter, botDetection, validateRequest(adminInviteCheckSchema), checkAdminInvite);
 
 router.post('/logout', logout);
 

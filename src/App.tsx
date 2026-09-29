@@ -70,6 +70,7 @@ export default function App() {
         <Route path="admin/donors" element={<AdminDashboard />} />
         <Route path="admin/analytics" element={<AdminDashboard />} />
         <Route path="admin/settings" element={<AdminDashboard />} />
+        <Route path="admin/admins" element={<AdminDashboard />} />
       </Route>
 
       {/* Hospital Routes */}
