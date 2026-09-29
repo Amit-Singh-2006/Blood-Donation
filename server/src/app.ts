@@ -9,6 +9,7 @@ import hospitalRoutes from './routes/hospitalRoutes';
 import adminRoutes from './routes/adminRoutes';
 import userRoutes from './routes/userRoutes';
 import aiRoutes from './routes/aiRoutes';
+import { healthCheck } from './controllers/healthController';
 import rateLimit from 'express-rate-limit';
 
 // ── Security Middleware ────────────────────────────────────────────────────
@@ -164,6 +165,7 @@ app.use('/ai', aiRoutes);
 app.get('/', (req, res) => {
     res.send('Blood Donation Management API is running');
 });
+app.get('/health', healthCheck);
 
 // ──────────────────────────────────────────────────────────────────────────
 // 14. 404 Handler – prevents Directory Listing / Forced Browsing info leaks
