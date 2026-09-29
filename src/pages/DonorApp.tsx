@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
-import { QRCodeSVG } from 'qrcode.react';
 import AgentChat from '../components/AgentChat';
-import FeedbackModal from '../components/FeedbackModal';
 import { apiFetch } from '../lib/api';
+import { EMERGENCY } from '../lib/contact';
 
 /** A blood request the donor was alerted to, from GET /donor/network. */
 interface NetworkAlert {
@@ -30,12 +29,30 @@ interface DonorNetworkView {
     available: boolean;
     preferred_channel: string;
     total_donations: number;
+    xp_points?: number;
     last_donation_date: string | null;
     eligible_from: string | null;
     eligible_now: boolean;
   };
   alerts?: NetworkAlert[];
+  history?: { request_id: number; hospital_name: string; hospital_city: string; blood_group_needed: string; donated_on: string }[];
+  stats?: { alerts_received: number; accepted: number; donations_via_lifelink: number };
 }
+
+interface Badge { name: string; icon: string; tone: string; why: string }
+
+/** Recognition only: badges have no monetary value (see the Terms). */
+const earnedBadges = (donor: DonorNetworkView['donor'], stats: DonorNetworkView['stats']): Badge[] => {
+  const n = donor?.total_donations ?? 0;
+  return [
+    n >= 1 && { name: 'First Donation', icon: 'water_drop', tone: 'bg-[#ee2b2b]/10 text-[#ee2b2b]', why: 'Gave blood for the first time' },
+    (stats?.accepted ?? 0) >= 1 && { name: 'Answered the Call', icon: 'notifications_active', tone: 'bg-amber-100 text-amber-600', why: 'Said YES to a hospital request' },
+    n >= 3 && { name: 'Regular Donor', icon: 'event_repeat', tone: 'bg-blue-100 text-blue-600', why: '3 or more donations' },
+    n >= 5 && { name: 'Life Saver', icon: 'volunteer_activism', tone: 'bg-green-100 text-green-600', why: '5 or more donations' },
+    n >= 10 && { name: 'Hero', icon: 'military_tech', tone: 'bg-purple-100 text-purple-600', why: '10 or more donations' },
+    donor?.blood_group === 'O-' && n >= 1 && { name: 'Universal Donor', icon: 'diversity_1', tone: 'bg-slate-100 text-slate-700', why: 'O- blood can help any patient' },
+  ].filter(Boolean) as Badge[];
+};
 
 type PreferenceChange = { available?: boolean; preferred_channel?: string };
 
@@ -108,25 +125,14 @@ export default function DonorApp() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isAvailable, setIsAvailable] = useState(false);
-  const [showFeedback, setShowFeedback] = useState(false);
   const [showChat, setShowChat] = useState(false);
   const [network, setNetwork] = useState<DonorNetworkView | null>(null);
   const [networkError, setNetworkError] = useState('');
   const [replyNotice, setReplyNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [respondingId, setRespondingId] = useState<number | null>(null);
-  const [userPoints, setUserPoints] = useState(location.state?.initialPoints || 450);
-  const [userTokens, setUserTokens] = useState(24000);
-  const [pendingAppointments, setPendingAppointments] = useState<{ date: string, time: string, hospital: string, id: number }[]>([]);
-  const [hospitalRated, setHospitalRated] = useState(false);
-  const [feedPosts, setFeedPosts] = useState([
-    { id: 1, user: "Alex Johnson", time: "2h ago", content: "Just completed my 5th donation at City General! The staff was amazing and the process was super smooth. Feeling great about helping out! 🩸💪", likes: 24, replies: [], showReplyInput: false, isLiked: false }
-  ]);
 
   const [user, setUser] = useState<any>(null);
-  const [donations, setDonations] = useState<any[]>([
-    { id: 'd2', donation_date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), hospital_name: 'St. Mary\'s Medical', units: 1, rated: false },
-    { id: 'd1', donation_date: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(), hospital_name: 'City General Hospital', units: 1, rated: true }
-  ]);
+  const [donations, setDonations] = useState<any[]>([]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem('user');
@@ -185,28 +191,18 @@ export default function DonorApp() {
   const fetchDonations = async () => {
     try {
       const data = await apiFetch('/donor/donations');
-      if (data && data.length > 0) {
-        // Merge API data with dummies if needed, or just replace
-        setDonations(data.map((d: any) => ({ ...d, rated: false })));
-      }
+      setDonations(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Failed to fetch donations:', err);
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/');
-  };
 
   // Determine active tab based on URL
   const getActiveTab = () => {
     const path = location.pathname;
     if (path.includes('/centers')) return 'centers';
     if (path.includes('/impact')) return 'impact';
-    if (path.includes('/community')) return 'community';
-    if (path.includes('/pending')) return 'pending';
     if (path.includes('/settings')) return 'settings';
     return 'dashboard';
   };
@@ -236,9 +232,9 @@ export default function DonorApp() {
             'Content-Type': 'text/plain;charset=utf-8',
           },
           body: JSON.stringify({
-            name: user?.name || "LifeLink Hero",
+            name: network?.donor?.name || user?.name || "LifeLink Donor",
             email: userEmail,
-            bloodGroup: user?.blood_group || "O-",
+            bloodGroup: network?.donor?.blood_group || user?.blood_group || "",
           }),
         });
         alert('Certificate generation request sent! Please check your email inbox in a few moments. (It will also be logged in the spreadsheet)');
@@ -296,25 +292,13 @@ export default function DonorApp() {
           to="/donor/centers"
           className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${(activeTab as string) === 'centers' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
-          Donation Centers
-        </Link>
-        <Link
-          to="/donor/pending"
-          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'pending' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-        >
-          Pending Donations
+          Where to Donate
         </Link>
         <Link
           to="/donor/impact"
           className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'impact' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
         >
-          Impact Report
-        </Link>
-        <Link
-          to="/donor/community"
-          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'community' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-        >
-          Community
+          My Impact
         </Link>
       </div>
 
@@ -327,15 +311,12 @@ export default function DonorApp() {
           replyNotice={replyNotice}
           respondingId={respondingId}
           onRespond={respondToAlert}
-          onRate={() => setShowFeedback(true)}
           onClaimCertificate={handleClaimCertificate}
           claimingId={claimingId}
         />
       )}
-      {activeTab === 'centers' && <DonationCentersView onBook={(appt) => setPendingAppointments([...pendingAppointments, appt])} />}
-      {activeTab === 'pending' && <PendingDonationsView userPoints={userPoints} appointments={pendingAppointments} onCancel={(id) => setPendingAppointments(pendingAppointments.filter(a => a.id !== id))} />}
-      {activeTab === 'impact' && <RewardsView userTokens={userTokens} setUserTokens={setUserTokens} user={user} />}
-      {activeTab === 'community' && <CommunityView feedPosts={feedPosts} setFeedPosts={setFeedPosts} />}
+      {activeTab === 'centers' && <WhereToDonateView city={network?.donor?.city} />}
+      {activeTab === 'impact' && <ImpactView network={network} networkError={networkError} donations={donations} onClaimCertificate={handleClaimCertificate} claimingId={claimingId} />}
       {activeTab === 'settings' && <DonorSettingsView channel={network?.donor?.preferred_channel} onSave={updatePreferences} />}
 
       {/* Floating AI Chat Button */}
@@ -357,38 +338,16 @@ export default function DonorApp() {
           }
         }}
       />
-
-      <FeedbackModal
-        isOpen={showFeedback}
-        onClose={() => setShowFeedback(false)}
-        targetType="hospital"
-        targetName="St. Mary's Medical"
-        onSubmit={(comment) => {
-          setHospitalRated(true);
-          // Also update the donation list for the demo
-          setDonations(prev => prev.map(d => d.id === 'd2' ? { ...d, rated: true } : d));
-          setFeedPosts(prev => [{
-            id: Date.now(),
-            user: (user as any)?.name || "Alex Johnson",
-            time: "Just now",
-            content: comment,
-            likes: 0,
-            replies: [],
-            showReplyInput: false,
-            isLiked: false
-          }, ...prev]);
-        }}
-      />
     </div>
   );
 }
 
 function DashboardView({
-  donations, network, networkError, isAvailable, replyNotice, respondingId, onRespond, onRate, onClaimCertificate, claimingId
+  donations, network, networkError, isAvailable, replyNotice, respondingId, onRespond, onClaimCertificate, claimingId
 }: {
   donations: any[]; network: DonorNetworkView | null; networkError: string; isAvailable: boolean;
   replyNotice: { ok: boolean; text: string } | null; respondingId: number | null;
-  onRespond: (alertInfo: NetworkAlert, url: string) => void; onRate: () => void;
+  onRespond: (alertInfo: NetworkAlert, url: string) => void;
   onClaimCertificate: (donation: any) => void; claimingId: string | null;
 }) {
   const donor = network?.donor;
@@ -397,6 +356,7 @@ function DashboardView({
   const totalDonations = donor?.total_donations ?? donations.length;
   const nextMilestone = [1, 5, 10, 25, 50, 100].find((m) => m > totalDonations) ?? totalDonations;
   const milestonePct = nextMilestone ? Math.round((totalDonations / nextMilestone) * 100) : 100;
+  const badges = earnedBadges(donor, network?.stats);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -552,13 +512,6 @@ function DashboardView({
                         <span className="text-[10px] font-bold bg-green-100 text-green-700 px-2 py-0.5 rounded uppercase">Verified</span>
                       </td>
                       <td className="py-4 text-right flex flex-col items-end gap-2">
-                        {donation.rated ? (
-                          <span className="text-xs font-bold text-slate-400">Rated</span>
-                        ) : (
-                          <button onClick={onRate} className="text-xs font-bold text-[#ee2b2b] hover:bg-[#ee2b2b]/5 px-3 py-1.5 rounded-lg transition-colors">
-                            Rate Hospital
-                          </button>
-                        )}
                         <button
                           onClick={() => onClaimCertificate(donation)}
                           disabled={claimingId === donation.id}
@@ -616,1220 +569,210 @@ function DashboardView({
             <h3 className="text-lg font-bold text-slate-900">Earned Badges</h3>
             <Link to="/donor/impact" className="text-[#ee2b2b] text-xs font-bold hover:underline">View All</Link>
           </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="flex flex-col items-center text-center gap-2">
-              <div className="w-12 h-12 bg-amber-100 rounded-full flex items-center justify-center text-amber-600">
-                <span className="material-symbols-outlined text-2xl">workspace_premium</span>
-              </div>
-              <span className="text-[10px] font-bold text-slate-600">First Responder</span>
-            </div>
-            <div className="flex flex-col items-center text-center gap-2">
-              <div className="w-12 h-12 bg-[#ee2b2b]/10 rounded-full flex items-center justify-center text-[#ee2b2b]">
-                <span className="material-symbols-outlined text-2xl">volunteer_activism</span>
-              </div>
-              <span className="text-[10px] font-bold text-slate-600">Lifesaver</span>
-            </div>
-            <div className="flex flex-col items-center text-center gap-2">
-              <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
-                <span className="material-symbols-outlined text-2xl">bolt</span>
-              </div>
-              <span className="text-[10px] font-bold text-slate-600">Quick React</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Map Widget */}
-        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900">Centers Near You</h3>
-            <span className="text-[10px] text-slate-400">{donor?.city ?? ''}</span>
-          </div>
-          <div className="h-48 bg-slate-200 relative">
-            <img alt="Map View" className="w-full h-full object-cover grayscale opacity-60" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCQv5H3unlG5_AmOlS9h45HtaApX0js3IFcNkO_5gPwHh64vPlyqVb18f97Gwlblq21VrccZk8lVg0cFHolcS-ZVZeE8gOSBWMBuvfogaU7NcmdChyLLklumMK1_FYsFfidRkukviJ01e90m7jaOAvdI6O003dNWa4x_uib2OqWfzVHELdGgZNzEUlGtuSai7gRr-KRgrQwW2CqMRo9M-vj6TJxJDCFZMyqPYyC4e0057KYc-R-Z_u_GG5UBeR6JqL-5FNMTE3zGe8" />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-6 h-6 bg-[#ee2b2b] rounded-full border-2 border-white animate-pulse shadow-lg"></div>
-            </div>
-          </div>
-          <div className="p-4 space-y-3">
-            <div className="flex items-start gap-3">
-              <span className="material-symbols-outlined text-[#ee2b2b] text-sm mt-0.5">location_on</span>
-              <div>
-                <p className="text-xs font-bold text-slate-900">Bay Area Donor Hub</p>
-                <p className="text-[10px] text-slate-500">Open until 8:00 PM</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DonationCentersView({ onBook }: { onBook: (appt: any) => void }) {
-  const navigate = useNavigate();
-  const today = new Date();
-
-  const [currentMonth, setCurrentMonth] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
-  const [selectedDate, setSelectedDate] = useState<number | null>(today.getDate());
-  const [selectedTime, setSelectedTime] = useState<string | null>(null);
-  const [selectedHospital, setSelectedHospital] = useState("City Central Medical Center");
-
-  // Per-hospital slot pools — each has a distinct character
-  const hospitals = [
-    {
-      name: "City Central Medical Center",
-      distance: "1.2 miles away",
-      address: "450 Main St.",
-      demand: "Urgent: O-",
-      style: "text-[#ee2b2b] bg-[#ee2b2b]/10",
-      allSlots: ["08:00 AM", "09:00 AM", "09:30 AM", "10:30 AM", "11:00 AM", "11:30 AM", "01:00 PM", "02:00 PM", "03:30 PM"],
-      maxAvailable: 6,
-    },
-    {
-      name: "St. Jude Community Clinic",
-      distance: "2.8 miles away",
-      address: "89 Hope Blvd.",
-      demand: "Demand: A+",
-      style: "text-slate-500 bg-slate-100",
-      allSlots: ["09:00 AM", "10:00 AM", "12:00 PM", "01:30 PM", "02:30 PM", "04:00 PM", "04:30 PM", "05:00 PM"],
-      maxAvailable: 5,
-    },
-    {
-      name: "North Valley Blood Bank",
-      distance: "5.1 miles away",
-      address: "12 Oak Ridge Rd.",
-      demand: "Limited Slots",
-      style: "text-slate-500 bg-slate-100",
-      allSlots: ["01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM"],
-      maxAvailable: 3,
-    },
-  ];
-
-  // Deterministic slot generator: same hospital + day + month → same slots every time
-  const getSlotsForHospital = (hospIdx: number, day: number | null, month: number) => {
-    if (!day) return { available: [], booked: [] };
-    const seed = hospIdx * 97 + day * 31 + month * 7;
-    const hosp = hospitals[hospIdx];
-    const shuffled = [...hosp.allSlots].sort((a, b) => {
-      const hashA = (seed + a.charCodeAt(0) * 13 + a.charCodeAt(1) * 7) % 100;
-      const hashB = (seed + b.charCodeAt(0) * 13 + b.charCodeAt(1) * 7) % 100;
-      return hashA - hashB;
-    });
-    const dayOfWeek = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day).getDay();
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const count = isWeekend ? Math.max(2, hosp.maxAvailable - 2) : hosp.maxAvailable;
-    const available = shuffled.slice(0, count).sort();
-    const booked = shuffled.slice(count, count + Math.max(1, seed % 3));
-    return { available, booked };
-  };
-
-  const selectedMonthLabel = currentMonth.toLocaleString('default', { month: 'short' });
-
-  const handleSchedule = () => {
-    if (!selectedDate || !selectedTime) {
-      alert("Please select a date and time slot first.");
-      return;
-    }
-    alert(`Appointment successfully scheduled at ${selectedHospital}!`);
-    onBook({ date: `${selectedMonthLabel} ${selectedDate}`, time: selectedTime, hospital: selectedHospital, id: Date.now() });
-    navigate('/donor/pending');
-  };
-
-
-  return (
-    <div className="flex flex-col gap-8 -mt-2 pb-24">
-      {/* Breadcrumbs & Title */}
-      <div className="flex flex-col gap-2">
-        <nav className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
-          <Link className="hover:text-[#ee2b2b]" to="/donor">Dashboard</Link>
-          <span className="material-symbols-outlined text-sm">chevron_right</span>
-          <span className="text-slate-900">Book Appointment</span>
-        </nav>
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <h2 className="text-3xl md:text-4xl font-black text-slate-900 leading-tight">Schedule Your Donation</h2>
-            <p className="text-slate-500 max-w-2xl mt-1">Our AI predicts high demand for O- and A+ types this week. Your donation could save up to three lives.</p>
-          </div>
-          <div className="flex items-center gap-2 bg-[#ee2b2b]/10 text-[#ee2b2b] px-4 py-2 rounded-lg border border-[#ee2b2b]/20">
-            <span className="material-symbols-outlined animate-pulse">priority_high</span>
-            <span className="text-sm font-bold uppercase">Critical Shortage: O Negative</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Booking Interface Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left: Calendar View */}
-        <div className="lg:col-span-7 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-            <div className="flex flex-col">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Select Date</span>
-              <h3 className="text-xl font-bold text-slate-900">
-                {currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
-              </h3>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><span className="material-symbols-outlined">chevron_left</span></button>
-              <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="p-2 hover:bg-slate-100 rounded-lg transition-colors"><span className="material-symbols-outlined">chevron_right</span></button>
-            </div>
-          </div>
-          <div className="p-6">
-            <div className="grid grid-cols-7 mb-2">
-              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(d => (
-                <div key={d} className="text-center text-[10px] font-black text-slate-400 uppercase py-2">{d}</div>
+          {badges.length === 0 ? (
+            <p className="text-sm text-slate-400">Your first donation earns your first badge.</p>
+          ) : (
+            <div className="grid grid-cols-3 gap-4">
+              {badges.slice(0, 3).map((b) => (
+                <div key={b.name} className="flex flex-col items-center text-center gap-2">
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center ${b.tone}`}>
+                    <span className="material-symbols-outlined text-2xl">{b.icon}</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-slate-600">{b.name}</span>
+                </div>
               ))}
             </div>
-            <div className="grid grid-cols-7 gap-1">
-              {Array.from({ length: new Date(currentMonth.getFullYear(), currentMonth.getMonth(), 1).getDay() }).map((_, i) => (
-                <div key={`empty-${i}`} className="aspect-square"></div>
-              ))}
-              {Array.from({ length: new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0).getDate() }, (_, i) => i + 1).map(day => {
-                const isSelected = selectedDate === day;
-                const hasSpots = [today.getDate() + 1, today.getDate() + 2].includes(day);
-
-                const dateOfThisButton = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day);
-                const todayMidnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-                const maxDate = new Date(todayMidnight);
-                maxDate.setDate(todayMidnight.getDate() + 21);
-
-                const isPast = dateOfThisButton < todayMidnight;
-                const isTooFar = dateOfThisButton > maxDate;
-                const isDisabled = isPast || isTooFar;
-
-                return (
-                  <button
-                    key={day}
-                    disabled={isDisabled}
-                    onClick={() => setSelectedDate(day)}
-                    title={isDisabled ? "Appointments can only be booked within a 3-week window." : ""}
-                    className={`aspect-square flex flex-col items-center justify-center rounded-lg text-sm transition-all relative ${isDisabled ? 'text-slate-300 cursor-not-allowed bg-transparent' : 'font-semibold hover:bg-slate-100 text-slate-900'} ${isSelected && !isDisabled
-                      ? "bg-[#ee2b2b] text-white font-bold shadow-lg shadow-[#ee2b2b]/20 scale-110 z-10 hover:bg-[#ee2b2b]"
-                      : ""
-                      }`}
-                  >
-                    {day}
-                    {isSelected && !isDisabled && <span className="w-1 h-1 bg-white rounded-full mt-1"></span>}
-                    {!isSelected && hasSpots && !isDisabled && <span className="absolute bottom-2 w-1 h-1 bg-[#ee2b2b]/40 rounded-full"></span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="px-6 py-4 bg-slate-50 flex flex-wrap gap-4 text-xs font-bold uppercase tracking-widest text-slate-500">
-            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[#ee2b2b]"></span> Selected</div>
-            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-[#ee2b2b]/40"></span> Available</div>
-            <div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-slate-300"></span> Fully Booked</div>
-          </div>
+          )}
         </div>
 
-        {/* Right: Hospital & Time Panel */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-bold text-slate-900">Select Hospital & Time</h3>
-              <span className="text-sm font-bold text-[#ee2b2b]">3 centers nearby</span>
-            </div>
-            <div className="flex flex-col gap-4 overflow-y-auto max-h-[600px] pr-2 custom-scrollbar">
-              {hospitals.map((hosp, hospIdx) => {
-                const isSelected = selectedHospital === hosp.name;
-                const { available, booked } = getSlotsForHospital(hospIdx, selectedDate, currentMonth.getMonth());
-                const dayOfWeek = selectedDate
-                  ? new Date(currentMonth.getFullYear(), currentMonth.getMonth(), selectedDate).getDay()
-                  : -1;
-                const isClosed = dayOfWeek === 0;
-
-                return (
-                  <div
-                    key={hosp.name}
-                    onClick={() => { setSelectedHospital(hosp.name); setSelectedTime(null); }}
-                    className={`bg-white p-5 rounded-xl border ${isSelected ? 'border-2 border-[#ee2b2b]' : 'border-slate-200 hover:border-[#ee2b2b]/30'} shadow-sm relative group cursor-pointer transition-all`}
-                  >
-                    {isSelected && (
-                      <div className="absolute -right-1 -top-1">
-                        <span className="bg-[#ee2b2b] text-white text-[10px] font-black px-2 py-1 rounded shadow-lg uppercase tracking-widest">Selected</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h4 className="font-bold text-slate-900 text-lg leading-tight">{hosp.name}</h4>
-                        <p className="text-slate-500 text-sm flex items-center gap-1 mt-1">
-                          <span className="material-symbols-outlined text-sm">location_on</span> {hosp.distance} · {hosp.address}
-                        </p>
-                      </div>
-                      <div className={`${hosp.style} text-[10px] font-black px-2 py-1 rounded uppercase tracking-tighter`}>{hosp.demand}</div>
-                    </div>
-
-                    {isSelected ? (
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <p className="text-xs font-black text-slate-400 uppercase tracking-widest">
-                            Available Slots · {selectedMonthLabel} {selectedDate}
-                          </p>
-                          {!isClosed && (
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${available.length === 0 ? 'bg-red-50 text-red-500'
-                                : available.length <= 2 ? 'bg-amber-50 text-amber-600'
-                                  : 'bg-green-50 text-green-600'
-                              }`}>
-                              {available.length === 0 ? 'Full' : `${available.length} left`}
-                            </span>
-                          )}
-                        </div>
-
-                        {isClosed ? (
-                          <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg border border-slate-100">
-                            <span className="material-symbols-outlined text-slate-400 text-sm">event_busy</span>
-                            <p className="text-xs font-bold text-slate-500">Closed on Sundays. Please select another day.</p>
-                          </div>
-                        ) : available.length === 0 ? (
-                          <div className="flex items-center gap-2 p-3 bg-red-50 rounded-lg border border-red-100">
-                            <span className="material-symbols-outlined text-red-400 text-sm">block</span>
-                            <p className="text-xs font-bold text-red-500">Fully booked on this day. Try another date.</p>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-3 gap-2">
-                            {available.map(time => (
-                              <button
-                                key={time}
-                                onClick={(e) => { e.stopPropagation(); setSelectedTime(time); }}
-                                className={`py-2 px-1 text-xs font-bold rounded-lg transition-all ${selectedTime === time
-                                    ? 'border-2 border-[#ee2b2b] bg-[#ee2b2b] text-white shadow-md'
-                                    : 'border border-slate-200 hover:border-[#ee2b2b]/50 hover:bg-[#ee2b2b]/5'
-                                  }`}
-                              >
-                                {time}
-                              </button>
-                            ))}
-                            {booked.map(time => (
-                              <button key={time} disabled
-                                className="py-2 px-1 text-xs font-bold border border-slate-200 rounded-lg opacity-35 cursor-not-allowed line-through text-slate-400">
-                                {time}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between text-xs font-bold text-slate-400">
-                        <span className="flex items-center gap-1">
-                          <span className="material-symbols-outlined text-sm">schedule</span>
-                          Click to view slots
-                        </span>
-                        {selectedDate && (() => {
-                          const { available: av } = getSlotsForHospital(hospIdx, selectedDate, currentMonth.getMonth());
-                          const dOW = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), selectedDate!).getDay();
-                          if (dOW === 0) return <span className="text-slate-400">Closed Sun</span>;
-                          return (
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${av.length === 0 ? 'bg-red-50 text-red-500'
-                                : av.length <= 2 ? 'bg-amber-50 text-amber-600'
-                                  : 'bg-green-50 text-green-600'
-                              }`}>
-                              {av.length === 0 ? 'Full' : `${av.length} slots`}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+        {/* Where to donate */}
+        <Link to="/donor/centers" className="block bg-white rounded-xl border border-slate-200 p-5 hover:border-[#ee2b2b]/30 hover:shadow-md transition-all">
+          <div className="flex items-center gap-3">
+            <span className="material-symbols-outlined text-[#ee2b2b]">location_on</span>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Where to donate{donor?.city ? ` in ${donor.city}` : ''}</h3>
+              <p className="text-xs text-slate-500">LifeLink hospitals and licensed blood centres near you</p>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Sticky Booking Summary Footer */}
-      {(selectedDate || selectedTime) && (
-        <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-[0_-4px_20px_rgba(0,0,0,0.05)] p-4 sm:p-6 z-40 animate-in slide-in-from-bottom flex justify-center">
-          <div className="max-w-7xl w-full flex flex-col sm:flex-row items-center justify-between gap-6 pl-0">
-            <div className="flex items-center gap-6 divide-x divide-slate-200 w-full sm:w-auto overflow-x-auto">
-              <div className="flex flex-col min-w-max">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Date & Time</span>
-                <p className="font-bold text-slate-900">{selectedMonthLabel} {selectedDate}{selectedTime ? ` @ ${selectedTime}` : ''}</p>
-              </div>
-              <div className="flex flex-col pl-6 min-w-max">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Location</span>
-                <p className="font-bold text-slate-900">{selectedHospital}</p>
-              </div>
-              <div className="hidden lg:flex flex-col pl-6 min-w-max">
-                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estimated Duration</span>
-                <p className="font-bold text-slate-900">45-60 mins</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4 w-full sm:w-auto shrink-0">
-              <button className="px-6 py-3 text-slate-600 font-bold hover:text-slate-900 transition-colors hidden sm:block">
-                Save to Drafts
-              </button>
-              <button
-                onClick={handleSchedule}
-                className="flex-1 sm:flex-none bg-[#ee2b2b] hover:bg-red-700 text-white px-8 py-3 rounded-xl font-bold text-lg shadow-lg shadow-[#ee2b2b]/20 transition-all transform active:scale-95 flex items-center justify-center gap-2"
-              >
-                Schedule Appointment
-                <span className="material-symbols-outlined">calendar_add_on</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Location Modal Helper */}
-      <div className="fixed bottom-32 md:bottom-28 right-8 z-30">
-        <div className="bg-white p-3 rounded-full shadow-2xl border border-slate-200 flex items-center gap-3 pr-6 animate-pulse">
-          <div className="w-10 h-10 rounded-full bg-[#ee2b2b]/10 text-[#ee2b2b] flex items-center justify-center">
-            <span className="material-symbols-outlined">map</span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-[10px] font-black text-slate-400 uppercase">Current Area</span>
-            <span className="text-xs font-bold">Manhattan, NY</span>
-          </div>
-        </div>
+        </Link>
       </div>
     </div>
   );
 }
 
-function PendingDonationsView({ userPoints, appointments, onCancel }: { userPoints: number, appointments: any[], onCancel: (id: number) => void }) {
-  const navigate = useNavigate();
-  return (
-    <div className="max-w-4xl mx-auto space-y-8">
-      {/* Registration Status */}
-      <div className="bg-white rounded-xl p-6 border border-slate-200">
-        <h3 className="font-bold text-lg mb-4 text-slate-900 flex items-center gap-2">
-          <span className="material-symbols-outlined text-green-500">how_to_reg</span>
-          Registration Status
-        </h3>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-bold text-slate-700">Profile Complete</span>
-          <span className="text-sm font-bold text-green-600">100%</span>
-        </div>
-        <div className="w-full bg-slate-100 rounded-full h-2">
-          <div className="bg-green-500 rounded-full h-2 w-full"></div>
-        </div>
-      </div>
+function WhereToDonateView({ city }: { city?: string }) {
+  const [centers, setCenters] = useState<{ hospital_name: string; city: string; contact_number: string | null; in_your_city: boolean }[] | null>(null);
+  const [error, setError] = useState('');
 
-      <div className="grid md:grid-cols-2 gap-8">
-        {/* Upcoming scheduled donations */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <h3 className="font-bold text-lg mb-4 text-slate-900 flex items-center gap-2">
-            <span className="material-symbols-outlined text-blue-500">event_upcoming</span>
-            Upcoming Donations
-          </h3>
-          <div className="space-y-4">
-            {appointments.length === 0 ? (
-              <p className="text-sm text-slate-500 italic">No upcoming appointments. <Link to="/donor/centers" className="text-[#ee2b2b] hover:underline font-bold">Schedule one now!</Link></p>
-            ) : (
-              appointments.map(appt => (
-                <div key={appt.id} className="border border-blue-100 bg-blue-50 rounded-lg p-4 flex gap-4 items-start">
-                  <div className="bg-white p-3 rounded-lg text-center min-w-[60px] border border-blue-100 flex flex-col justify-center items-center">
-                    <p className="text-xs font-bold text-slate-500 uppercase">{appt.date}</p>
-                    <p className="text-lg font-black text-blue-600 leading-tight mt-1">{appt.time.split(' ')[0]}</p>
-                    <p className="text-[10px] font-black text-slate-400 leading-tight">{appt.time.split(' ')[1]}</p>
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-slate-900">Whole Blood Donation</h4>
-                    <p className="text-sm text-slate-600 mt-1">{appt.hospital}</p>
-                    <div className="mt-3 flex gap-2">
-                      <button onClick={() => { onCancel(appt.id); navigate('/donor/centers'); }} className="text-xs font-bold bg-white border border-slate-200 px-3 py-1.5 rounded hover:bg-slate-50 transition-colors shadow-sm">Reschedule</button>
-                      <button onClick={() => onCancel(appt.id)} className="text-xs font-bold text-red-600 hover:text-red-700 bg-white border border-red-100 px-3 py-1.5 rounded transition-colors shadow-sm">Cancel</button>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* History Summary and Points */}
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <h3 className="font-bold text-lg mb-4 text-slate-900 flex items-center gap-2">
-            <span className="material-symbols-outlined text-amber-500">stars</span>
-            Impact Summary
-          </h3>
-          <div className="bg-gradient-to-br from-red-50 to-orange-50 p-6 rounded-xl border border-red-100 text-center mb-6">
-            <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mb-1">Total Points Earned</p>
-            <p className="text-4xl font-black text-red-600">{userPoints} <span className="text-lg text-red-400">XP</span></p>
-          </div>
-          <div>
-            <h4 className="text-sm font-bold text-slate-900 mb-3 uppercase tracking-wider">Recent Activity</h4>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">Profile Completion Bonus</span>
-                <span className="font-bold text-green-600">+100 XP</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-600">Verified Blood Group Docs</span>
-                <span className="font-bold text-green-600">+30 XP</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CommunityView({ feedPosts, setFeedPosts }: { feedPosts: any[], setFeedPosts: any }) {
-  const [isRegistered, setIsRegistered] = useState(false);
-  const [showCampaignModal, setShowCampaignModal] = useState(false);
-  const [campaignForm, setCampaignForm] = useState({ name: '', email: '', phone: '', size: 'M' });
-  const [campaignSubmitted, setCampaignSubmitted] = useState(false);
-  const [replyText, setReplyText] = useState("");
-
-  const handleToggleLike = (postId: number) => {
-    setFeedPosts((posts: any[]) => posts.map(post => {
-      if (post.id === postId) {
-        return {
-          ...post,
-          isLiked: !post.isLiked,
-          likes: post.isLiked ? post.likes - 1 : post.likes + 1
-        };
-      }
-      return post;
-    }));
-  };
-
-  const handleRegisterDrive = () => {
-    setShowCampaignModal(true);
-    setCampaignSubmitted(false);
-  };
-
-  const handleCampaignSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    // Send Google Automation Email using Google Apps Script
-    try {
-      const scriptUrl = import.meta.env.VITE_GOOGLE_SCRIPT_URL;
-      if (scriptUrl) {
-        const ticketId = 'DRIVE-' + Math.random().toString(36).substr(2, 6).toUpperCase();
-        fetch(scriptUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: {
-            'Content-Type': 'text/plain;charset=utf-8',
-          },
-          body: JSON.stringify({
-            name: campaignForm.name,
-            email: campaignForm.email,
-            ticketId: ticketId,
-            subject: '🎟️ Confirmed: Your Official Blood Drive Ticket',
-            message: 'Your registration for the upcoming blood drive at the Community Center this Saturday (9AM - 4PM) is confirmed. Your venue details and time slots will be updated soon. Thank you for saving lives!',
-          }),
-        }).catch(err => console.error("Google Script fetch error:", err));
-      } else {
-        console.warn("VITE_GOOGLE_SCRIPT_URL is not set.");
-      }
-    } catch (err) {
-      console.error("Google Automation error:", err);
-    }
-
-    setCampaignSubmitted(true);
-    setIsRegistered(true);
-    setTimeout(() => setShowCampaignModal(false), 2500);
-  };
-
-  const handleToggleReply = (postId: number) => {
-    setFeedPosts((posts: any[]) => posts.map(post =>
-      post.id === postId ? { ...post, showReplyInput: !post.showReplyInput } : post
-    ));
-  };
-
-  const submitReply = (postId: number) => {
-    if (!replyText.trim()) return;
-    setFeedPosts((posts: any[]) => posts.map(post => {
-      if (post.id === postId) {
-        return { ...post, showReplyInput: false, replies: [...post.replies, replyText] };
-      }
-      return post;
-    }));
-    setReplyText("");
-  };
-
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      <div className="lg:col-span-2 space-y-6">
-        <div className="bg-white rounded-xl p-6 border border-slate-200">
-          <h3 className="font-bold text-lg mb-4">Community Feed</h3>
-          <div className="space-y-6">
-            {feedPosts.map((post: any, i: number) => (
-              <div key={post.id} className="flex gap-4 pb-6 border-b border-slate-100 last:border-0 last:pb-0">
-                <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden shrink-0">
-                  <img src={`https://picsum.photos/seed/user${post.id || i}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-bold text-sm text-slate-900">{post.user}</span>
-                    <span className="text-xs text-slate-400">• {post.time}</span>
-                  </div>
-                  <p className="text-sm text-slate-600 mb-3">
-                    {post.content}
-                  </p>
-
-                  {/* Render Replies */}
-                  {post.replies.map((reply: any, idx: number) => (
-                    <div key={idx} className="bg-slate-50 p-3 rounded-lg mt-2 mb-3 ml-4 border border-slate-100 text-sm text-slate-700">
-                      <span className="font-bold text-slate-900 mr-2">You:</span>{reply}
-                    </div>
-                  ))}
-
-                  <div className="flex items-center gap-4 text-xs font-bold">
-                    <button onClick={() => handleToggleLike(post.id)} className={`flex items-center gap-1 transition-colors ${post.isLiked ? 'text-[#ee2b2b]' : 'text-slate-400 hover:text-[#ee2b2b]'}`}>
-                      <svg
-                        className={`w-5 h-5 transition-colors duration-200 ${post.isLiked
-                          ? 'text-[#ee2b2b] fill-[#ee2b2b]'
-                          : 'text-slate-400 fill-transparent stroke-2'
-                          }`}
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={post.isLiked ? '0' : '2'}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path>
-                      </svg>
-                      {post.likes} Likes
-                    </button>
-                    <button onClick={() => handleToggleReply(post.id)} className="flex items-center gap-1 text-slate-400 hover:text-slate-600 transition-colors">
-                      <span className="material-symbols-outlined text-sm">chat_bubble</span>
-                      Reply
-                    </button>
-                  </div>
-
-                  {/* Reply Input */}
-                  {post.showReplyInput && (
-                    <div className="mt-3 flex gap-2 w-full">
-                      <input
-                        type="text"
-                        value={replyText}
-                        onChange={(e) => setReplyText(e.target.value)}
-                        placeholder="Write a reply..."
-                        className="flex-1 text-sm bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-slate-300"
-                      />
-                      <button onClick={() => submitReply(post.id)} className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-bold">Send</button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-6">
-        <div className="bg-[#ee2b2b] text-white rounded-xl p-6 relative overflow-hidden">
-          <div className="relative z-10">
-            <h3 className="font-bold text-lg mb-2">Upcoming Drive</h3>
-            <p className="text-sm text-white/90 mb-4">Join us at the Community Center this Saturday for our monthly blood drive.</p>
-            <button
-              onClick={handleRegisterDrive}
-              disabled={isRegistered}
-              className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${isRegistered
-                ? 'bg-white/50 text-white/70 cursor-default'
-                : 'bg-white text-[#ee2b2b] hover:bg-slate-50'
-                }`}
-            >
-              {isRegistered ? '✓ Registered!' : 'Register Now'}
-            </button>
-          </div>
-          <div className="absolute -bottom-4 -right-4 opacity-20">
-            <span className="material-symbols-outlined text-9xl">campaign</span>
-          </div>
-        </div>
-
-        {/* Campaign Registration Modal */}
-        {showCampaignModal && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
-            >
-              {campaignSubmitted ? (
-                <div className="p-10 text-center">
-                  <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <span className="material-symbols-outlined text-3xl text-emerald-500">check_circle</span>
-                  </div>
-                  <h3 className="text-xl font-black text-slate-900 mb-2">You're Registered! 🎉</h3>
-                  <p className="text-sm text-slate-500">We've sent your confirmation & drive details to your email. See you Saturday!</p>
-                </div>
-              ) : (
-                <>
-                  {/* Modal Header */}
-                  <div className="bg-[#ee2b2b] p-6 relative overflow-hidden">
-                    <div className="absolute -bottom-4 -right-4 opacity-10">
-                      <span className="material-symbols-outlined text-8xl">campaign</span>
-                    </div>
-                    <div className="relative z-10">
-                      <h3 className="text-xl font-black text-white">Register for Upcoming Drive</h3>
-                      <p className="text-sm text-white/80 mt-1">Community Center · This Saturday · 9AM – 4PM</p>
-                    </div>
-                    <button
-                      onClick={() => setShowCampaignModal(false)}
-                      className="absolute top-4 right-4 text-white/70 hover:text-white transition-colors"
-                    >
-                      <span className="material-symbols-outlined">close</span>
-                    </button>
-                  </div>
-
-                  {/* Modal Form */}
-                  <form onSubmit={handleCampaignSubmit} className="p-6 space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Full Name</label>
-                      <div className="relative">
-                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">person</span>
-                        <input
-                          required
-                          value={campaignForm.name}
-                          onChange={e => setCampaignForm(f => ({ ...f, name: e.target.value }))}
-                          placeholder="Amit Singh"
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b]/50 transition-all"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email Address</label>
-                      <div className="relative">
-                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">mail</span>
-                        <input
-                          type="email"
-                          required
-                          value={campaignForm.email}
-                          onChange={e => setCampaignForm(f => ({ ...f, email: e.target.value }))}
-                          placeholder="you@example.com"
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b]/50 transition-all"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phone Number</label>
-                      <div className="relative">
-                        <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">phone</span>
-                        <input
-                          type="tel"
-                          required
-                          value={campaignForm.phone}
-                          onChange={e => setCampaignForm(f => ({ ...f, phone: e.target.value }))}
-                          placeholder="+91 98765 43210"
-                          className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b]/50 transition-all"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Campaign T-Shirt Size</label>
-                      <select
-                        value={campaignForm.size}
-                        onChange={e => setCampaignForm(f => ({ ...f, size: e.target.value }))}
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all"
-                      >
-                        <option value="XS">XS – Extra Small</option>
-                        <option value="S">S – Small</option>
-                        <option value="M">M – Medium</option>
-                        <option value="L">L – Large</option>
-                        <option value="XL">XL – Extra Large</option>
-                        <option value="XXL">XXL – Double Extra Large</option>
-                      </select>
-                    </div>
-                    <div className="pt-2 flex gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setShowCampaignModal(false)}
-                        className="flex-1 py-3 border border-slate-200 rounded-xl text-sm font-black text-slate-600 hover:bg-slate-50 transition-all"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        type="submit"
-                        className="flex-1 py-3 bg-[#ee2b2b] text-white rounded-xl text-sm font-black hover:bg-[#ee2b2b]/90 shadow-lg shadow-[#ee2b2b]/20 transition-all active:scale-95"
-                      >
-                        Confirm Registration
-                      </button>
-                    </div>
-                  </form>
-                </>
-              )}
-            </motion.div>
-          </div>
-        )}
-        <div className="bg-white rounded-xl border border-slate-200 p-6">
-          <h3 className="font-bold text-sm text-slate-900 mb-4 uppercase tracking-wider">Top Contributors</h3>
-          <div className="space-y-4">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-slate-400 w-4">{i}</span>
-                  <div className="w-8 h-8 rounded-full bg-slate-200 overflow-hidden">
-                    <img src={`https://picsum.photos/seed/top${i}/100/100`} alt="User" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  </div>
-                  <span className="text-sm font-bold text-slate-700">User {i}</span>
-                </div>
-                <span className="text-xs font-bold text-[#ee2b2b]">{1000 - (i * 50)} XP</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RewardsView({ userTokens, setUserTokens, user }: { userTokens: number, setUserTokens: (val: number) => void, user: any }) {
-  const navigate = useNavigate();
-  const [showAllFacilities, setShowAllFacilities] = useState(false);
-  const [appointment, setAppointment] = useState<any>(null);
-  const [redeemedList, setRedeemedList] = useState<any[]>([]);
-
-  const xp = user?.xp_points || 0;
-  const level = user?.current_level || 1;
-  const nextTarget = level * 100;
-  const progressPercent = Math.min(100, Math.round((xp / nextTarget) * 100));
-
-  // Load redeemed facilities + poll for QR scan confirmations
   useEffect(() => {
-    const stored = JSON.parse(localStorage.getItem('redeemedFacilities') || '[]');
-    setRedeemedList(stored);
-    const interval = setInterval(() => {
-      const updated = JSON.parse(localStorage.getItem('redeemedFacilities') || '[]');
-      setRedeemedList(updated);
-    }, 2000);
-    return () => clearInterval(interval);
+    apiFetch('/donor/centers')
+      .then((rows) => setCenters(rows))
+      .catch((err) => setError(err.message || 'Could not load hospitals.'));
   }, []);
 
-  const handleRedeem = (cost: number, name: string, hospital: string, address: string) => {
-    if (userTokens >= cost) {
-      const uniqueId = 'APT-' + Math.random().toString(36).substr(2, 6).toUpperCase();
-      setUserTokens(userTokens - cost);
-      const date = new Date(Date.now() + 86400000).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
-      const time = '10:30 AM';
-      const appt = { id: uniqueId, name, hospital, address, date, time };
-      setAppointment(appt);
-      // Also save into redeemedFacilities list immediately
-      const stored = JSON.parse(localStorage.getItem('redeemedFacilities') || '[]');
-      stored.push(appt);
-      localStorage.setItem('redeemedFacilities', JSON.stringify(stored));
-      setRedeemedList(stored);
-    } else {
-      alert(`Not enough tokens! You need ${cost - userTokens} more tokens to redeem ${name}.`);
-    }
-  };
+  const local = centers?.filter((c) => c.in_your_city) ?? [];
+  const others = centers?.filter((c) => !c.in_your_city) ?? [];
+
+  const list = (rows: typeof local) => (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {rows.map((c) => (
+        <div key={`${c.hospital_name}-${c.city}`} className="bg-white rounded-xl border border-slate-200 p-5 flex items-start justify-between gap-3">
+          <div>
+            <p className="font-bold text-slate-900">{c.hospital_name}</p>
+            <p className="text-xs text-slate-500">{c.city}</p>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            {c.contact_number && (
+              <a href={`tel:${c.contact_number}`} className="w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50" title="Call">
+                <span className="material-symbols-outlined text-lg">call</span>
+              </a>
+            )}
+            <button onClick={() => openDirections(`${c.hospital_name}, ${c.city}`)} className="w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-600 hover:bg-slate-50" title="Directions">
+              <span className="material-symbols-outlined text-lg">map</span>
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-8">
-      {/* Hero Section: Rank Progress */}
-      <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-xl p-8 shadow-sm border border-slate-200 relative overflow-hidden">
-          {/* Decorative background element */}
-          <div className="absolute top-0 right-0 w-32 h-32 bg-[#ee2b2b]/5 rounded-bl-full pointer-events-none"></div>
-          <div className="flex flex-col md:flex-row gap-8 items-center">
-            <div className="relative">
-              <div className="w-32 h-32 rounded-full border-4 border-[#ee2b2b]/30 flex items-center justify-center p-1 bg-white shadow-xl">
-                <div className="w-full h-full rounded-full bg-[#ee2b2b] flex items-center justify-center text-white">
-                  <span className="material-symbols-outlined text-5xl">shield</span>
-                </div>
-              </div>
-              <div className="absolute -bottom-2 -right-2 bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-widest border-2 border-white">Tier {level}</div>
-            </div>
-            <div className="flex-1 text-center md:text-left">
-              <div className="flex items-center justify-center md:justify-start gap-2 mb-1">
-                <h1 className="text-3xl font-extrabold text-slate-900">{user?.name || 'Donor'}</h1>
-                <span className="material-symbols-outlined text-[#ee2b2b]">verified</span>
-              </div>
-              <p className="text-slate-500 text-base mb-6">You are in the top 5% of donors in Seattle. Keep it up!</p>
-              <div className="space-y-3">
-                <div className="flex justify-between text-sm font-bold">
-                  <span className="text-[#ee2b2b]">{xp} / {nextTarget} XP</span>
-                  <span className="text-slate-400">Next: Life Sentinel</span>
-                </div>
-                <div className="h-4 w-full bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200">
-                  <div className="h-full bg-[#ee2b2b] rounded-full transition-all duration-1000" style={{ width: `${progressPercent}%` }}></div>
-                </div>
-                <p className="text-xs text-slate-400 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-xs">info</span>
-                  {nextTarget - xp} XP remaining to unlock Sentinel status and exclusive rewards.
-                </p>
-              </div>
-            </div>
-          </div>
+      <div className="bg-white rounded-xl border border-blue-100 p-6 flex gap-4">
+        <span className="material-symbols-outlined text-blue-600">info</span>
+        <div className="text-sm text-slate-600 space-y-1">
+          <p className="font-bold text-slate-900">You don't need to book</p>
+          <p>When a nearby patient needs your blood group, LifeLink alerts you and the hospital expects you once you tap YES. To donate any time, visit a licensed blood centre: call ahead to check timings, carry a photo ID and eat a light meal first.</p>
         </div>
-        {/* AI Insights / CTA Card */}
-        <div className="bg-[#ee2b2b]/5 border border-[#ee2b2b]/20 rounded-xl p-6 flex flex-col justify-between">
-          <div>
-            <div className="flex items-center gap-2 mb-4 text-[#ee2b2b]">
-              <span className="material-symbols-outlined text-xl">psychology</span>
-              <h3 className="font-bold text-sm uppercase tracking-wider">AI Insight</h3>
-            </div>
-            <p className="text-slate-800 font-medium text-lg leading-snug">
-              Local hospitals are low on <span className="text-[#ee2b2b] font-bold">O-Negative</span> today.
-            </p>
-            <p className="text-slate-600 text-sm mt-2">
-              Donate within 48 hours to earn a <span className="font-bold">2x XP Multiplier</span> and the "First Responder" badge.
-            </p>
-          </div>
-          <button onClick={() => navigate('/donor/centers')} className="mt-6 w-full py-4 bg-[#ee2b2b] hover:bg-[#ee2b2b]/90 text-white font-bold rounded-lg shadow-lg shadow-[#ee2b2b]/30 transition-all flex items-center justify-center gap-2">
-            <span className="material-symbols-outlined">calendar_today</span>
-            Schedule Donation
-          </button>
-        </div>
-      </section>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Achievements Grid */}
-        <div className="lg:col-span-2">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold flex items-center gap-2 text-slate-900">
-              <span className="material-symbols-outlined text-amber-500">military_tech</span>
-              Earned Badges
-            </h2>
-            <span className="text-slate-400 text-sm">8 of 24 Unlocked</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {/* Badge 1 */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm group hover:border-[#ee2b2b]/50 transition-all cursor-help relative">
-              <div className="w-14 h-14 rounded-full mx-auto flex items-center justify-center text-white shadow-lg mb-3 bg-gradient-to-br from-yellow-400 to-orange-500">
-                <span className="material-symbols-outlined text-3xl">volunteer_activism</span>
-              </div>
-              <h5 className="text-sm font-bold text-center mb-1 text-slate-900">Life Saver</h5>
-              <p className="text-[10px] text-center text-slate-500 uppercase font-bold">5+ Donations</p>
-            </div>
-            {/* Badge 2 */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm group hover:border-[#ee2b2b]/50 transition-all cursor-help">
-              <div className="w-14 h-14 rounded-full mx-auto flex items-center justify-center text-white shadow-lg mb-3 bg-gradient-to-br from-slate-300 to-slate-500">
-                <span className="material-symbols-outlined text-3xl">emergency</span>
-              </div>
-              <h5 className="text-sm font-bold text-center mb-1 text-slate-900">First Responder</h5>
-              <p className="text-[10px] text-center text-slate-500 uppercase font-bold">Fast Acceptance</p>
-            </div>
-            {/* Badge 3 */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm group hover:border-[#ee2b2b]/50 transition-all cursor-help">
-              <div className="w-14 h-14 rounded-full mx-auto flex items-center justify-center text-white shadow-lg mb-3 bg-gradient-to-br from-orange-400 to-amber-700">
-                <span className="material-symbols-outlined text-3xl">groups</span>
-              </div>
-              <h5 className="text-sm font-bold text-center mb-1 text-slate-900">Champion</h5>
-              <p className="text-[10px] text-center text-slate-500 uppercase font-bold">Community Leader</p>
-            </div>
-          </div>
-
-          {/* Tokens & Hospital Facilities */}
-          <div className="mt-10">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl font-bold flex items-center gap-2 text-slate-900">
-                <span className="material-symbols-outlined text-green-500">toll</span>
-                Reward Tokens & Facilities
-              </h2>
-              <div className="flex items-center gap-2 bg-green-50 text-green-700 px-4 py-2 rounded-xl border border-green-200 shadow-sm">
-                <span className="font-black text-xl">{userTokens.toLocaleString()}</span>
-                <span className="text-[10px] font-bold uppercase tracking-widest mt-1">Available</span>
-              </div>
-            </div>
-
-            <p className="text-sm text-slate-500 mb-6 font-medium">
-              You earn <span className="font-bold text-[#ee2b2b]">2,000 tokens</span> for each successful donation! Redeem your tokens for free checkups and facilities at our partner hospitals.
-            </p>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
-                <div>
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center">
-                      <span className="material-symbols-outlined">health_and_safety</span>
-                    </div>
-                    <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">City General</span>
-                  </div>
-                  <h4 className="font-bold text-slate-900 leading-tight">Comprehensive Health Checkup</h4>
-                  <p className="text-xs text-slate-500 mt-2 line-clamp-2">Full body screening including vitals, blood profile, and doctor consultation.</p>
-                </div>
-                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-sm font-black text-green-600">10,000 <span className="text-[10px]">Tokens</span></span>
-                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(10000, 'Comprehensive Health Checkup', 'City General', 'City General Hospital, Seattle Center')} disabled={userTokens < 10000}>Redeem</button>
-                </div>
-              </div>
-
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
-                <div>
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-lg flex items-center justify-center">
-                      <span className="material-symbols-outlined">dentistry</span>
-                    </div>
-                    <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">St. Jude Medical</span>
-                  </div>
-                  <h4 className="font-bold text-slate-900 leading-tight">Dental Cleaning & Scaling</h4>
-                  <p className="text-xs text-slate-500 mt-2 line-clamp-2">Professional dental cleaning and regular maintenance consultation.</p>
-                </div>
-                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-sm font-black text-green-600">8,000 <span className="text-[10px]">Tokens</span></span>
-                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(8000, 'Dental Cleaning & Scaling', 'St. Jude Medical', 'St. Jude Medical Center, Western Ave')} disabled={userTokens < 8000}>Redeem</button>
-                </div>
-              </div>
-
-              <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
-                <div>
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="w-10 h-10 bg-purple-100 text-purple-600 rounded-lg flex items-center justify-center">
-                      <span className="material-symbols-outlined">visibility</span>
-                    </div>
-                    <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">North Valley</span>
-                  </div>
-                  <h4 className="font-bold text-slate-900 leading-tight">Vision Diagnostic Test</h4>
-                  <p className="text-xs text-slate-500 mt-2 line-clamp-2">Complete eye checkup, prescription update, and retina scanning.</p>
-                </div>
-                <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                  <span className="text-sm font-black text-green-600">5,000 <span className="text-[10px]">Tokens</span></span>
-                  <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(5000, 'Vision Diagnostic Test', 'North Valley', 'North Valley Specialist Clinic')} disabled={userTokens < 5000}>Redeem</button>
-                </div>
-              </div>
-
-              {!showAllFacilities ? (
-                <div onClick={() => setShowAllFacilities(true)} className="bg-slate-50 p-5 rounded-xl border border-slate-200 border-dashed flex flex-col justify-center items-center group hover:bg-[#ee2b2b]/5 transition-all outline-none cursor-pointer">
-                  <span className="material-symbols-outlined text-4xl text-slate-400 group-hover:text-[#ee2b2b] mb-2 transition-colors">dataset</span>
-                  <h4 className="font-bold text-slate-700 group-hover:text-[#ee2b2b] transition-colors">View All Facilities</h4>
-                  <p className="text-xs text-slate-500 mt-1">20+ hospital partners</p>
-                </div>
-              ) : (
-                <>
-                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
-                    <div>
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="w-10 h-10 bg-teal-100 text-teal-600 rounded-lg flex items-center justify-center">
-                          <span className="material-symbols-outlined">psychology</span>
-                        </div>
-                        <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Lakeside Care</span>
-                      </div>
-                      <h4 className="font-bold text-slate-900 leading-tight">Mental Health Consultation</h4>
-                      <p className="text-xs text-slate-500 mt-2 line-clamp-2">1-hour confidential session with a certified therapist.</p>
-                    </div>
-                    <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-sm font-black text-green-600">6,000 <span className="text-[10px]">Tokens</span></span>
-                      <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(6000, 'Mental Health Consultation', 'Lakeside Care', 'Lakeside Wellness Center, Pier 54')} disabled={userTokens < 6000}>Redeem</button>
-                    </div>
-                  </div>
-
-                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between group hover:border-[#ee2b2b]/50 hover:shadow-md transition-all">
-                    <div>
-                      <div className="flex justify-between items-start mb-3">
-                        <div className="w-10 h-10 bg-rose-100 text-rose-600 rounded-lg flex items-center justify-center">
-                          <span className="material-symbols-outlined">favorite</span>
-                        </div>
-                        <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-wider">Heart Center</span>
-                      </div>
-                      <h4 className="font-bold text-slate-900 leading-tight">ECG & Heart Screening</h4>
-                      <p className="text-xs text-slate-500 mt-2 line-clamp-2">Basic cardiovascular screening for early detection.</p>
-                    </div>
-                    <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-sm font-black text-green-600">12,000 <span className="text-[10px]">Tokens</span></span>
-                      <button className="text-xs font-bold bg-slate-900 text-white px-4 py-2 rounded-lg hover:bg-slate-800 transition-colors active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => handleRedeem(12000, 'ECG & Heart Screening', 'Heart Center', 'Heart & Vascular Institute, Seattle')} disabled={userTokens < 12000}>Redeem</button>
-                    </div>
-                  </div>
-
-                  <div onClick={() => setShowAllFacilities(false)} className="bg-slate-50 p-5 rounded-xl border border-slate-200 border-dashed flex flex-col justify-center items-center group hover:bg-[#ee2b2b]/5 transition-all outline-none cursor-pointer">
-                    <span className="material-symbols-outlined text-4xl text-slate-400 group-hover:text-[#ee2b2b] mb-2 transition-colors">unfold_less</span>
-                    <h4 className="font-bold text-slate-700 group-hover:text-[#ee2b2b] transition-colors">Show Less</h4>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Leaderboard Sidebar */}
-        <aside className="flex flex-col gap-6">
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 overflow-hidden relative">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold flex items-center gap-2 text-slate-900">
-                <span className="material-symbols-outlined text-[#ee2b2b]">leaderboard</span>
-                Local Heroes
-              </h2>
-              <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded">SEATTLE AREA</span>
-            </div>
-            <div className="space-y-4">
-              {/* Top Donor 1 */}
-              <div className="flex items-center gap-4 group">
-                <span className="text-amber-500 font-bold w-4">1</span>
-                <div className="w-10 h-10 rounded-full bg-slate-100 border-2 border-amber-500 overflow-hidden">
-                  <img className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDLIdArSZ__mE6omwUR7nj27VRxIjaZTbQuCtEdYYKKljhGdq4NZKxzFmc6so8VbIP8rRjfSnjkmv9n0Rz6rhJqPElh41d_Gu0oPaC9ppsh9bN1Fdl_FxkTRve4SrhaopJy6AoxIpJmJW-mM9qBsAKmmQFlPp-7HJnz6XBX10pPmqBBqxVSvZiUcCSySR7kvYvpqNVoP_mqcHrT48L1W2hGS72TNQjfzDTduOBty-m3xbrUQlS-r-E7Yk2AJcSuAX4gumqgtekRLWY" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold truncate text-slate-900">Sarah Mitchell</p>
-                  <p className="text-xs text-slate-400">2,450 XP</p>
-                </div>
-                <span className="material-symbols-outlined text-green-500 text-sm">trending_up</span>
-              </div>
-              {/* You */}
-              <div className="pt-4 border-t border-slate-100 flex items-center gap-4 bg-[#ee2b2b]/5 -mx-6 px-6 py-3">
-                <span className="text-[#ee2b2b] font-bold w-4">12</span>
-                <div className="w-10 h-10 rounded-full bg-[#ee2b2b] overflow-hidden border-2 border-[#ee2b2b]">
-                  <img className="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAmGCUAhVMR3Z5uQEP8UfkbMl8lgDvYah8rKZvWQnL27Bot_HUjAcoK0syZ3ECT-hAvVModhklCNJfq8b5EzHUO6_yBoToF_ZSL_1U-8tN9A0QoG_aBX1HEUdgnGRqkwM1rH2bNoxSh6rBHv57Knas2PPdArZ20LJqowRklrJ9-BlpFUZxtBUJJonEWR-DcnO-sKDEhBpT3Y76GWDrw5Jy8w2Ne1XFrRTSxLj0qdyjTnGpL6qtUZX-03S1EjZRwP25DStZYz0qdEkg" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold truncate text-slate-900">{user?.name || 'You'} (Donor)</p>
-                  <p className="text-xs text-[#ee2b2b] font-bold">{user?.blood_group || 'O+'}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Redeemed Facilities */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 overflow-hidden">
-            <div className="flex items-center justify-between mb-5">
-              <h2 className="text-base font-bold flex items-center gap-2 text-slate-900">
-                <span className="material-symbols-outlined text-green-500">redeem</span>
-                Redeemed Facilities
-              </h2>
-              <span className="text-[10px] font-bold px-2 py-1 rounded bg-green-50 text-green-600 border border-green-100">
-                {redeemedList.length} Used
-              </span>
-            </div>
-            {redeemedList.length === 0 ? (
-              <div className="flex flex-col items-center py-6 text-center">
-                <div className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center mb-3">
-                  <span className="material-symbols-outlined text-slate-300 text-3xl">confirmation_number</span>
-                </div>
-                <p className="text-slate-400 text-xs font-medium">No redeemed facilities yet.</p>
-                <p className="text-slate-300 text-xs mt-1">Redeem tokens above to unlock perks!</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {redeemedList.slice().reverse().map((item: any, idx: number) => {
-                  const usedTickets = JSON.parse(localStorage.getItem('usedTickets') || '[]');
-                  const isConfirmed = usedTickets.includes(item.id);
-                  return (
-                    <motion.div
-                      key={item.id || idx}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: idx * 0.05 }}
-                      onClick={() => setAppointment(item)}
-                      className={`relative p-4 rounded-xl border cursor-pointer group transition-all active:scale-[0.98] ${isConfirmed
-                        ? 'bg-emerald-50 border-emerald-200 hover:border-emerald-400 hover:shadow-md'
-                        : 'bg-slate-50 border-slate-200 hover:border-[#ee2b2b]/40 hover:shadow-md'
-                        }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-slate-900 text-sm leading-tight truncate">{item.name}</p>
-                          <p className="text-xs text-slate-500 mt-0.5">{item.hospital}</p>
-                          <p className="text-[10px] text-slate-400 mt-1 font-mono">{item.id}</p>
-                        </div>
-                        <span className={`shrink-0 text-[10px] font-black px-2 py-1 rounded-full uppercase tracking-widest mt-0.5 ${isConfirmed ? 'bg-emerald-500 text-white' : 'bg-amber-100 text-amber-600'
-                          }`}>
-                          {isConfirmed ? '✓ Used' : 'Pending'}
-                        </span>
-                      </div>
-                      {isConfirmed ? (
-                        <div className="mt-2 flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span>
-                            <span className="text-[10px] text-emerald-600 font-bold">Facility Redeemed</span>
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-bold group-hover:text-emerald-600 transition-colors flex items-center gap-0.5">
-                            View Ticket <span className="material-symbols-outlined text-xs">open_in_new</span>
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="mt-2 flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <span className="material-symbols-outlined text-amber-500 text-sm">qr_code_2</span>
-                            <span className="text-[10px] text-amber-600 font-bold">Scan QR to confirm</span>
-                          </div>
-                          <span className="text-[10px] text-slate-400 font-bold group-hover:text-[#ee2b2b] transition-colors flex items-center gap-0.5">
-                            View QR <span className="material-symbols-outlined text-xs">open_in_new</span>
-                          </span>
-                        </div>
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </aside>
       </div>
 
-      {/* Redemption Ticket Modal */}
-      <AnimatePresence>
-        {appointment && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-100"
-            >
-              <div className="bg-[#ee2b2b] p-6 text-white relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none"></div>
-                <div className="relative z-10 flex justify-between items-start">
-                  <div>
-                    <span className="bg-white/20 text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded">Confirmed Appointment</span>
-                    <h3 className="text-2xl font-black mt-2 tracking-tight">Redemption Ticket</h3>
-                  </div>
-                  <button onClick={() => setAppointment(null)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                    <span className="material-symbols-outlined">close</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-8 space-y-6">
-                <div className="flex justify-between items-center pb-4 border-b border-dashed border-slate-200">
-                  <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Appointment ID</label>
-                    <p className="text-lg font-black text-[#ee2b2b] tracking-wider">{appointment.id}</p>
-                  </div>
-                  <div className="w-20 h-20 bg-white border-2 border-slate-100 rounded-xl flex items-center justify-center p-1.5 shadow-sm">
-                    <QRCodeSVG
-                      value={`${window.location.origin}/redeem/${appointment.id}?name=${encodeURIComponent(appointment.name)}&hospital=${encodeURIComponent(appointment.hospital)}&date=${encodeURIComponent(appointment.date)}&time=${encodeURIComponent(appointment.time)}`}
-                      size={64}
-                      fgColor="#1e293b"
-                      bgColor="#ffffff"
-                      level="H"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Service / Facility</label>
-                    <p className="text-slate-900 font-bold leading-tight">{appointment.name}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Hospital</label>
-                      <p className="text-slate-700 font-bold text-sm">{appointment.hospital}</p>
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Scheduled Date</label>
-                      <p className="text-slate-700 font-bold text-sm">{appointment.date}</p>
-                    </div>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-2xl flex items-start gap-3 border border-slate-100">
-                    <span className="material-symbols-outlined text-slate-400 text-lg mt-0.5">location_on</span>
-                    <div className="flex-1">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Address</label>
-                      <p className="text-xs font-bold text-slate-600 mt-0.5">{appointment.address}</p>
-                    </div>
-                    <a
-                      href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(appointment.address)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="w-10 h-10 bg-white shadow-sm border border-slate-200 rounded-xl flex items-center justify-center text-[#ee2b2b] hover:bg-[#ee2b2b] hover:text-white transition-all active:scale-90"
-                    >
-                      <span className="material-symbols-outlined text-xl">directions</span>
-                    </a>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setAppointment(null)}
-                  className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black shadow-lg shadow-slate-900/20 hover:bg-slate-800 transition-all active:scale-95"
-                >
-                  Confirm & Close
-                </button>
-              </div>
-            </motion.div>
-          </div>
+      <section className="space-y-4">
+        <h3 className="text-lg font-bold text-slate-900">LifeLink hospitals{city ? ` in ${city}` : ''}</h3>
+        {error ? (
+          <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-4">{error}</p>
+        ) : !centers ? (
+          <p className="text-sm text-slate-400">Loading…</p>
+        ) : local.length ? list(local) : (
+          <p className="text-sm text-slate-500 bg-slate-50 border border-slate-200 rounded-xl p-5">No verified LifeLink hospitals in your city yet. The blood centre directory below lists every licensed centre.</p>
         )}
-      </AnimatePresence>
+      </section>
+
+      {others.length > 0 && (
+        <section className="space-y-4">
+          <h3 className="text-lg font-bold text-slate-900">Other LifeLink hospitals</h3>
+          {list(others)}
+        </section>
+      )}
+
+      <a href={EMERGENCY.bloodBankSearchUrl} target="_blank" rel="noopener noreferrer" className="block bg-white rounded-xl border border-slate-200 p-6 hover:border-[#ee2b2b]/30 hover:shadow-md transition-all">
+        <div className="flex items-center gap-4">
+          <span className="material-symbols-outlined text-3xl text-[#ee2b2b]">search</span>
+          <div>
+            <p className="font-bold text-slate-900">Find a licensed blood centre near you</p>
+            <p className="text-sm text-slate-500">e-RaktKosh, the Government of India's directory of blood centres and their stock.</p>
+          </div>
+          <span className="material-symbols-outlined text-slate-400 ml-auto">open_in_new</span>
+        </div>
+      </a>
     </div>
   );
 }
 
+function ImpactView({ network, networkError, donations, onClaimCertificate, claimingId }: {
+  network: DonorNetworkView | null; networkError: string; donations: any[];
+  onClaimCertificate: (donation: any) => void; claimingId: string | null;
+}) {
+  const donor = network?.donor;
+  const stats = network?.stats;
+  const history = network?.history ?? [];
+  const total = donor?.total_donations ?? donations.length;
+  const badges = earnedBadges(donor, stats);
+  const locked = [
+    { name: 'First Donation', need: 'Donate once' },
+    { name: 'Answered the Call', need: 'Say YES to a request' },
+    { name: 'Regular Donor', need: '3 donations' },
+    { name: 'Life Saver', need: '5 donations' },
+    { name: 'Hero', need: '10 donations' },
+  ].filter((b) => !badges.some((e) => e.name === b.name));
 
+  if (!network) {
+    return (
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 text-center text-sm text-slate-500">
+        {networkError || 'Loading your impact…'}
+      </div>
+    );
+  }
 
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          ['Donations', total],
+          ['Lives helped', total * 3],
+          ['Requests answered', stats?.accepted ?? 0],
+          ['XP', donor?.xp_points ?? 0],
+        ].map(([label, value]) => (
+          <div key={label as string} className="bg-white rounded-xl border border-slate-200 p-5">
+            <p className="text-3xl font-black text-slate-900">{value}</p>
+            <p className="text-xs font-bold text-slate-500 uppercase mt-1">{label}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs text-slate-400 -mt-4">One whole-blood donation can help up to three patients. XP and badges are a thank-you from LifeLink: they have no cash value, because donation in India is voluntary and unpaid.</p>
 
+      <section className="bg-white rounded-xl border border-slate-200 p-6">
+        <h3 className="text-lg font-bold text-slate-900 mb-4">Badges</h3>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {badges.map((b) => (
+            <div key={b.name} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50">
+              <div className={`w-11 h-11 rounded-full flex items-center justify-center ${b.tone}`}>
+                <span className="material-symbols-outlined">{b.icon}</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-900">{b.name}</p>
+                <p className="text-[11px] text-slate-500">{b.why}</p>
+              </div>
+            </div>
+          ))}
+          {locked.map((b) => (
+            <div key={b.name} className="flex items-center gap-3 p-3 rounded-xl border border-dashed border-slate-200 opacity-60">
+              <div className="w-11 h-11 rounded-full flex items-center justify-center bg-slate-100 text-slate-400">
+                <span className="material-symbols-outlined">lock</span>
+              </div>
+              <div>
+                <p className="text-sm font-bold text-slate-700">{b.name}</p>
+                <p className="text-[11px] text-slate-500">{b.need}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
-
+      <section className="bg-white rounded-xl border border-slate-200 p-6">
+        <h3 className="text-lg font-bold text-slate-900 mb-4">Donations through LifeLink</h3>
+        {history.length === 0 ? (
+          <p className="text-sm text-slate-400">None yet. When you answer a request and the hospital confirms your donation, it appears here.</p>
+        ) : (
+          <ul className="space-y-3">
+            {history.map((h) => (
+              <li key={h.request_id} className="flex items-center justify-between gap-3 p-4 rounded-xl bg-slate-50">
+                <div>
+                  <p className="font-bold text-slate-900">{h.hospital_name}</p>
+                  <p className="text-xs text-slate-500">{h.hospital_city} · {h.blood_group_needed} patient · {formatDay(h.donated_on)}</p>
+                </div>
+                <button
+                  onClick={() => onClaimCertificate({ id: `net-${h.request_id}` })}
+                  disabled={claimingId === `net-${h.request_id}`}
+                  className="text-xs font-bold bg-[#ee2b2b] text-white px-3 py-1.5 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-1 disabled:opacity-50 shrink-0"
+                >
+                  <span className="material-symbols-outlined text-[14px]">workspace_premium</span>
+                  {claimingId === `net-${h.request_id}` ? 'Sending…' : 'Certificate'}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}

@@ -14,6 +14,12 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}) => {
         });
 
         if (!response.ok) {
+            // The 30-minute session expired: send the user back to sign in instead
+            // of leaving a dashboard full of "Authentication required" errors.
+            if (response.status === 401 && !endpoint.startsWith('/auth/') && localStorage.getItem('user')) {
+                localStorage.removeItem('user');
+                window.location.assign('/login?expired=1');
+            }
             const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.message || `API error: ${response.status}`);
         }

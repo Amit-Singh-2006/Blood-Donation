@@ -76,13 +76,22 @@ export const getHospitalProfile = async (req: AuthRequest, res: Response) => {
 const recordNetworkDonations = async (hospitalId: number | undefined, donors: HospitalDonorView[] = []) => {
     for (const d of donors) {
         if (d.status !== 'donated' || !d.phone) continue;
+        // A new donation also moves the donor's rest period and XP, like the network does
         await query(
-            `INSERT INTO donations (donor_id, hospital_id, units, donation_date, network_match_id)
-             SELECT dn.user_id, $2, 1, COALESCE($3::date, CURRENT_DATE), $4
-             FROM donors dn
-             WHERE right(regexp_replace(dn.phone, '\\D', '', 'g'), 10) = right(regexp_replace($1, '\\D', '', 'g'), 10)
-             LIMIT 1
-             ON CONFLICT (network_match_id) DO NOTHING`,
+            `WITH donor AS (
+                 SELECT user_id FROM donors
+                 WHERE right(regexp_replace(phone, '\\D', '', 'g'), 10) = right(regexp_replace($1, '\\D', '', 'g'), 10)
+                 LIMIT 1
+             ), inserted AS (
+                 INSERT INTO donations (donor_id, hospital_id, units, donation_date, xp_earned, network_match_id)
+                 SELECT user_id, $2, 1, COALESCE($3::date, CURRENT_DATE), 10, $4 FROM donor
+                 ON CONFLICT (network_match_id) DO NOTHING
+                 RETURNING donor_id, donation_date
+             )
+             UPDATE donors SET
+                 last_donation_date = GREATEST(COALESCE(donors.last_donation_date, inserted.donation_date), inserted.donation_date),
+                 xp_points = COALESCE(donors.xp_points, 0) + 10
+             FROM inserted WHERE donors.user_id = inserted.donor_id`,
             [d.phone, hospitalId, d.responded_at, d.match_id]
         );
     }

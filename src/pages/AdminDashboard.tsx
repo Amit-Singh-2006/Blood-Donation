@@ -5,6 +5,7 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { cn } from '../lib/utils';
 import { apiFetch } from '../lib/api';
+import { signOut } from '../lib/auth';
 
 export default function AdminDashboard() {
   const location = useLocation();
@@ -32,10 +33,8 @@ export default function AdminDashboard() {
     else setActiveTab('overview');
   }, [location.pathname]);
 
-  const handleSignOut = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('userRole');
+  const handleSignOut = async () => {
+    await signOut();
     navigate('/login');
   };
 

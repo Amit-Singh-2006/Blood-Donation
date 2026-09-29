@@ -5,6 +5,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import AgentChat from '../components/AgentChat';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '../lib/api';
+import { signOut } from '../lib/auth';
 import { useNetworkAnalytics } from '../lib/network';
 import { EMERGENCY } from '../lib/contact';
 
@@ -177,10 +178,8 @@ export default function HospitalDashboard() {
     try { localStorage.setItem('hospitalNotificationsSeen', String(now)); } catch { /* storage unavailable */ }
   };
 
-  const handleSignOut = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    localStorage.removeItem('userRole');
+  const handleSignOut = async () => {
+    await signOut();
     navigate('/login');
   };
 

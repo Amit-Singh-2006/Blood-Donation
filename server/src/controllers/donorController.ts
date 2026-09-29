@@ -169,3 +169,23 @@ export const getNetworkStatus = (req: AuthRequest, res: Response) => respondWith
 // PUT /donor/network  { available?, preferred_channel? }
 export const updateNetworkPreferences = (req: AuthRequest, res: Response) =>
     respondWithNetworkView(req, res, req.body as PreferenceChange);
+
+// GET /donor/centers: verified LifeLink hospitals, the donor's city first
+export const getDonationCenters = async (req: AuthRequest, res: Response) => {
+    try {
+        const result = await query(
+            `SELECT h.hospital_name, h.city, h.contact_number,
+                    (lower(h.city) = lower(d.city)) AS in_your_city
+             FROM hospitals h
+             LEFT JOIN donors d ON d.user_id = $1
+             WHERE h.is_verified = TRUE
+             ORDER BY (lower(h.city) = lower(d.city)) DESC NULLS LAST, h.city, h.hospital_name
+             LIMIT 50`,
+            [req.user?.id]
+        );
+        res.json(result.rows);
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+};

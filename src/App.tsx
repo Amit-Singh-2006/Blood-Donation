@@ -19,7 +19,6 @@ import TermsOfService from './pages/TermsOfService';
 import HospitalPartnership from './pages/HospitalPartnership';
 import Support from './pages/Support';
 import ProtectedRoute from './components/ProtectedRoute';
-import FacilityRedeemPage from './pages/FacilityRedeemPage';
 
 export default function App() {
   return (
@@ -42,16 +41,16 @@ export default function App() {
         <Route path="track" element={<TrackRequest />} />
         <Route path="track/:token" element={<TrackRequest />} />
         <Route path="tracking" element={<Navigate to="/track" replace />} />
-        <Route path="redeem/:id" element={<FacilityRedeemPage />} />
 
         {/* Donor Routes - inside Layout so the topbar renders */}
         <Route element={<ProtectedRoute allowedRoles={['donor']} />}>
           <Route path="donor" element={<DonorApp />} />
           <Route path="donor/centers" element={<DonorApp />} />
-          <Route path="donor/pending" element={<DonorApp />} />
           <Route path="donor/settings" element={<DonorApp />} />
           <Route path="donor/impact" element={<DonorApp />} />
-          <Route path="donor/community" element={<DonorApp />} />
+          {/* Removed placeholder tabs; old links land on the dashboard */}
+          <Route path="donor/pending" element={<Navigate to="/donor" replace />} />
+          <Route path="donor/community" element={<Navigate to="/donor" replace />} />
         </Route>
       </Route>
 
