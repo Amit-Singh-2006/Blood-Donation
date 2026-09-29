@@ -11,3 +11,9 @@ export const EMERGENCY = {
  * (possibly medical) messages to a stranger. Empty hides email contact.
  */
 export const CONTACT_EMAIL: string = import.meta.env.VITE_CONTACT_EMAIL || '';
+
+/** Grievance Officer required by the IT Rules, 2021 and the DPDP Act, 2023. */
+export const GRIEVANCE_OFFICER_NAME: string = import.meta.env.VITE_GRIEVANCE_OFFICER_NAME || '';
+
+/** Date the Terms and Privacy Policy were last revised. */
+export const LEGAL_UPDATED = '29 September 2026';

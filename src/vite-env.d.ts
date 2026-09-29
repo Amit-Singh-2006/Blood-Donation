@@ -7,6 +7,8 @@ interface ImportMetaEnv {
     readonly VITE_NETWORK_BASE_URL?: string;
     // The project's contact inbox; email contact is hidden until it is set
     readonly VITE_CONTACT_EMAIL?: string;
+    // Grievance Officer named on the Terms and Privacy Policy (IT Rules, 2021)
+    readonly VITE_GRIEVANCE_OFFICER_NAME?: string;
 
     // Firebase
     readonly VITE_FIREBASE_API_KEY: string;
