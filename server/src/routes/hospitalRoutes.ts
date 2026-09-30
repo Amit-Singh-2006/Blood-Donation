@@ -5,6 +5,7 @@ import {
     getHospitalRequests,
     createHospitalRequest,
     cancelHospitalRequest,
+    getDonorLocations,
     updateHospitalInventory,
     verifyDonation,
     getPotentialDonors,
@@ -35,6 +36,7 @@ router.get('/profile', hospitalApiLimiter, authMiddleware, roleMiddleware(['hosp
 router.get('/donations', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getHospitalDonations);
 router.get('/inventory', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getHospitalInventory);
 router.get('/requests', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getHospitalRequests);
+router.get('/donor-locations', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getDonorLocations);
 router.get('/potential-donors/:requestId', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getPotentialDonors);
 
 // ── POST / PUT routes with Mass Assignment Guards ──

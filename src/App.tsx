@@ -21,6 +21,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const HospitalDashboard = lazy(() => import('./pages/HospitalDashboard'));
 const DonorApp = lazy(() => import('./pages/DonorApp'));
+const PassPage = lazy(() => import('./pages/PassPage'));
 
 const Loading = () => (
   <div className="min-h-screen flex items-center justify-center text-sm font-bold text-slate-400">Loading…</div>
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="track" element={<TrackRequest />} />
         <Route path="track/:token" element={<TrackRequest />} />
         <Route path="tracking" element={<Navigate to="/track" replace />} />
+        <Route path="pass/:code" element={<PassPage />} />
 
         {/* Donor Routes - inside Layout so the topbar renders */}
         <Route element={<ProtectedRoute allowedRoles={['donor']} />}>

@@ -133,6 +133,15 @@ const buildView = node({
 const DEFERRAL_DAYS = { male: 90, female: 120 };
 const DAY = 86400000;
 const BASE = 'https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response';
+// Donation pass shown at the hospital gate: derived from the donor's private
+// link token, so it proves who said YES without revealing the token itself
+const PASS_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const passCode = (token) => {
+  const h = require('crypto').createHash('sha256').update(String(token) + ':lifelink-pass').digest();
+  let s = '';
+  for (let i = 0; i < 8; i++) s += PASS_ALPHABET[h[i] % PASS_ALPHABET.length];
+  return 'LP-' + s.slice(0, 4) + '-' + s.slice(4);
+};
 
 const p = $('Parse Portal Request').first().json;
 const donor = $('Find Donor by Phone').first().json;
@@ -174,6 +183,7 @@ const alerts = matches
     distance_km: m.distance_km,
     alerted_at: m.notified_at,
     accept_url: m.status === 'notified' ? link(m, 'accept') : null,
+    pass_code: m.status === 'accepted' ? passCode(m.response_token) : null,
     // After accepting, the decline link withdraws and alerts the next donor
     decline_url: link(m, 'decline'),
   }));

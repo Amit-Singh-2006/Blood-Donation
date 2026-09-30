@@ -164,6 +164,16 @@ const decideOutcome = node({
 const HOURS_COMMITTED = 24;
 const XP_PER_DONATION = 10;
 const BASE = 'https://amitsingh7291.app.n8n.cloud/webhook/lifelink';
+const FRONTEND = 'https://blood-donation-frontend-delta.vercel.app';
+// Donation pass shown at the hospital gate: derived from the donor's private
+// link token, so it proves who said YES without revealing the token itself
+const PASS_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const passCode = (token) => {
+  const h = require('crypto').createHash('sha256').update(String(token) + ':lifelink-pass').digest();
+  let s = '';
+  for (let i = 0; i < 8; i++) s += PASS_ALPHABET[h[i] % PASS_ALPHABET.length];
+  return 'LP-' + s.slice(0, 4) + '-' + s.slice(4);
+};
 
 const p = $('Parse Link').first().json;
 const match = $('Find Match').first().json;
@@ -382,6 +392,9 @@ if (!donorLinkOk && !hospitalLinkOk) {
 
 const after = out.request_updates[0] ?? req;
 const payload = { outcome, title, message };
+// A donor who is expected at the hospital gets their pass (again, if they reopen the link)
+const pass = ['accepted', 'already_accepted'].includes(outcome) ? passCode(match.response_token) : null;
+if (pass) payload.pass_code = pass;
 // An invalid link reveals nothing about the request it points at
 const showRequest = req.id && outcome !== 'invalid_link';
 if (showRequest) Object.assign(payload, { request_status: after.status, units_required: req.units_required, units_confirmed: after.units_confirmed ?? 0 });
@@ -390,8 +403,12 @@ const accent = tone === 'ok' ? '#16a34a' : '#d97706';
 const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>LifeLink</title>'
   + '<style>body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#fff5f5;color:#1f2937}main{max-width:480px;margin:10vh auto;padding:16px}'
   + '.card{background:#fff;border-radius:16px;padding:28px;box-shadow:0 10px 30px rgba(0,0,0,.08);border-top:6px solid ' + accent + '}'
-  + 'h1{font-size:1.4rem;margin:0 0 12px}p{line-height:1.5;margin:0 0 12px}.meta{color:#6b7280;font-size:.9rem}.brand{color:#dc2626;font-weight:700;margin-bottom:12px}</style></head>'
+  + 'h1{font-size:1.4rem;margin:0 0 12px}p{line-height:1.5;margin:0 0 12px}.meta{color:#6b7280;font-size:.9rem}.brand{color:#dc2626;font-weight:700;margin-bottom:12px}'
+  + '.pass{margin:18px 0 6px;padding:16px;border:2px dashed #dc2626;border-radius:12px;text-align:center}.code{font:700 1.6rem/1.2 ui-monospace,monospace;letter-spacing:.08em;margin:6px 0 10px}.pass a{color:#dc2626;font-weight:700}</style></head>'
   + '<body><main><div class="card"><div class="brand">LifeLink</div><h1>' + esc(title) + '</h1><p>' + esc(message) + '</p>'
+  + (pass ? '<div class="pass"><p class="meta">Your donation pass</p><p class="code">' + esc(pass) + '</p>'
+    + '<p><a href="' + FRONTEND + '/pass/' + encodeURIComponent(pass) + '">Show it as a QR code</a></p>'
+    + '<p class="meta">Show this at the hospital gate with a photo ID. Staff scan it to confirm you are the donor they are expecting.</p></div>' : '')
   + (showRequest ? '<p class="meta">' + esc(payload.units_confirmed) + ' of ' + esc(req.units_required) + ' units confirmed &middot; ' + esc(after.status) + '</p>' : '')
   + '</div></main></body></html>';
 

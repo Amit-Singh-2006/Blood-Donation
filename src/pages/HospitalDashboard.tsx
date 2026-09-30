@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
@@ -9,6 +9,11 @@ import { signOut } from '../lib/auth';
 import { getUser } from '../lib/session';
 import { useNetworkAnalytics } from '../lib/network';
 import { EMERGENCY } from '../lib/contact';
+import { Point, agoText, distanceKm, etaMinutes } from '../lib/geo';
+
+// The camera scanner and the map load only when used
+const PassScanner = lazy(() => import('../components/PassScanner'));
+const DonorMap = lazy(() => import('../components/DonorMap'));
 
 type NavItem = 'overview' | 'requests' | 'inventory' | 'settings';
 
@@ -37,6 +42,8 @@ interface LiveDonor {
   phone: string | null;
   blood_group: string;
   distance_km: number | null;
+  /** The QR/ID the donor shows at the gate */
+  pass_code?: string;
   status: 'accepted' | 'donated' | 'no_show';
   responded_at: string | null;
   donated_url: string | null;
@@ -82,8 +89,18 @@ interface HospitalProfile {
   pincode: string | null;
   contact_number: string;
   has_location: boolean;
+  latitude: number | null;
+  longitude: number | null;
   is_verified: boolean;
   network_configured: boolean;
+}
+
+/** Where a donor on their way is, if they chose to share it. */
+interface DonorLocation extends Point {
+  match_id: number;
+  request_id: number;
+  accuracy_m: number | null;
+  updated_at: string;
 }
 
 interface DispatchSummary {
@@ -118,6 +135,10 @@ export default function HospitalDashboard() {
   const [loadError, setLoadError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [seenAt, setSeenAt] = useState(readSeen);
+  const [locations, setLocations] = useState<DonorLocation[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const [passResult, setPassResult] = useState<PassCheck | null>(null);
+  const [verifiedAt, setVerifiedAt] = useState<Record<number, string>>(readVerified);
 
   const loadRequests = useCallback(async () => {
     const data = await apiFetch('/hospital/requests');
@@ -162,6 +183,39 @@ export default function HospitalDashboard() {
     }, REFRESH_MS);
     return () => clearInterval(id);
   }, [hasActive, loadRequests]);
+
+  // Donors on their way who chose to share their location: refresh every 20 s
+  const donorsOnTheWay = requests.some((r) => r.live?.donors.some((d) => d.status === 'accepted'));
+  useEffect(() => {
+    if (!donorsOnTheWay) { setLocations([]); return; }
+    const load = () => apiFetch('/hospital/donor-locations').then(setLocations).catch(() => { });
+    load();
+    const id = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 20000);
+    return () => clearInterval(id);
+  }, [donorsOnTheWay]);
+
+  // A scanned or typed pass is checked against the donors who said YES to our requests
+  const checkPass = (code: string) => {
+    setScanning(false);
+    for (const r of requests) {
+      const donor = r.live?.donors.find((d) => d.pass_code === code);
+      if (!donor) continue;
+      if (donor.status === 'accepted') {
+        const next = { ...verifiedAt, [donor.match_id]: new Date().toISOString() };
+        setVerifiedAt(next);
+        try { sessionStorage.setItem(VERIFIED_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+      }
+      setPassResult({ code, request: r, donor });
+      return;
+    }
+    setPassResult({ code });
+  };
+  const checkPassRef = useRef(checkPass);
+  checkPassRef.current = checkPass;
+  const onPassScanned = useCallback((code: string) => checkPassRef.current(code), []);
+  const hospitalPoint = profile?.latitude != null && profile?.longitude != null
+    ? { latitude: profile.latitude, longitude: profile.longitude, name: profile.hospital_name }
+    : null;
 
   // Notifications come from what actually happened on the network
   const events = requests
@@ -330,6 +384,14 @@ export default function HospitalDashboard() {
             </div>
 
             <button
+              onClick={() => setScanning(true)}
+              aria-label="Scan donor pass"
+              className="bg-slate-900 text-white h-10 px-3 sm:px-4 rounded-xl text-xs font-black hover:bg-slate-800 transition-all flex items-center gap-2"
+            >
+              <span className="material-symbols-outlined text-sm">qr_code_scanner</span>
+              <span className="hidden sm:inline">SCAN PASS</span>
+            </button>
+            <button
               onClick={() => goTo('requests')}
               aria-label="New blood request"
               className="bg-[#ee2b2b] text-white h-10 px-3 sm:px-5 rounded-xl text-xs font-black shadow-lg shadow-[#ee2b2b]/20 hover:scale-105 transition-all flex items-center gap-2"
@@ -360,7 +422,7 @@ export default function HospitalDashboard() {
               ) : (
                 <>
                   {activeTab === 'overview' && <OverviewTab requests={requests} inventory={inventory} donations={donations} onGoToRequests={() => setActiveTab('requests')} />}
-                  {activeTab === 'requests' && <RequestsTab requests={requests} verified={!!profile?.is_verified} onRefresh={loadRequests} />}
+                  {activeTab === 'requests' && <RequestsTab requests={requests} verified={!!profile?.is_verified} onRefresh={loadRequests} locations={locations} hospitalPoint={hospitalPoint} verifiedAt={verifiedAt} onScan={() => setScanning(true)} />}
                   {activeTab === 'inventory' && <InventoryTab inventory={inventory} onRefresh={fetchData} />}
                   {activeTab === 'settings' && <SettingsTab user={user} profile={profile} />}
                 </>
@@ -389,6 +451,89 @@ export default function HospitalDashboard() {
           }
         }}
       />
+      {scanning && (
+        <Suspense fallback={null}>
+          <PassScanner onCode={onPassScanned} onClose={() => setScanning(false)} />
+        </Suspense>
+      )}
+      {passResult && (
+        <PassResultModal
+          result={passResult}
+          verifiedAt={passResult.donor ? verifiedAt[passResult.donor.match_id] : undefined}
+          onClose={() => setPassResult(null)}
+          onRefresh={loadRequests}
+        />
+      )}
+    </div>
+  );
+}
+
+
+// ─────────────────── DONOR PASS CHECK ───────────────────
+interface PassCheck { code: string; request?: HospitalRequest; donor?: LiveDonor }
+
+const VERIFIED_KEY = 'lifelink.verifiedPasses';
+const readVerified = (): Record<number, string> => {
+  try { return JSON.parse(sessionStorage.getItem(VERIFIED_KEY) || '{}'); } catch { return {}; }
+};
+
+/** The outcome of scanning (or typing) a donor's pass at the gate. */
+function PassResultModal({ result, verifiedAt, onClose, onRefresh }: { result: PassCheck; verifiedAt?: string; onClose: () => void; onRefresh: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<{ ok: boolean; text: string } | null>(null);
+  const { donor, request } = result;
+
+  const recordDonation = async () => {
+    if (!donor?.donated_url) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`${donor.donated_url}&format=json`);
+      const body = await res.json();
+      setOutcome({ ok: res.ok, text: `${body.title}. ${body.message}` });
+    } catch {
+      setOutcome({ ok: false, text: 'The donor network could not be reached. Please try again.' });
+    } finally {
+      setBusy(false);
+      onRefresh().catch(() => { });
+    }
+  };
+
+  const tone = !donor ? 'border-red-500' : donor.status === 'accepted' ? 'border-green-500' : 'border-amber-500';
+  return (
+    <div className="fixed inset-0 z-[200] bg-slate-900/70 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label="Donor pass">
+      <div className={cn('bg-white rounded-2xl w-full max-w-md shadow-2xl border-t-8 p-6 space-y-4', tone)}>
+        {!donor ? (
+          <>
+            <h3 className="text-xl font-black text-red-700 flex items-center gap-2"><span className="material-symbols-outlined">gpp_bad</span>Not a pass for your hospital</h3>
+            <p className="text-sm text-slate-600">No donor who said YES to your requests has pass <span className="font-mono font-bold">{result.code}</span>. Check the ID, or ask the donor to open their LifeLink confirmation again.</p>
+          </>
+        ) : (
+          <>
+            <h3 className={cn('text-xl font-black flex items-center gap-2', donor.status === 'accepted' ? 'text-green-700' : 'text-amber-700')}>
+              <span className="material-symbols-outlined">{donor.status === 'accepted' ? 'verified_user' : 'info'}</span>
+              {donor.status === 'accepted' ? 'Pass verified' : donor.status === 'donated' ? 'Pass already used' : 'Marked as not coming'}
+            </h3>
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-4 space-y-1 text-sm">
+              <p className="text-lg font-black text-slate-900">{donor.name} <span className="text-[#ee2b2b]">{donor.blood_group}</span></p>
+              {request && <p className="text-slate-600">For request #{request.id}: {request.units_required} unit(s) of {request.blood_group}{request.patient_ref ? ` · ${request.patient_ref}` : ''}</p>}
+              {donor.phone && <p className="text-slate-600">Phone: <a href={`tel:${donor.phone}`} className="font-bold text-slate-900 underline">{donor.phone}</a></p>}
+              <p className="font-mono text-xs text-slate-500">{result.code}{verifiedAt ? ` · checked ${formatWhen(verifiedAt)}` : ''}</p>
+            </div>
+            {donor.status === 'accepted' && <p className="text-sm text-slate-600">Check a photo ID with this name before the donation.</p>}
+            {donor.status === 'donated' && <p className="text-sm text-slate-600">This donor's donation is already recorded.</p>}
+            {donor.status === 'no_show' && <p className="text-sm text-slate-600">This donor was marked as not coming, so the next donors were alerted. If they are here now, thank them and check whether the blood is still needed.</p>}
+          </>
+        )}
+        {outcome && <p className={cn('rounded-xl p-3 text-sm font-medium border', outcome.ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800')}>{outcome.text}</p>}
+        <div className="flex flex-wrap justify-end gap-2">
+          {donor?.status === 'accepted' && donor.donated_url && !outcome?.ok && (
+            <button onClick={recordDonation} disabled={busy} className="px-4 py-2.5 rounded-xl bg-green-600 text-white text-sm font-black hover:bg-green-700 disabled:opacity-50">
+              {busy ? 'Saving…' : 'Donation done'}
+            </button>
+          )}
+          <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50">Close</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -523,7 +668,10 @@ function OverviewTab({ requests, inventory, donations, onGoToRequests }: { reque
 }
 
 // ─────────────────── REQUESTS TAB ───────────────────
-function RequestsTab({ requests, verified, onRefresh }: { requests: HospitalRequest[]; verified: boolean; onRefresh: () => Promise<void> }) {
+function RequestsTab({ requests, verified, onRefresh, locations, hospitalPoint, verifiedAt, onScan }: {
+  requests: HospitalRequest[]; verified: boolean; onRefresh: () => Promise<void>;
+  locations: DonorLocation[]; hospitalPoint: (Point & { name: string }) | null; verifiedAt: Record<number, string>; onScan: () => void;
+}) {
   const emptyForm = { blood_group: 'O+', units_required: '1', urgency: 'Urgent', patient_ref: '', required_by: '' };
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -672,7 +820,10 @@ function RequestsTab({ requests, verified, onRefresh }: { requests: HospitalRequ
             <p className="text-slate-400 font-bold">No blood requests yet.</p>
           </div>
         ) : requests.map((req) => (
-          <RequestCard key={req.id} req={req} open={openId === req.id} onToggle={() => setOpenId(openId === req.id ? null : req.id)} onRefresh={onRefresh} />
+          <RequestCard
+            key={req.id} req={req} open={openId === req.id} onToggle={() => setOpenId(openId === req.id ? null : req.id)} onRefresh={onRefresh}
+            locations={locations.filter((l) => l.request_id === req.id)} hospitalPoint={hospitalPoint} verifiedAt={verifiedAt} onScan={onScan}
+          />
         ))}
       </div>
     </div>
@@ -738,7 +889,10 @@ function FamilyLink({ token }: { token: string }) {
   );
 }
 
-function RequestCard({ req, open, onToggle, onRefresh }: { req: HospitalRequest; open: boolean; onToggle: () => void; onRefresh: () => Promise<void> }) {
+function RequestCard({ req, open, onToggle, onRefresh, locations, hospitalPoint, verifiedAt, onScan }: {
+  req: HospitalRequest; open: boolean; onToggle: () => void; onRefresh: () => Promise<void>;
+  locations: DonorLocation[]; hospitalPoint: (Point & { name: string }) | null; verifiedAt: Record<number, string>; onScan: () => void;
+}) {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const live = req.live;
@@ -750,6 +904,9 @@ function RequestCard({ req, open, onToggle, onRefresh }: { req: HospitalRequest;
   const neverSent = !req.tracking_token && !live;
   const canCancel = !closed && (!!live?.cancel_url || neverSent);
   const networkDown = !closed && !!req.tracking_token && !live;
+  const onTheWay = (live?.donors ?? []).filter((d) => d.status === 'accepted');
+  const locationOf = (matchId: number) => locations.find((l) => l.match_id === matchId);
+  const located = onTheWay.filter((d) => locationOf(d.match_id));
 
   // The same one-tap links the network sends to hospital staff; format=json returns the outcome
   const act = async (key: string, url: string, confirmText?: string) => {
@@ -866,8 +1023,28 @@ function RequestCard({ req, open, onToggle, onRefresh }: { req: HospitalRequest;
                 </p>
               )}
 
+              {located.length > 0 && (
+                <div className="space-y-2">
+                  <h5 className="text-sm font-black text-slate-900">Donors on the way</h5>
+                  <Suspense fallback={<div className="h-[260px] rounded-xl bg-slate-100 animate-pulse" />}>
+                    <DonorMap
+                      hospital={hospitalPoint}
+                      donors={located.map((d) => ({ id: d.match_id, label: `${d.name} · ${d.blood_group}`, latitude: locationOf(d.match_id)!.latitude, longitude: locationOf(d.match_id)!.longitude }))}
+                    />
+                  </Suspense>
+                  <p className="text-[11px] text-slate-500">Only donors who chose to share their location appear. Positions refresh every 20 seconds.</p>
+                </div>
+              )}
+
               <div>
-                <h5 className="text-sm font-black text-slate-900 mb-3">Confirmed donors</h5>
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <h5 className="text-sm font-black text-slate-900">Confirmed donors</h5>
+                  {onTheWay.length > 0 && (
+                    <button onClick={onScan} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-black hover:bg-slate-800 flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm">qr_code_scanner</span> Scan pass
+                    </button>
+                  )}
+                </div>
                 {live.donors.length === 0 ? (
                   <p className="text-sm text-slate-400">No donor has confirmed yet. You'll see them here as soon as they tap YES.</p>
                 ) : (
@@ -881,8 +1058,28 @@ function RequestCard({ req, open, onToggle, onRefresh }: { req: HospitalRequest;
                           </p>
                           <p className="text-xs text-slate-500">
                             {d.status === 'donated' ? 'Donated' : d.status === 'no_show' ? 'Did not come' : 'On the way'}
-                            {d.responded_at ? ` · ${formatWhen(d.responded_at)}` : ''}
+                            {d.responded_at ? ` · accepted ${formatWhen(d.responded_at)}` : ''}
                           </p>
+                          {d.pass_code && (
+                            <p className="text-[11px] text-slate-500 mt-1 flex flex-wrap items-center gap-2">
+                              <span className="font-mono">Pass {d.pass_code}</span>
+                              {verifiedAt[d.match_id] && (
+                                <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 font-black uppercase text-[10px]">Pass checked {formatWhen(verifiedAt[d.match_id])}</span>
+                              )}
+                            </p>
+                          )}
+                          {d.status === 'accepted' && (() => {
+                            const loc = locationOf(d.match_id);
+                            if (!loc) return <p className="text-[11px] text-slate-400 mt-1">Live location not shared</p>;
+                            const km = hospitalPoint ? distanceKm(loc, hospitalPoint) : null;
+                            return (
+                              <p className="text-xs font-bold text-blue-700 mt-1 flex flex-wrap items-center gap-1">
+                                <span className="material-symbols-outlined text-sm">near_me</span>
+                                {km != null ? `${km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1)} km`} away · about ${etaMinutes(km)} min · ` : ''}updated {agoText(loc.updated_at)}
+                                <a href={`https://www.google.com/maps?q=${loc.latitude},${loc.longitude}`} target="_blank" rel="noopener noreferrer" className="underline ml-1">open map</a>
+                              </p>
+                            );
+                          })()}
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {d.phone && (

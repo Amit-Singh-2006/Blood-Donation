@@ -132,6 +132,15 @@ const buildView = node({
 // confirmed (first name and phone, so staff can coordinate) and the one-tap
 // action links. A request is only returned when its hospital token matches.
 const BASE = 'https://amitsingh7291.app.n8n.cloud/webhook/lifelink/donor-response';
+// Donation pass shown at the hospital gate: derived from the donor's private
+// link token, so it proves who said YES without revealing the token itself
+const PASS_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+const passCode = (token) => {
+  const h = require('crypto').createHash('sha256').update(String(token) + ':lifelink-pass').digest();
+  let s = '';
+  for (let i = 0; i < 8; i++) s += PASS_ALPHABET[h[i] % PASS_ALPHABET.length];
+  return 'LP-' + s.slice(0, 4) + '-' + s.slice(4);
+};
 const wanted = $('Parse Portal Request').first().json.requests;
 const requests = new Map($('Load Requests').all().map((i) => i.json).filter((r) => r.id).map((r) => [r.id, r]));
 const matches = $('Load Matches').all().map((i) => i.json).filter((m) => m.id);
@@ -163,6 +172,8 @@ const views = wanted.map(({ request_id, hospital_token }) => {
         phone: d.phone ?? null,
         blood_group: m.donor_blood_group,
         distance_km: m.distance_km ?? null,
+        // What the donor's QR carries; staff scan it at the gate to confirm who arrived
+        pass_code: passCode(m.response_token),
         status: m.status,
         responded_at: m.responded_at ?? null,
         donated_url: m.status === 'accepted' ? link(m, 'donated') : null,

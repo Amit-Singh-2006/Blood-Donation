@@ -4,11 +4,14 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import AgentChat from '../components/AgentChat';
 import { apiFetch } from '../lib/api';
 import { getUser } from '../lib/session';
+import DonationPass from '../components/DonationPass';
+import { agoText, directionsUrl, distanceKm, Point } from '../lib/geo';
 import { EMERGENCY } from '../lib/contact';
 
 /** A blood request the donor was alerted to, from GET /donor/network. */
 interface NetworkAlert {
   match_id: number;
+  request_id: number;
   status: 'awaiting_reply' | 'accepted';
   hospital_name: string;
   hospital_city: string;
@@ -19,6 +22,69 @@ interface NetworkAlert {
   alerted_at: string | null;
   accept_url: string | null;
   decline_url: string;
+  /** Shown at the hospital gate once the donor said YES */
+  pass_code?: string | null;
+  hospital_location?: (Point & { address: string }) | null;
+  /** Only once the donor said YES */
+  hospital_contact?: string | null;
+}
+
+/** Live location the donor chooses to share with the hospital they are travelling to. */
+interface LocationSharing {
+  matchId: number | null;
+  lastSent: string | null;
+  error: string;
+  start: (matchId: number) => void;
+  stop: () => void;
+}
+
+const SHARING_KEY = 'lifelink.sharingMatch';
+
+/**
+ * While a match is being shared, sends the phone's position to the backend at
+ * most every 15 s (sooner after moving 100 m). Stops when matchId is null.
+ */
+function useLiveLocation(matchId: number | null, onSent: () => void, onError: (message: string, fatal: boolean) => void) {
+  useEffect(() => {
+    if (matchId == null) return;
+    if (!navigator.geolocation) {
+      onError('Location is not available in this browser.', true);
+      return;
+    }
+    let active = true;
+    let lastAt = 0;
+    let last: Point | null = null;
+    const id = navigator.geolocation.watchPosition(
+      async (pos) => {
+        const point = { latitude: pos.coords.latitude, longitude: pos.coords.longitude };
+        const now = Date.now();
+        if (last && now - lastAt < 15000 && distanceKm(last, point) < 0.1) return;
+        lastAt = now;
+        last = point;
+        try {
+          await apiFetch('/donor/location', {
+            method: 'PUT',
+            body: JSON.stringify({
+              match_id: matchId,
+              latitude: Math.round(point.latitude * 1e6) / 1e6,
+              longitude: Math.round(point.longitude * 1e6) / 1e6,
+              accuracy_m: Math.round(pos.coords.accuracy),
+            }),
+          });
+          if (active) onSent();
+        } catch (err: any) {
+          if (active) onError(err.message || 'Could not share your location.', false);
+        }
+      },
+      (err) => active && onError(err.code === err.PERMISSION_DENIED ? 'Location permission was denied, so sharing stopped.' : 'Could not get your location yet. Still trying.', err.code === err.PERMISSION_DENIED),
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }
+    );
+    return () => {
+      active = false;
+      navigator.geolocation.clearWatch(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchId]);
 }
 
 interface DonorNetworkView {
@@ -140,6 +206,50 @@ export default function DonorApp() {
     fetchDonations();
     fetchNetwork();
   }, []);
+
+  // Opt-in live location for the hospital the donor said YES to (kept across tabs of the app)
+  const [sharingMatch, setSharingMatch] = useState<number | null>(() => {
+    try {
+      const v = Number(localStorage.getItem(SHARING_KEY));
+      return Number.isInteger(v) && v > 0 ? v : null;
+    } catch { return null; }
+  });
+  const [shareLastSent, setShareLastSent] = useState<string | null>(null);
+  const [shareError, setShareError] = useState('');
+  const stopSharing = async () => {
+    const id = sharingMatch;
+    try { localStorage.removeItem(SHARING_KEY); } catch { /* storage unavailable */ }
+    setSharingMatch(null);
+    setShareLastSent(null);
+    if (id) await apiFetch(`/donor/location/${id}`, { method: 'DELETE' }).catch(() => { });
+  };
+  const startSharing = (matchId: number) => {
+    try { localStorage.setItem(SHARING_KEY, String(matchId)); } catch { /* storage unavailable */ }
+    setShareError('');
+    setShareLastSent(null);
+    setSharingMatch(matchId);
+  };
+  useLiveLocation(
+    sharingMatch,
+    () => { setShareLastSent(new Date().toISOString()); setShareError(''); },
+    (message, fatal) => { setShareError(message); if (fatal) stopSharing(); }
+  );
+  const sharing: LocationSharing = { matchId: sharingMatch, lastSent: shareLastSent, error: shareError, start: startSharing, stop: stopSharing };
+
+  // While the donor is on their way, keep the alert fresh (the hospital may record
+  // the donation or cancel), and stop sharing once that request is no longer theirs
+  const hasAccepted = !!network?.alerts?.some((a) => a.status === 'accepted');
+  useEffect(() => {
+    if (!hasAccepted) return;
+    const id = setInterval(() => fetchNetwork(), 60000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasAccepted]);
+  useEffect(() => {
+    if (sharingMatch == null || !network?.alerts) return;
+    if (!network.alerts.some((a) => a.match_id === sharingMatch && a.status === 'accepted')) stopSharing();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [network, sharingMatch]);
 
   // Live alerts, eligibility and availability come from the LifeLink donor network
   const fetchNetwork = async () => {
@@ -311,6 +421,7 @@ export default function DonorApp() {
           onRespond={respondToAlert}
           onClaimCertificate={handleClaimCertificate}
           claimingId={claimingId}
+          sharing={sharing}
         />
       )}
       {activeTab === 'centers' && <WhereToDonateView city={network?.donor?.city} />}
@@ -341,12 +452,13 @@ export default function DonorApp() {
 }
 
 function DashboardView({
-  donations, network, networkError, isAvailable, replyNotice, respondingId, onRespond, onClaimCertificate, claimingId
+  donations, network, networkError, isAvailable, replyNotice, respondingId, onRespond, onClaimCertificate, claimingId, sharing
 }: {
   donations: any[]; network: DonorNetworkView | null; networkError: string; isAvailable: boolean;
   replyNotice: { ok: boolean; text: string } | null; respondingId: number | null;
   onRespond: (alertInfo: NetworkAlert, url: string) => void;
   onClaimCertificate: (donation: any) => void; claimingId: string | null;
+  sharing: LocationSharing;
 }) {
   const donor = network?.donor;
   const alerts = network?.alerts ?? [];
@@ -432,18 +544,59 @@ function DashboardView({
                 )}
               </div>
               {req.status === 'accepted' ? (
-                <div className="flex flex-wrap items-center gap-3">
-                  <span className="flex-1 text-sm font-bold text-green-700 bg-green-50 px-4 py-3 rounded-lg">You're confirmed. The hospital is expecting you.</span>
-                  <button
-                    onClick={() => onRespond(req, req.decline_url)}
-                    disabled={respondingId === req.match_id}
-                    className="bg-white hover:bg-slate-50 text-slate-600 font-bold py-3 px-5 rounded-lg transition-all border border-slate-200 disabled:opacity-50"
-                  >
-                    I can't make it
-                  </button>
-                  <button onClick={() => openDirections(`${req.hospital_name}, ${req.hospital_city}`)} className="w-12 h-12 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors" title="Directions">
-                    <span className="material-symbols-outlined text-slate-600">map</span>
-                  </button>
+                <div className="space-y-4">
+                  <p className="text-sm font-bold text-green-700 bg-green-50 px-4 py-3 rounded-lg">You're confirmed. {req.hospital_name} is expecting you.</p>
+                  {req.pass_code && <DonationPass code={req.pass_code} hospital={req.hospital_name} />}
+                  {req.hospital_location?.address && (
+                    <p className="text-sm text-slate-600 flex items-start gap-2"><span className="material-symbols-outlined text-lg text-slate-400">location_on</span>{req.hospital_location.address}</p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <a
+                      href={directionsUrl(req.hospital_location ?? `${req.hospital_name}, ${req.hospital_city}`)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-slate-900 text-white font-bold py-3 px-4 rounded-lg hover:bg-slate-800"
+                    >
+                      <span className="material-symbols-outlined text-lg">directions</span> Directions
+                    </a>
+                    {req.hospital_contact && (
+                      <a href={`tel:${req.hospital_contact}`} className="flex items-center justify-center gap-2 bg-white text-slate-700 font-bold py-3 px-4 rounded-lg border border-slate-200 hover:bg-slate-50">
+                        <span className="material-symbols-outlined text-lg">call</span> Call hospital
+                      </a>
+                    )}
+                    <button
+                      onClick={() => { if (sharing.matchId === req.match_id) sharing.stop(); onRespond(req, req.decline_url); }}
+                      disabled={respondingId === req.match_id}
+                      className="bg-white hover:bg-slate-50 text-slate-600 font-bold py-3 px-4 rounded-lg transition-all border border-slate-200 disabled:opacity-50"
+                    >
+                      I can't make it
+                    </button>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-sm text-slate-900 flex items-center gap-2">
+                          <span className="material-symbols-outlined text-lg text-[#ee2b2b]">my_location</span>
+                          Share my live location with {req.hospital_name}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {sharing.matchId === req.match_id
+                            ? (sharing.lastSent ? `Sharing · last update ${agoText(sharing.lastSent)}` : 'Starting… allow location access if your browser asks.')
+                            : 'So the hospital can see you are on the way. Only this hospital sees it, and only for this donation.'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => (sharing.matchId === req.match_id ? sharing.stop() : sharing.start(req.match_id))}
+                        className={`shrink-0 px-4 py-2 rounded-lg text-sm font-bold ${sharing.matchId === req.match_id ? 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50' : 'bg-[#ee2b2b] text-white hover:bg-[#ee2b2b]/90'}`}
+                      >
+                        {sharing.matchId === req.match_id ? 'Stop' : 'Share'}
+                      </button>
+                    </div>
+                    {sharing.matchId === req.match_id && (
+                      <p className="text-[11px] text-slate-500">Keep this page open while you travel. Sharing stops when you tap Stop, when the hospital records your donation, or after 3 hours.</p>
+                    )}
+                    {sharing.error && <p className="text-xs font-bold text-amber-700">{sharing.error}</p>}
+                  </div>
                 </div>
               ) : (
                 <div className="flex gap-3">

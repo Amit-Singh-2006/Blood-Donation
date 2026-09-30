@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { getDonorDonations, getMatchedRequests, getLeaderboard, getImpactPrediction, getNetworkStatus, updateNetworkPreferences, getDonationCenters } from '../controllers/donorController';
+import { getDonorDonations, getMatchedRequests, getLeaderboard, getImpactPrediction, getNetworkStatus, updateNetworkPreferences, getDonationCenters, shareLocation, stopSharingLocation } from '../controllers/donorController';
 import { validateRequest } from '../middleware/validateZod';
-import { networkPreferencesSchema } from '../schemas/donorSchemas';
+import { networkPreferencesSchema, donorLocationSchema } from '../schemas/donorSchemas';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { roleMiddleware } from '../middleware/roleMiddleware';
 import { botDetection } from '../middleware/securityMiddleware';
@@ -28,6 +28,9 @@ router.get('/impact/:requestId', donorApiLimiter, authMiddleware, roleMiddleware
 router.get('/network', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), getNetworkStatus);
 router.put('/network', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), validateRequest(networkPreferencesSchema), updateNetworkPreferences);
 router.get('/centers', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), getDonationCenters);
+// Opt-in live location for the hospital the donor is travelling to
+router.put('/location', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), validateRequest(donorLocationSchema), shareLocation);
+router.delete('/location/:matchId', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), stopSharingLocation);
 
 // Leaderboard is public but bot-protected to prevent scraping
 router.get('/leaderboard', botDetection, donorApiLimiter, getLeaderboard);

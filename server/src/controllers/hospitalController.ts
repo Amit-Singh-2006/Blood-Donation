@@ -67,6 +67,8 @@ export const getHospitalProfile = async (req: AuthRequest, res: Response) => {
             pincode: hospital.pincode,
             contact_number: hospital.contact_number,
             has_location: hospital.latitude != null && hospital.longitude != null,
+            latitude: hospital.latitude != null ? Number(hospital.latitude) : null,
+            longitude: hospital.longitude != null ? Number(hospital.longitude) : null,
             is_verified: !!hospital.is_verified,
             network_configured: networkConfigured(),
         });
@@ -137,7 +139,32 @@ export const getHospitalRequests = async (req: AuthRequest, res: Response) => {
             }
             requests.push({ ...publicRequest(r), status: live?.status ?? r.status, live });
         }
+
+        // Forget live locations of donors who are no longer on their way
+        const finished = ['Completed', 'Cancelled', 'Exhausted'];
+        const done = [...views.values()].flatMap((v) => (v.donors ?? [])
+            .filter((d) => finished.includes(v.status ?? '') || d.status !== 'accepted')
+            .map((d) => d.match_id));
+        if (done.length) await query('DELETE FROM donor_locations WHERE match_id = ANY($1::int[])', [done]);
         res.json({ requests, network_error: networkError ?? null });
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+};
+
+// GET /hospital/donor-locations: where the donors coming to this hospital are,
+// for those who chose to share it (updated in the last 30 minutes)
+export const getDonorLocations = async (req: AuthRequest, res: Response) => {
+    try {
+        await query(`DELETE FROM donor_locations WHERE updated_at < now() - interval '3 hours'`);
+        const result = await query(
+            `SELECT l.match_id, r.id AS request_id, l.latitude, l.longitude, l.accuracy_m, l.updated_at
+             FROM donor_locations l JOIN blood_requests r ON r.network_request_id = l.request_id
+             WHERE r.hospital_id = $1 AND l.updated_at > now() - interval '30 minutes'`,
+            [req.user?.id]
+        );
+        res.json(result.rows.map((l: any) => ({ ...l, latitude: Number(l.latitude), longitude: Number(l.longitude) })));
     } catch (err: any) {
         console.error(err);
         res.status(500).json({ message: 'Internal server error.' });

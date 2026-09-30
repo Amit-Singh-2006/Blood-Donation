@@ -214,6 +214,21 @@ const initDb = async () => {
     ALTER TABLE admin_profiles ENABLE ROW LEVEL SECURITY;
     ALTER TABLE admin_invites ENABLE ROW LEVEL SECURITY;
 
+    -- Live location a donor chooses to share with the hospital they are
+    -- travelling to, for one accepted request. Kept only while it is useful:
+    -- rows go when the donor stops, the donation is recorded or after 3 hours.
+    CREATE TABLE IF NOT EXISTS donor_locations (
+      match_id INTEGER PRIMARY KEY,
+      request_id INTEGER NOT NULL,
+      donor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      latitude DECIMAL(9,6) NOT NULL,
+      longitude DECIMAL(9,6) NOT NULL,
+      accuracy_m INTEGER,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS donor_locations_request_id ON donor_locations (request_id);
+    ALTER TABLE donor_locations ENABLE ROW LEVEL SECURITY;
+
     -- Which version of this schema was last applied (see below)
     CREATE TABLE IF NOT EXISTS app_schema (
       id INTEGER PRIMARY KEY,

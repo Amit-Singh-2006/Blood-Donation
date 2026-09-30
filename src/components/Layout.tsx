@@ -22,7 +22,7 @@ export default function Layout() {
   }, [location.pathname]); // Update when navigating in case accounts change
 
   const hideNav = ['/', '/login', '/register-donor', '/register-hospital', '/register-admin', '/how-it-works', '/emergency-network', '/impact-reports', '/privacy', '/terms', '/partnership', '/support', '/track'].includes(location.pathname)
-    || location.pathname.startsWith('/track/');
+    || location.pathname.startsWith('/track/') || location.pathname.startsWith('/pass/');
 
   // Determine layout type based on path
   const isSidebarLayout = location.pathname.startsWith('/admin') || location.pathname.startsWith('/hospital') || location.pathname.startsWith('/analytics');
