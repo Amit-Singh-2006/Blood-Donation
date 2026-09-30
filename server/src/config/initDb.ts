@@ -331,11 +331,20 @@ const initDb = async () => {
   let client;
   try {
     client = await pool.connect();
-    const applied = await client.query('SELECT version FROM app_schema WHERE id = 1').catch(() => null);
-    if (applied?.rows[0]?.version === version) return;
-
     await client.query('BEGIN');
+    // Never wait long for a lock, and if this instance is paused mid-way, let
+    // Postgres end the transaction instead of keeping tables locked for good
+    // (a paused instance once held the users table, so every sign-in hung)
     await client.query("SET LOCAL lock_timeout = '5s'");
+    await client.query("SET LOCAL idle_in_transaction_session_timeout = '15s'");
+    await client.query('SAVEPOINT version_check');
+    const applied = await client.query('SELECT version FROM app_schema WHERE id = 1').catch(() => null);
+    if (!applied) await client.query('ROLLBACK TO SAVEPOINT version_check'); // first run, or the table is busy
+    if (applied?.rows[0]?.version === version) {
+      await client.query('COMMIT');
+      return;
+    }
+
     const { rows } = await client.query('SELECT pg_try_advisory_xact_lock(724724) AS locked');
     if (!rows[0]?.locked) {
       await client.query('ROLLBACK'); // another instance is applying it right now

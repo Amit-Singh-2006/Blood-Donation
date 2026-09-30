@@ -36,10 +36,11 @@ test('cold starts skip the table-locking DDL when the schema is already applied'
     assert.match(recorded, /^[0-9a-f]{16}$/);
     mock.restoreAll();
 
-    // Next start: same version recorded, so no DDL and no transaction
+    // Next start: same version recorded, so no DDL, just a short guarded check
     const second = fakeClient((sql) => (sql.includes('SELECT version FROM app_schema') ? [{ version: recorded }] : []));
     await initDb();
-    assert.deepEqual(second.calls, ['SELECT version FROM']);
+    assert.deepEqual(second.calls, ['BEGIN', 'SET LOCAL lock_timeout', 'SET LOCAL idle_in_transaction_session_timeout', 'SAVEPOINT version_check', 'SELECT version FROM', 'COMMIT']);
+    assert.ok(!ranSchema(second.calls));
     assert.equal(second.released(), 1);
 });
 
@@ -54,7 +55,7 @@ test('only one instance applies a schema change at a time', async () => {
 test('a changed schema is applied in one transaction with a lock timeout', async () => {
     const run = fakeClient((sql) => (sql.includes('pg_try_advisory_xact_lock') ? [{ locked: true }] : sql.includes('SELECT version') ? [{ version: 'old' }] : []));
     await initDb();
-    assert.deepEqual(run.calls.slice(0, 4), ['SELECT version FROM', 'BEGIN', 'SET LOCAL lock_timeout', 'SELECT pg_try_advisory_xact_lock(724724) AS']);
+    assert.deepEqual(run.calls.slice(0, 6), ['BEGIN', 'SET LOCAL lock_timeout', 'SET LOCAL idle_in_transaction_session_timeout', 'SAVEPOINT version_check', 'SELECT version FROM', 'SELECT pg_try_advisory_xact_lock(724724) AS']);
     assert.ok(ranSchema(run.calls));
     assert.equal(run.calls.at(-1), 'COMMIT');
     assert.equal(run.released(), 1);

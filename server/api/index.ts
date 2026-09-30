@@ -5,10 +5,17 @@
  * We import the already-configured Express `app` and export it directly.
  * Vercel's Node.js runtime wraps it into a serverless function automatically.
  */
+import type { IncomingMessage, ServerResponse } from 'http';
 import app from '../src/app';
 import initDb from '../src/config/initDb';
 
-// Initialize DB tables once on cold start (Vercel caches this between invocations)
-initDb().catch(console.error);
+// Requests wait for the schema check (at most 10 s). Vercel pauses an instance
+// once no request is in flight, and a pause in the middle of the check could
+// leave tables locked, so it must finish while a request is still open.
+const ready = initDb().catch(console.error);
+const settled = Promise.race([ready, new Promise((resolve) => setTimeout(resolve, 10000).unref())]);
 
-export default app;
+export default async function handler(req: IncomingMessage, res: ServerResponse) {
+    await settled;
+    return app(req as any, res as any);
+}
