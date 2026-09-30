@@ -4,6 +4,8 @@ import {
     getMe, listAdmins, setAdminActive, listInvites, createInvite, revokeInvite,
 } from '../controllers/adminController';
 import { validateRequest } from '../middleware/validateZod';
+import { createCampaign, listCampaigns, listRegistrations, markAttendance, cancelCampaign } from '../controllers/campaignController';
+import { campaignSchema, attendanceSchema } from '../schemas/campaignSchemas';
 import { hospitalVerificationSchema, adminActiveSchema, adminInviteSchema } from '../schemas/adminSchemas';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { requireAdmin, requireNationalAdmin } from '../middleware/requireAdmin';
@@ -54,5 +56,13 @@ router.put('/admins/:id/active', ...national, validateRequest(adminActiveSchema)
 router.get('/invites', ...national, listInvites);
 router.post('/invites', ...national, validateRequest(adminInviteSchema), createInvite);
 router.put('/invites/:id/revoke', ...national, revokeInvite);
+
+// Blood donation campaigns: city admins run them in their own cities
+const anyAdmin = [adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin];
+router.get('/campaigns', ...anyAdmin, listCampaigns);
+router.post('/campaigns', ...anyAdmin, validateRequest(campaignSchema), createCampaign);
+router.get('/campaigns/:id/registrations', ...anyAdmin, listRegistrations);
+router.put('/campaigns/:id/registrations/:regId', ...anyAdmin, validateRequest(attendanceSchema), markAttendance);
+router.put('/campaigns/:id/cancel', ...anyAdmin, cancelCampaign);
 
 export default router;

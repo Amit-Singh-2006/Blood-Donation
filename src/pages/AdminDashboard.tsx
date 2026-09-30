@@ -1,3 +1,4 @@
+import AdminCampaigns from '../components/AdminCampaigns';
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -73,6 +74,7 @@ export default function AdminDashboard() {
     else if (location.pathname.includes('/analytics')) setActiveTab('analytics');
     else if (location.pathname.includes('/settings')) setActiveTab('settings');
     else if (location.pathname.includes('/admins')) setActiveTab('admins');
+    else if (location.pathname.includes('/campaigns')) setActiveTab('campaigns');
     else setActiveTab('overview');
   }, [location.pathname]);
 
@@ -86,6 +88,7 @@ export default function AdminDashboard() {
     { id: 'hospitals', label: 'Hospitals', icon: 'local_hospital' },
     { id: 'requests', label: 'Requests', icon: 'emergency' },
     { id: 'donors', label: 'Donors', icon: 'group' },
+    { id: 'campaigns', label: 'Campaigns', icon: 'campaign' },
     { id: 'analytics', label: 'Analytics', icon: 'monitoring' },
     ...(me?.is_national ? [{ id: 'admins', label: 'Admins', icon: 'manage_accounts' }] : []),
     { id: 'settings', label: 'Settings', icon: 'settings_suggest' },
@@ -283,6 +286,7 @@ export default function AdminDashboard() {
               {activeTab === 'hospitals' && <HospitalsView initialSearch={searchQuery} onChange={loadOverview} />}
               {activeTab === 'requests' && <RequestsView initialSearch={searchQuery} />}
               {activeTab === 'donors' && <DonorsView initialSearch={searchQuery} />}
+              {activeTab === 'campaigns' && <AdminCampaigns />}
               {activeTab === 'analytics' && <div className="-m-4 sm:-m-6 lg:-m-8"><Analytics /></div>}
               {activeTab === 'admins' && me?.is_national && <AdminsView meId={me.id} />}
               {activeTab === 'settings' && <SettingsView user={user} overview={overview} />}

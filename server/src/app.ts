@@ -9,6 +9,7 @@ import hospitalRoutes from './routes/hospitalRoutes';
 import adminRoutes from './routes/adminRoutes';
 import userRoutes from './routes/userRoutes';
 import aiRoutes from './routes/aiRoutes';
+import { campaignRoutes, reviewRoutes } from './routes/campaignRoutes';
 import { healthCheck } from './controllers/healthController';
 import rateLimit from 'express-rate-limit';
 
@@ -158,6 +159,8 @@ app.use('/hospital', hospitalRoutes);
 app.use('/admin', adminRoutes);
 app.use('/user', userRoutes);
 app.use('/ai', aiRoutes);
+app.use('/campaigns', campaignRoutes);
+app.use('/reviews', reviewRoutes);
 
 // ──────────────────────────────────────────────────────────────────────────
 // 13. Health Check (public)

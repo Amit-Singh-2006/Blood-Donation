@@ -143,6 +143,8 @@ export default function Layout() {
                 <Link to="/donor" className={cn("text-sm font-medium transition-colors hover:text-[#ee2b2b]", location.pathname === '/donor' ? "text-[#ee2b2b] font-bold" : "text-slate-600")}>Dashboard</Link>
                 <Link to="/donor/centers" className={cn("text-sm font-medium transition-colors hover:text-[#ee2b2b]", location.pathname === '/donor/centers' ? "text-[#ee2b2b] font-bold" : "text-slate-600")}>Where to Donate</Link>
                 <Link to="/donor/impact" className={cn("text-sm font-medium transition-colors hover:text-[#ee2b2b]", location.pathname === '/donor/impact' ? "text-[#ee2b2b] font-bold" : "text-slate-600")}>My Impact</Link>
+                <Link to="/donor/campaigns" className={cn("text-sm font-medium transition-colors hover:text-[#ee2b2b]", location.pathname === '/donor/campaigns' ? "text-[#ee2b2b] font-bold" : "text-slate-600")}>Campaigns</Link>
+                <Link to="/donor/reviews" className={cn("text-sm font-medium transition-colors hover:text-[#ee2b2b]", location.pathname === '/donor/reviews' ? "text-[#ee2b2b] font-bold" : "text-slate-600")}>Reviews</Link>
               </nav>
             )}
           </div>

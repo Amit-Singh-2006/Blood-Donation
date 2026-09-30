@@ -1,3 +1,5 @@
+import DonorCampaigns from '../components/DonorCampaigns';
+import { DonorReviews } from '../components/Reviews';
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
@@ -310,6 +312,8 @@ export default function DonorApp() {
   const getActiveTab = () => {
     const path = location.pathname;
     if (path.includes('/centers')) return 'centers';
+    if (path.includes('/campaigns')) return 'campaigns';
+    if (path.includes('/reviews')) return 'reviews';
     if (path.includes('/impact')) return 'impact';
     if (path.includes('/settings')) return 'settings';
     return 'dashboard';
@@ -408,6 +412,18 @@ export default function DonorApp() {
         >
           My Impact
         </Link>
+        <Link
+          to="/donor/campaigns"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${(activeTab as string) === 'campaigns' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Campaigns
+        </Link>
+        <Link
+          to="/donor/reviews"
+          className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${(activeTab as string) === 'reviews' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+        >
+          Reviews
+        </Link>
       </div>
 
       {activeTab === 'dashboard' && (
@@ -425,6 +441,8 @@ export default function DonorApp() {
         />
       )}
       {activeTab === 'centers' && <WhereToDonateView city={network?.donor?.city} />}
+      {activeTab === 'campaigns' && <DonorCampaigns />}
+      {activeTab === 'reviews' && <DonorReviews />}
       {activeTab === 'impact' && <ImpactView network={network} networkError={networkError} donations={donations} onClaimCertificate={handleClaimCertificate} claimingId={claimingId} />}
       {activeTab === 'settings' && <DonorSettingsView channel={network?.donor?.preferred_channel} onSave={updatePreferences} />}
 

@@ -22,6 +22,7 @@ const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const HospitalDashboard = lazy(() => import('./pages/HospitalDashboard'));
 const DonorApp = lazy(() => import('./pages/DonorApp'));
 const PassPage = lazy(() => import('./pages/PassPage'));
+const CampaignPage = lazy(() => import('./pages/CampaignPage'));
 
 const Loading = () => (
   <div className="min-h-screen flex items-center justify-center text-sm font-bold text-slate-400">Loading…</div>
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="track/:token" element={<TrackRequest />} />
         <Route path="tracking" element={<Navigate to="/track" replace />} />
         <Route path="pass/:code" element={<PassPage />} />
+        <Route path="campaign/:id" element={<CampaignPage />} />
 
         {/* Donor Routes - inside Layout so the topbar renders */}
         <Route element={<ProtectedRoute allowedRoles={['donor']} />}>
@@ -57,6 +59,8 @@ export default function App() {
           <Route path="donor/centers" element={<DonorApp />} />
           <Route path="donor/settings" element={<DonorApp />} />
           <Route path="donor/impact" element={<DonorApp />} />
+          <Route path="donor/campaigns" element={<DonorApp />} />
+          <Route path="donor/reviews" element={<DonorApp />} />
           {/* Removed placeholder tabs; old links land on the dashboard */}
           <Route path="donor/pending" element={<Navigate to="/donor" replace />} />
           <Route path="donor/community" element={<Navigate to="/donor" replace />} />
@@ -74,6 +78,7 @@ export default function App() {
         <Route path="admin/analytics" element={<AdminDashboard />} />
         <Route path="admin/settings" element={<AdminDashboard />} />
         <Route path="admin/admins" element={<AdminDashboard />} />
+        <Route path="admin/campaigns" element={<AdminDashboard />} />
       </Route>
 
       {/* Hospital Routes */}
@@ -81,6 +86,7 @@ export default function App() {
         <Route path="hospital" element={<HospitalDashboard />} />
         <Route path="hospital/requests" element={<HospitalDashboard />} />
         <Route path="hospital/inventory" element={<HospitalDashboard />} />
+        <Route path="hospital/reviews" element={<HospitalDashboard />} />
       </Route>
 
 

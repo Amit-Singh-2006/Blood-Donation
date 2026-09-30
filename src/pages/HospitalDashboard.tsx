@@ -1,3 +1,4 @@
+import { HospitalReviews } from '../components/Reviews';
 import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -15,7 +16,7 @@ import { Point, agoText, distanceKm, etaMinutes } from '../lib/geo';
 const PassScanner = lazy(() => import('../components/PassScanner'));
 const DonorMap = lazy(() => import('../components/DonorMap'));
 
-type NavItem = 'overview' | 'requests' | 'inventory' | 'settings';
+type NavItem = 'overview' | 'requests' | 'inventory' | 'reviews' | 'settings';
 
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 // Live data refresh while requests are active; each refresh is one n8n execution
@@ -248,6 +249,7 @@ export default function HospitalDashboard() {
     { id: 'overview', label: 'Overview', icon: 'dashboard' },
     { id: 'requests', label: 'Blood Requests', icon: 'emergency' },
     { id: 'inventory', label: 'Inventory', icon: 'bloodtype' },
+    { id: 'reviews', label: 'Reviews', icon: 'reviews' },
     { id: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
@@ -424,6 +426,7 @@ export default function HospitalDashboard() {
                   {activeTab === 'overview' && <OverviewTab requests={requests} inventory={inventory} donations={donations} onGoToRequests={() => setActiveTab('requests')} />}
                   {activeTab === 'requests' && <RequestsTab requests={requests} verified={!!profile?.is_verified} onRefresh={loadRequests} locations={locations} hospitalPoint={hospitalPoint} verifiedAt={verifiedAt} onScan={() => setScanning(true)} />}
                   {activeTab === 'inventory' && <InventoryTab inventory={inventory} onRefresh={fetchData} />}
+                  {activeTab === 'reviews' && <HospitalReviews />}
                   {activeTab === 'settings' && <SettingsTab user={user} profile={profile} />}
                 </>
               )}

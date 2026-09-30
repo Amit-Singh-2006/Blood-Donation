@@ -237,6 +237,74 @@ const initDb = async () => {
     );
     ALTER TABLE app_schema ENABLE ROW LEVEL SECURITY;
 
+    -- Blood donation campaigns (camps) run by admins, their sign-ups and attendance
+    CREATE TABLE IF NOT EXISTS campaigns (
+      id SERIAL PRIMARY KEY,
+      created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      name VARCHAR(150) NOT NULL,
+      description TEXT,
+      city VARCHAR(100) NOT NULL,
+      state VARCHAR(100),
+      venue VARCHAR(200) NOT NULL,
+      address TEXT,
+      map_url TEXT,
+      start_date DATE NOT NULL,
+      days INTEGER NOT NULL DEFAULT 1 CHECK (days BETWEEN 1 AND 30),
+      start_time TIME NOT NULL,
+      end_time TIME NOT NULL,
+      rewards TEXT,
+      refreshments TEXT,
+      contact_phone VARCHAR(20),
+      target_donors INTEGER,
+      status VARCHAR(20) NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'cancelled')),
+      alerted_count INTEGER NOT NULL DEFAULT 0,
+      alert_error TEXT,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+    ALTER TABLE campaigns ENABLE ROW LEVEL SECURITY;
+
+    CREATE TABLE IF NOT EXISTS campaign_registrations (
+      id SERIAL PRIMARY KEY,
+      campaign_id INTEGER NOT NULL REFERENCES campaigns(id) ON DELETE CASCADE,
+      donor_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      name VARCHAR(100) NOT NULL,
+      email VARCHAR(150) NOT NULL,
+      phone VARCHAR(20) NOT NULL,
+      blood_group VARCHAR(12) NOT NULL,
+      gender VARCHAR(20) NOT NULL,
+      dob DATE NOT NULL,
+      weight_kg INTEGER NOT NULL,
+      city VARCHAR(100),
+      preferred_date DATE,
+      preferred_slot VARCHAR(40),
+      last_donation_date DATE,
+      health JSONB NOT NULL DEFAULT '{}',
+      attended BOOLEAN,
+      donated BOOLEAN,
+      volume_ml INTEGER,
+      remarks VARCHAR(300),
+      marked_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE (campaign_id, phone)
+    );
+    ALTER TABLE campaign_registrations ENABLE ROW LEVEL SECURITY;
+
+    -- Star reviews: donors rate hospitals and campaigns, hospitals rate donors
+    CREATE TABLE IF NOT EXISTS reviews (
+      id SERIAL PRIMARY KEY,
+      reviewer_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      target_type VARCHAR(20) NOT NULL CHECK (target_type IN ('hospital', 'donor', 'campaign')),
+      target_id INTEGER NOT NULL,
+      context VARCHAR(40) NOT NULL,
+      rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
+      comment VARCHAR(1000),
+      created_at TIMESTAMPTZ DEFAULT now(),
+      updated_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE (reviewer_id, target_type, target_id, context)
+    );
+    CREATE INDEX IF NOT EXISTS reviews_target ON reviews (target_type, target_id);
+    ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+
     -- Haversine Distance Function
     CREATE OR REPLACE FUNCTION calculate_distance(lat1 FLOAT, lon1 FLOAT, lat2 FLOAT, lon2 FLOAT)
     RETURNS FLOAT AS $$

@@ -165,3 +165,10 @@ export const enrolDonor = async (profile: Omit<NetworkProfile, 'phone'> & { phon
         console.error('Donor network enrolment failed:', err?.message ?? err);
     }
 };
+
+/** Hands a campaign alert to n8n, which texts, WhatsApps and emails each donor. */
+export const broadcastCampaign = async (payload: object) => {
+    const { status, data } = await post('campaign-broadcast', payload);
+    if (status < 200 || status >= 300) throw new NetworkError(`The alert service rejected the campaign (${status})`, status);
+    return data;
+};
