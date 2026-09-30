@@ -300,13 +300,13 @@ export default function HospitalDashboard() {
         </div>
 
         <div className="mt-auto p-8 pt-4 space-y-3">
-          <div className="bg-slate-900 rounded-2xl p-5 text-white shadow-xl shadow-slate-900/10">
-            <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Facility</h4>
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-5 text-slate-900">
+            <h4 className="text-xs font-black uppercase tracking-widest text-[#ee2b2b] mb-2">Facility</h4>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-xs font-black">{initials}</div>
+              <div className="w-8 h-8 rounded-full bg-[#ee2b2b] text-white flex items-center justify-center text-xs font-black">{initials}</div>
               <div className="min-w-0">
                 <p className="text-[11px] font-bold truncate w-32">{hospitalName}</p>
-                <p className={cn('text-[9px] font-black uppercase', profile?.is_verified ? 'text-green-400' : 'text-amber-400')}>
+                <p className={cn('text-[9px] font-black uppercase', profile?.is_verified ? 'text-green-600' : 'text-amber-600')}>
                   {profile ? (profile.is_verified ? 'Verified' : 'Pending verification') : '…'}
                 </p>
               </div>
@@ -386,7 +386,7 @@ export default function HospitalDashboard() {
             <button
               onClick={() => setScanning(true)}
               aria-label="Scan donor pass"
-              className="bg-slate-900 text-white h-10 px-3 sm:px-4 rounded-xl text-xs font-black hover:bg-slate-800 transition-all flex items-center gap-2"
+              className="bg-[#ee2b2b] text-white h-10 px-3 sm:px-4 rounded-xl text-xs font-black hover:bg-red-700 transition-all flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-sm">qr_code_scanner</span>
               <span className="hidden sm:inline">SCAN PASS</span>
@@ -593,7 +593,7 @@ function OverviewTab({ requests, inventory, donations, onGoToRequests }: { reque
               ) : active.slice(0, 4).map((req) => (
                 <div key={req.id} className="flex items-center justify-between p-5 rounded-2xl border border-slate-100 bg-slate-50/30">
                   <div className="flex items-center gap-5">
-                    <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg', req.urgency === 'Emergency' ? 'bg-[#ee2b2b]' : 'bg-slate-900')}>
+                    <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg', req.urgency === 'Emergency' ? 'bg-[#ee2b2b] text-white' : 'bg-red-50 border border-red-100 text-[#ee2b2b]')}>
                       <span className="text-sm font-black">{req.blood_group}</span>
                     </div>
                     <div>
@@ -609,22 +609,22 @@ function OverviewTab({ requests, inventory, donations, onGoToRequests }: { reque
             </div>
           </div>
 
-          <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-2xl shadow-slate-900/20">
-            <span className="text-[10px] font-black text-[#ee2b2b] uppercase tracking-[0.2em] bg-red-500/10 px-3 py-1.5 rounded-full inline-block mb-4">Donor Network Now</span>
+          <div className="bg-red-50 border border-red-100 rounded-3xl p-8 text-slate-900">
+            <span className="text-[10px] font-black text-[#ee2b2b] uppercase tracking-[0.2em] bg-white border border-red-100 px-3 py-1.5 rounded-full inline-block mb-4">Donor Network Now</span>
             {!network ? (
-              <p className="text-sm text-slate-400">{networkLoadError ? 'Live network figures are unavailable right now.' : 'Loading live network figures…'}</p>
+              <p className="text-sm text-slate-600">{networkLoadError ? 'Live network figures are unavailable right now.' : 'Loading live network figures…'}</p>
             ) : (
               <>
                 <h3 className="text-2xl font-black leading-tight mb-2">{network.donor_pool.eligible_now} donors eligible to donate right now</h3>
-                <p className="text-sm text-slate-400 mb-6">
+                <p className="text-sm text-slate-600 mb-6">
                   {noEligible.length
                     ? `No eligible donors at the moment for ${noEligible.join(', ')}. Compatible groups can still cover these, but plan ahead for patients who need them.`
                     : 'Every blood group has at least one eligible donor on the network.'}
                 </p>
                 <div className="grid grid-cols-4 gap-3">
                   {BLOOD_TYPES.map((g) => (
-                    <div key={g} className="bg-white/5 rounded-xl p-3 text-center">
-                      <p className="text-xs font-black text-slate-400">{g}</p>
+                    <div key={g} className="bg-white border border-red-100 rounded-xl p-3 text-center">
+                      <p className="text-xs font-black text-[#ee2b2b]">{g}</p>
                       <p className="text-lg font-black">{network.donor_pool.by_blood_group[g]?.eligible_now ?? 0}</p>
                     </div>
                   ))}
@@ -767,7 +767,7 @@ function RequestsTab({ requests, verified, onRefresh, locations, hospitalPoint, 
                         className={cn(
                           'py-3 px-2 rounded-xl text-xs font-black border-2 transition-all text-center',
                           form.urgency === u.value
-                            ? u.value === 'Emergency' ? 'border-[#ee2b2b] bg-[#ee2b2b] text-white' : 'border-slate-900 bg-slate-900 text-white'
+                            ? u.value === 'Emergency' ? 'border-[#ee2b2b] bg-[#ee2b2b] text-white' : 'border-[#ee2b2b] bg-red-50 text-[#ee2b2b]'
                             : 'border-slate-200 text-slate-500 hover:border-slate-400'
                         )}
                       >
@@ -882,7 +882,7 @@ function FamilyLink({ token }: { token: string }) {
         <p className="text-slate-500 text-xs mt-0.5">Shows progress only, never donor names or numbers. Share it by message or let them scan the code.</p>
         <p className="font-mono text-xs text-slate-700 mt-2 truncate">{url}</p>
       </div>
-      <button onClick={copy} className="px-4 py-2 rounded-xl bg-slate-900 text-white text-xs font-black hover:bg-slate-800 shrink-0">
+      <button onClick={copy} className="px-4 py-2 rounded-xl bg-[#ee2b2b] text-white text-xs font-black hover:bg-red-700 shrink-0">
         {copied ? 'Copied' : 'Copy link'}
       </button>
     </div>
@@ -944,7 +944,7 @@ function RequestCard({ req, open, onToggle, onRefresh, locations, hospitalPoint,
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
       <button onClick={onToggle} className="w-full p-6 flex items-center justify-between gap-4 text-left">
         <div className="flex items-center gap-5 min-w-0">
-          <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0', req.urgency === 'Emergency' ? 'bg-[#ee2b2b]' : 'bg-slate-800')}>
+          <div className={cn('w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shrink-0', req.urgency === 'Emergency' ? 'bg-[#ee2b2b] text-white' : 'bg-red-50 border border-red-100 text-[#ee2b2b]')}>
             <span className="text-sm font-black">{req.blood_group}</span>
           </div>
           <div className="min-w-0">
@@ -1040,7 +1040,7 @@ function RequestCard({ req, open, onToggle, onRefresh, locations, hospitalPoint,
                 <div className="flex items-center justify-between gap-3 mb-3">
                   <h5 className="text-sm font-black text-slate-900">Confirmed donors</h5>
                   {onTheWay.length > 0 && (
-                    <button onClick={onScan} className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-black hover:bg-slate-800 flex items-center gap-1">
+                    <button onClick={onScan} className="px-3 py-1.5 rounded-lg bg-[#ee2b2b] text-white text-xs font-black hover:bg-red-700 flex items-center gap-1">
                       <span className="material-symbols-outlined text-sm">qr_code_scanner</span> Scan pass
                     </button>
                   )}

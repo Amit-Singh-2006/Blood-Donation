@@ -324,7 +324,7 @@ export default function HospitalRegistration() {
                     <p className="flex gap-2"><span className="material-symbols-outlined text-[#ee2b2b]">lock_clock</span>
                       <span>You can sign in and set up your inventory straight away. Blood requests start alerting donors once you are verified.</span></p>
                   </div>
-                  <label className="flex items-start gap-3 p-4 rounded-xl bg-slate-900 text-white cursor-pointer">
+                  <label className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-100 text-slate-800 cursor-pointer">
                     <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-1 w-5 h-5 accent-[#ee2b2b]" />
                     <span className="text-sm">I am authorised to register this hospital, and the details above are accurate. I agree to the <Link to="/terms" className="underline font-bold">Terms</Link> and <Link to="/privacy" className="underline font-bold">Privacy Policy</Link>.</span>
                   </label>

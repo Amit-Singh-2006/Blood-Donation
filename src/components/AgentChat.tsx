@@ -488,7 +488,7 @@ export default function AgentChat({ isOpen, onClose, context, onAction }: AgentC
     const contextColors: Record<PageContext, string> = {
         hospital: 'from-[#ee2b2b] to-red-700',
         donor: 'from-blue-600 to-blue-800',
-        admin: 'from-slate-700 to-slate-900',
+        admin: 'from-rose-500 to-[#ee2b2b]',
     };
 
     return (

@@ -39,7 +39,7 @@ export default function ChatBot() {
     <>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-8 right-8 bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 hover:scale-105 transition-transform z-50"
+        className="fixed bottom-8 right-8 bg-[#ee2b2b] text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-2 hover:scale-105 transition-transform z-50"
       >
         <Bot className="w-5 h-5" />
         <span className="text-sm font-bold">AI Assistant</span>

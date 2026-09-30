@@ -88,10 +88,10 @@ export default function PassScanner({ onCode, onClose }: { onCode: (code: string
           {cameraError ? (
             <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl p-3">{cameraError}</p>
           ) : (
-            <div className="relative rounded-xl overflow-hidden bg-black aspect-square">
+            <div className="relative rounded-xl overflow-hidden bg-red-50 border border-red-100 aspect-square">
               <video ref={videoRef} className="w-full h-full object-cover" muted playsInline />
               <div className="absolute inset-8 border-4 border-white/80 rounded-2xl pointer-events-none" />
-              <p className="absolute bottom-2 inset-x-0 text-center text-xs font-bold text-white/90">Point the camera at the donor's QR code</p>
+              <p className="absolute bottom-2 inset-x-0 mx-auto w-fit px-3 py-1 rounded-full bg-white/90 text-center text-xs font-bold text-[#ee2b2b]">Point the camera at the donor's QR code</p>
             </div>
           )}
           <canvas ref={canvasRef} className="hidden" />
@@ -106,7 +106,7 @@ export default function PassScanner({ onCode, onClose }: { onCode: (code: string
                 autoComplete="off"
                 className="flex-1 px-3 py-2.5 border border-slate-200 rounded-lg font-mono uppercase tracking-wider outline-none focus:border-slate-900"
               />
-              <button type="submit" className="px-4 py-2.5 rounded-lg bg-slate-900 text-white text-sm font-bold hover:bg-slate-800">Check</button>
+              <button type="submit" className="px-4 py-2.5 rounded-lg bg-[#ee2b2b] text-white text-sm font-bold hover:bg-red-700">Check</button>
             </div>
             {typedError && <p className="text-xs font-bold text-amber-700">{typedError}</p>}
           </form>

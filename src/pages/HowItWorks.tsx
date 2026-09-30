@@ -87,14 +87,14 @@ export default function HowItWorks() {
                     </ol>
                 </motion.section>
 
-                <section className="bg-slate-900 text-white rounded-3xl p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                <section className="bg-red-50 border border-red-100 text-slate-900 rounded-3xl p-8 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                     <div>
                         <h3 className="text-xl font-bold">Ready to help?</h3>
-                        <p className="text-sm text-slate-300 mt-1">Register once, and we will only contact you when a patient near you needs your blood group.</p>
+                        <p className="text-sm text-slate-600 mt-1">Register once, and we will only contact you when a patient near you needs your blood group.</p>
                     </div>
                     <div className="flex gap-3">
-                        <Link to="/register-donor" className="px-5 py-3 rounded-xl bg-[#ee2b2b] text-sm font-bold hover:bg-[#ee2b2b]/90 transition-colors">Become a donor</Link>
-                        <Link to="/register-hospital" className="px-5 py-3 rounded-xl bg-white/10 text-sm font-bold hover:bg-white/20 transition-colors">Register a hospital</Link>
+                        <Link to="/register-donor" className="px-5 py-3 rounded-xl bg-[#ee2b2b] text-white text-sm font-bold hover:bg-[#ee2b2b]/90 transition-colors">Become a donor</Link>
+                        <Link to="/register-hospital" className="px-5 py-3 rounded-xl bg-white border border-red-200 text-[#ee2b2b] text-sm font-bold hover:bg-red-100 transition-colors">Register a hospital</Link>
                     </div>
                 </section>
             </main>

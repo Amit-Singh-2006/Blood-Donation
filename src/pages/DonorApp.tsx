@@ -555,7 +555,7 @@ function DashboardView({
                       href={directionsUrl(req.hospital_location ?? `${req.hospital_name}, ${req.hospital_city}`)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-slate-900 text-white font-bold py-3 px-4 rounded-lg hover:bg-slate-800"
+                      className="flex-1 min-w-[140px] flex items-center justify-center gap-2 bg-[#ee2b2b] text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700"
                     >
                       <span className="material-symbols-outlined text-lg">directions</span> Directions
                     </a>

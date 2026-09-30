@@ -38,11 +38,11 @@ export default function TermsOfService() {
             </header>
 
             {/* Hero */}
-            <div className="bg-gradient-to-br from-slate-800 to-slate-900 text-white py-20 px-6 text-center">
+            <div className="bg-gradient-to-br from-red-50 via-rose-50 to-white text-slate-900 py-20 px-6 text-center">
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-                    <span className="material-symbols-outlined text-6xl mb-4 block opacity-70">gavel</span>
+                    <span className="material-symbols-outlined text-6xl mb-4 block text-[#ee2b2b]">gavel</span>
                     <h1 className="text-4xl font-black mb-3">Terms of Service</h1>
-                    <p className="text-slate-400 max-w-xl mx-auto text-base">These terms govern your use of LifeLink AI in India. Please read them carefully.</p>
+                    <p className="text-slate-600 max-w-xl mx-auto text-base">These terms govern your use of LifeLink AI in India. Please read them carefully.</p>
                     <p className="text-slate-500 text-sm mt-4">Last updated: {LEGAL_UPDATED}</p>
                 </motion.div>
             </div>

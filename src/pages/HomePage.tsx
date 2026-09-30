@@ -354,7 +354,7 @@ export default function HomePage() {
                             {
                                 icon: 'admin_panel_settings',
                                 title: 'Admins',
-                                color: 'from-slate-700 to-slate-900',
+                                color: 'from-rose-500 to-red-700',
                                 route: '/register-admin',
                                 points: ['Full network oversight', 'Hospital & donor management', 'Regional analytics', 'AI engine configuration', 'Export PDF reports'],
                             },
@@ -418,7 +418,7 @@ export default function HomePage() {
             </section>
 
             {/* ── FOOTER ── */}
-            <footer className="bg-slate-900 text-slate-400 py-12 px-6">
+            <footer className="bg-red-50 border-t border-red-100 text-slate-600 py-12 px-6">
                 <div className="max-w-6xl mx-auto">
                     <div className="flex flex-col md:flex-row justify-between gap-10 mb-10">
                         <div className="space-y-3 max-w-xs">
@@ -426,25 +426,25 @@ export default function HomePage() {
                                 <div className="bg-[#ee2b2b] p-1.5 rounded-lg text-white">
                                     <span className="material-symbols-outlined text-lg">vital_signs</span>
                                 </div>
-                                <span className="text-white font-extrabold text-lg">LifeLink <span className="text-[#ee2b2b]">AI</span></span>
+                                <span className="text-slate-900 font-extrabold text-lg">LifeLink <span className="text-[#ee2b2b]">AI</span></span>
                             </div>
                             <p className="text-sm leading-relaxed">AI-powered blood donation network bridging donors and hospitals in life-critical moments.</p>
                         </div>
 
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-8 text-sm">
                             <div className="space-y-3">
-                                <p className="text-white font-black text-xs uppercase tracking-widest">Platform</p>
+                                <p className="text-slate-900 font-black text-xs uppercase tracking-widest">Platform</p>
                                 <Link to="/login" className="block hover:text-[#ee2b2b] transition-colors">Log In</Link>
                                 <Link to="/login" className="block hover:text-[#ee2b2b] transition-colors">Create Account</Link>
                                 <Link to="/partnership" className="block hover:text-[#ee2b2b] transition-colors">Hospital Partnership</Link>
                             </div>
                             <div className="space-y-3">
-                                <p className="text-white font-black text-xs uppercase tracking-widest">Legal</p>
+                                <p className="text-slate-900 font-black text-xs uppercase tracking-widest">Legal</p>
                                 <Link to="/privacy" className="block hover:text-[#ee2b2b] transition-colors">Privacy Policy</Link>
                                 <Link to="/terms" className="block hover:text-[#ee2b2b] transition-colors">Terms of Service</Link>
                             </div>
                             <div className="space-y-3">
-                                <p className="text-white font-black text-xs uppercase tracking-widest">Help</p>
+                                <p className="text-slate-900 font-black text-xs uppercase tracking-widest">Help</p>
                                 <Link to="/track" className="block hover:text-[#ee2b2b] transition-colors">Track a Request</Link>
                                 <Link to="/support" className="block hover:text-[#ee2b2b] transition-colors">Support</Link>
                                 <a href={`tel:${EMERGENCY.allEmergencies}`} className="block hover:text-[#ee2b2b] transition-colors">Medical emergency: call {EMERGENCY.allEmergencies}</a>
@@ -452,10 +452,10 @@ export default function HomePage() {
                         </div>
                     </div>
 
-                    <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div className="border-t border-red-100 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
                         <p className="text-xs">© 2026 LifeLink AI. All rights reserved.</p>
                         <div className="flex items-center gap-2 text-xs">
-                            <span className="material-symbols-outlined text-emerald-400 text-sm">verified_user</span>
+                            <span className="material-symbols-outlined text-emerald-600 text-sm">verified_user</span>
                             Hospital-verified requests &nbsp;·&nbsp; Donor details never shown to families
                         </div>
                     </div>

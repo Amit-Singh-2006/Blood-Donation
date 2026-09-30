@@ -127,7 +127,7 @@ export default function AdminDashboard() {
         </button>
         <div className="p-8 pb-4">
           <div className="flex items-center gap-2 mb-8">
-            <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-[#ee2b2b] rounded-xl flex items-center justify-center">
               <span className="material-symbols-outlined text-white">shield</span>
             </div>
             <div>
@@ -143,13 +143,13 @@ export default function AdminDashboard() {
                 onClick={() => goTo(item.id)}
                 className={cn(
                   'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all relative group',
-                  activeTab === item.id ? 'bg-slate-900 shadow-lg shadow-slate-200 text-white' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                  activeTab === item.id ? 'bg-red-50 text-[#ee2b2b]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
                 )}
               >
                 {activeTab === item.id && (
                   <motion.div layoutId="admin-sidebar-active" className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-[#ee2b2b] rounded-full" />
                 )}
-                <span className={cn('material-symbols-outlined text-xl transition-colors', activeTab === item.id ? 'text-white' : 'text-slate-400 group-hover:text-slate-600')}>
+                <span className={cn('material-symbols-outlined text-xl transition-colors', activeTab === item.id ? 'text-[#ee2b2b]' : 'text-slate-400 group-hover:text-slate-600')}>
                   {item.icon}
                 </span>
                 {item.label}
@@ -165,7 +165,7 @@ export default function AdminDashboard() {
           <div className="bg-slate-100 rounded-2xl p-5 border border-slate-200 shadow-sm">
             <h4 className="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Signed in</h4>
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-slate-900 flex items-center justify-center text-white text-[10px] font-black">{displayName.slice(0, 2).toUpperCase()}</div>
+              <div className="w-8 h-8 rounded-full bg-[#ee2b2b] flex items-center justify-center text-white text-[10px] font-black">{displayName.slice(0, 2).toUpperCase()}</div>
               <div className="min-w-0">
                 <p className="text-[11px] font-bold truncate w-32">{displayName}</p>
                 <p className="text-[9px] text-[#ee2b2b] font-black uppercase tracking-wider">{me?.is_national ? 'National admin' : 'City admin'}</p>
@@ -214,7 +214,7 @@ export default function AdminDashboard() {
             <div className="relative">
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
-                className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-all relative', showNotifications ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}
+                className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-all relative', showNotifications ? 'bg-red-50 text-[#ee2b2b]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}
                 aria-label="Notifications"
               >
                 <span className="material-symbols-outlined text-lg">notifications</span>
@@ -249,7 +249,7 @@ export default function AdminDashboard() {
 
             <button
               onClick={() => setShowSearch(!showSearch)}
-              className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-all', showSearch ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}
+              className={cn('w-10 h-10 rounded-xl flex items-center justify-center transition-all', showSearch ? 'bg-red-50 text-[#ee2b2b]' : 'bg-slate-100 text-slate-600 hover:bg-slate-200')}
               aria-label="Search"
             >
               <span className="material-symbols-outlined text-lg">search</span>
@@ -393,13 +393,13 @@ const requestBadge = (r: any, liveStatus?: string): [string, string] => {
   return STATUS_BADGE[status] ?? [status, 'bg-slate-100 text-slate-600'];
 };
 
-const urgencyTone = (urgency: string) => urgency === 'Emergency' ? 'bg-[#ee2b2b]' : urgency === 'Urgent' ? 'bg-amber-500' : 'bg-slate-800';
+const urgencyTone = (urgency: string) => urgency === 'Emergency' ? 'bg-[#ee2b2b] text-white' : urgency === 'Urgent' ? 'bg-amber-500 text-white' : 'bg-red-50 border border-red-100 text-[#ee2b2b]';
 
 function RecentRequestRow({ r }: { r: any }) {
   const [label, tone] = requestBadge(r);
   return (
     <div className="flex items-center gap-3 py-3">
-      <span className={cn('w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-xs font-black text-white', urgencyTone(r.urgency))}>{r.blood_group}</span>
+      <span className={cn('w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-xs font-black', urgencyTone(r.urgency))}>{r.blood_group}</span>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-bold text-slate-900 truncate">{r.hospital_name}</p>
         <p className="text-xs text-slate-500 truncate">{r.units_required} unit(s) · {r.urgency} · {r.city} · {timeAgo(r.created_at)}</p>
@@ -484,7 +484,7 @@ function OverviewView({ overview, network, networkError, isNational, onGo }: {
                       <p className="text-sm font-bold text-slate-900">{t.title}</p>
                       {t.text && <p className="text-xs text-slate-500">{t.text}</p>}
                     </div>
-                    <button onClick={() => onGo(t.tab)} className="shrink-0 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold hover:bg-slate-800">{t.action}</button>
+                    <button onClick={() => onGo(t.tab)} className="shrink-0 px-3 py-1.5 rounded-lg bg-[#ee2b2b] text-white text-xs font-bold hover:bg-red-700">{t.action}</button>
                   </div>
                 ))}
               </div>
@@ -510,16 +510,16 @@ function OverviewView({ overview, network, networkError, isNational, onGo }: {
         </div>
 
         <div className="space-y-6">
-          <section className="bg-slate-900 rounded-2xl p-6 text-white">
+          <section className="bg-red-50 border border-red-100 rounded-2xl p-6 text-slate-900">
             <p className="text-[10px] font-black text-[#ee2b2b] uppercase tracking-[0.2em] mb-3">{isNational ? 'Donor network now' : 'Whole donor network now'}</p>
             {network ? (
               <>
                 <p className="text-3xl font-black">{network.donor_pool.eligible_now}</p>
-                <p className="text-sm text-slate-400 mb-4">donors eligible to donate right now</p>
+                <p className="text-sm text-slate-600 mb-4">donors eligible to donate right now</p>
                 <div className="grid grid-cols-4 gap-2">
                   {BLOOD_TYPES.map((g) => (
-                    <div key={g} className="bg-white/5 rounded-lg p-2 text-center">
-                      <p className="text-[10px] font-black text-slate-400">{g}</p>
+                    <div key={g} className="bg-white border border-red-100 rounded-lg p-2 text-center">
+                      <p className="text-[10px] font-black text-[#ee2b2b]">{g}</p>
                       <p className="font-black">{network.donor_pool.by_blood_group[g]?.eligible_now ?? 0}</p>
                     </div>
                   ))}
@@ -527,7 +527,7 @@ function OverviewView({ overview, network, networkError, isNational, onGo }: {
                 <button onClick={() => onGo('analytics')} className="mt-4 text-xs font-black text-[#ee2b2b] hover:underline">Full analytics →</button>
               </>
             ) : (
-              <p className="text-sm text-slate-400">{networkError ? 'Live network figures are unavailable right now.' : 'Loading live network figures…'}</p>
+              <p className="text-sm text-slate-600">{networkError ? 'Live network figures are unavailable right now.' : 'Loading live network figures…'}</p>
             )}
           </section>
 
@@ -625,7 +625,7 @@ function RequestsView({ initialSearch = '' }: { initialSearch?: string }) {
             key={id}
             onClick={() => setFilter(id)}
             aria-pressed={filter === id}
-            className={cn('px-3 py-1.5 rounded-full text-xs font-bold border', filter === id ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400')}
+            className={cn('px-3 py-1.5 rounded-full text-xs font-bold border', filter === id ? 'bg-[#ee2b2b] text-white border-[#ee2b2b]' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400')}
           >
             {label} <span className="opacity-60">{withLive.filter(fn).length}</span>
           </button>
@@ -647,7 +647,7 @@ function RequestsView({ initialSearch = '' }: { initialSearch?: string }) {
             const [label, tone] = requestBadge(r, status?.status);
             return (
               <div key={r.id} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-                <span className={cn('w-12 h-12 shrink-0 rounded-xl flex items-center justify-center text-sm font-black text-white', urgencyTone(r.urgency))}>{r.blood_group}</span>
+                <span className={cn('w-12 h-12 shrink-0 rounded-xl flex items-center justify-center text-sm font-black', urgencyTone(r.urgency))}>{r.blood_group}</span>
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <p className="font-extrabold text-slate-900">{r.hospital_name} <span className="font-medium text-slate-500">· {[r.city, r.state].filter(Boolean).join(', ')}</span></p>
                   <p className="text-xs text-slate-500">
@@ -925,7 +925,7 @@ function AdminsView({ meId }: { meId?: number }) {
                   type="button"
                   aria-pressed={form.national === value}
                   onClick={() => setForm({ ...form, national: value as boolean })}
-                  className={cn('py-2 rounded-lg text-xs font-bold border-2', form.national === value ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 text-slate-600')}
+                  className={cn('py-2 rounded-lg text-xs font-bold border-2', form.national === value ? 'border-[#ee2b2b] bg-red-50 text-[#ee2b2b]' : 'border-slate-200 text-slate-600')}
                 >
                   {label as string}
                 </button>
@@ -957,7 +957,7 @@ function AdminsView({ meId }: { meId?: number }) {
             </select>
           </div>
           {formError && <p className="text-xs font-bold text-red-700 bg-red-50 border border-red-100 rounded-lg p-2">{formError}</p>}
-          <button type="submit" disabled={creating} className="w-full py-3 rounded-xl bg-slate-900 text-white text-sm font-black hover:bg-slate-800 disabled:opacity-50">
+          <button type="submit" disabled={creating} className="w-full py-3 rounded-xl bg-[#ee2b2b] text-white text-sm font-black hover:bg-red-700 disabled:opacity-50">
             {creating ? 'Creating…' : 'Create invite'}
           </button>
         </form>
@@ -1020,7 +1020,7 @@ function AdminsView({ meId }: { meId?: number }) {
                     <div className="min-w-0">
                       <p className="font-bold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
                         {a.name}
-                        {a.is_national && <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-slate-900 text-white">National</span>}
+                        {a.is_national && <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-red-100 text-[#ee2b2b]">National</span>}
                         {!a.active && <span className="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-red-100 text-red-700">Access removed</span>}
                         {a.id === meId && <span className="text-[10px] font-black uppercase text-slate-400">You</span>}
                       </p>
@@ -1033,7 +1033,7 @@ function AdminsView({ meId }: { meId?: number }) {
                     {a.id !== meId && (
                       <button
                         onClick={() => toggleAdmin(a)}
-                        className={cn('px-3 py-1.5 rounded-lg text-xs font-bold shrink-0', a.active ? 'border border-red-200 text-red-700 hover:bg-red-50' : 'bg-slate-900 text-white hover:bg-slate-800')}
+                        className={cn('px-3 py-1.5 rounded-lg text-xs font-bold shrink-0', a.active ? 'border border-red-200 text-red-700 hover:bg-red-50' : 'bg-[#ee2b2b] text-white hover:bg-red-700')}
                       >
                         {a.active ? 'Remove access' : 'Restore access'}
                       </button>

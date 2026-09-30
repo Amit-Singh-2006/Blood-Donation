@@ -84,20 +84,20 @@ export default function Home() {
       </section>
 
       {/* Stats / Impact */}
-      <section className="bg-slate-900 rounded-3xl p-8 md:p-12 text-white overflow-hidden relative">
+      <section className="bg-red-50 border border-red-100 rounded-3xl p-8 md:p-12 text-slate-900 overflow-hidden relative">
         <div className="absolute top-0 right-0 w-64 h-64 bg-red-600/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
         <div className="relative z-10 grid md:grid-cols-3 gap-8 text-center">
           <div>
-            <div className="text-4xl font-bold mb-2">3.3M</div>
-            <div className="text-slate-400 text-sm uppercase tracking-wider">Unit Annual Gap</div>
+            <div className="text-4xl font-bold mb-2 text-[#ee2b2b]">3.3M</div>
+            <div className="text-slate-500 text-sm uppercase tracking-wider">Unit Annual Gap</div>
           </div>
           <div>
-            <div className="text-4xl font-bold mb-2">&lt; 15m</div>
-            <div className="text-slate-400 text-sm uppercase tracking-wider">Response Time</div>
+            <div className="text-4xl font-bold mb-2 text-[#ee2b2b]">&lt; 15m</div>
+            <div className="text-slate-500 text-sm uppercase tracking-wider">Response Time</div>
           </div>
           <div>
-            <div className="text-4xl font-bold mb-2">99.5%</div>
-            <div className="text-slate-400 text-sm uppercase tracking-wider">Uptime Target</div>
+            <div className="text-4xl font-bold mb-2 text-[#ee2b2b]">99.5%</div>
+            <div className="text-slate-500 text-sm uppercase tracking-wider">Uptime Target</div>
           </div>
         </div>
       </section>

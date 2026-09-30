@@ -66,14 +66,14 @@ export default function Support() {
             </header>
 
             {/* Hero */}
-            <div className="bg-gradient-to-br from-slate-900 to-slate-700 text-white py-20 px-6 text-center relative overflow-hidden">
+            <div className="bg-gradient-to-br from-red-50 via-rose-50 to-white text-slate-900 py-20 px-6 text-center relative overflow-hidden">
                 <div className="absolute inset-0 opacity-5">
                     <span className="material-symbols-outlined text-[20rem] absolute -right-20 -bottom-16">support_agent</span>
                 </div>
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="relative z-10">
-                    <span className="material-symbols-outlined text-6xl mb-4 block opacity-70">support_agent</span>
+                    <span className="material-symbols-outlined text-6xl mb-4 block text-[#ee2b2b]">support_agent</span>
                     <h1 className="text-4xl font-black mb-3">Contact & Support</h1>
-                    <p className="text-slate-400 max-w-xl mx-auto text-base">Reach our team through the channels below. LifeLink is not an emergency service: in a medical emergency, call {EMERGENCY.allEmergencies}.</p>
+                    <p className="text-slate-600 max-w-xl mx-auto text-base">Reach our team through the channels below. LifeLink is not an emergency service: in a medical emergency, call {EMERGENCY.allEmergencies}.</p>
                 </motion.div>
             </div>
 

@@ -89,7 +89,7 @@ export default function AdminRegistration() {
     <div className="min-h-screen bg-[#f8f6f6] flex flex-col">
       <header className="w-full px-4 sm:px-6 lg:px-20 py-4 flex items-center justify-between bg-white/80 backdrop-blur-md border-b border-slate-200">
         <Link to="/" className="flex items-center gap-2">
-          <div className="bg-slate-900 p-1.5 rounded-lg text-white">
+          <div className="bg-[#ee2b2b] p-1.5 rounded-lg text-white">
             <span className="material-symbols-outlined text-2xl">shield_person</span>
           </div>
           <span className="text-xl font-extrabold tracking-tight text-slate-900">LifeLink <span className="text-[#ee2b2b]">Admin</span></span>
@@ -108,7 +108,7 @@ export default function AdminRegistration() {
         {/* Step 1: the invite code */}
         <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-sm">
           <div className="flex items-center gap-2">
-            <span className="w-7 h-7 rounded-full bg-slate-900 text-white text-xs font-black flex items-center justify-center">1</span>
+            <span className="w-7 h-7 rounded-full bg-[#ee2b2b] text-white text-xs font-black flex items-center justify-center">1</span>
             <h2 className="font-black text-slate-900">Check your invite code</h2>
           </div>
           <form onSubmit={(e) => { e.preventDefault(); checkCode(); }} className="flex flex-col sm:flex-row gap-2">
@@ -124,7 +124,7 @@ export default function AdminRegistration() {
             <button
               type="submit"
               disabled={!code.trim() || checking}
-              className="px-5 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+              className="px-5 py-3 rounded-xl bg-[#ee2b2b] text-white font-bold hover:bg-red-700 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
             >
               {checking ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <span className="material-symbols-outlined text-lg">fact_check</span>}
               Check code
@@ -167,7 +167,7 @@ export default function AdminRegistration() {
         {/* Step 2: the account (only after the code checks out) */}
         <section className={`bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-sm transition-opacity ${verified ? '' : 'opacity-50 pointer-events-none select-none'}`} aria-disabled={!verified}>
           <div className="flex items-center gap-2">
-            <span className="w-7 h-7 rounded-full bg-slate-900 text-white text-xs font-black flex items-center justify-center">2</span>
+            <span className="w-7 h-7 rounded-full bg-[#ee2b2b] text-white text-xs font-black flex items-center justify-center">2</span>
             <h2 className="font-black text-slate-900">Create your account</h2>
           </div>
           <form onSubmit={handleRegister} className="space-y-4">
@@ -230,7 +230,7 @@ export default function AdminRegistration() {
             <button
               type="submit"
               disabled={!canSubmit || submitting}
-              className="w-full py-4 rounded-xl bg-slate-900 text-white font-black hover:bg-slate-800 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
+              className="w-full py-4 rounded-xl bg-[#ee2b2b] text-white font-black hover:bg-red-700 disabled:opacity-40 transition-all flex items-center justify-center gap-2"
             >
               {submitting ? 'Creating account…' : 'Create admin account'}
               <span className="material-symbols-outlined">arrow_forward</span>
