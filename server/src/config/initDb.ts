@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import pool from './db';
 
 const initDb = async () => {
@@ -213,6 +214,14 @@ const initDb = async () => {
     ALTER TABLE admin_profiles ENABLE ROW LEVEL SECURITY;
     ALTER TABLE admin_invites ENABLE ROW LEVEL SECURITY;
 
+    -- Which version of this schema was last applied (see below)
+    CREATE TABLE IF NOT EXISTS app_schema (
+      id INTEGER PRIMARY KEY,
+      version VARCHAR(64) NOT NULL,
+      applied_at TIMESTAMPTZ DEFAULT now()
+    );
+    ALTER TABLE app_schema ENABLE ROW LEVEL SECURITY;
+
     -- Haversine Distance Function
     CREATE OR REPLACE FUNCTION calculate_distance(lat1 FLOAT, lon1 FLOAT, lat2 FLOAT, lon2 FLOAT)
     RETURNS FLOAT AS $$
@@ -230,13 +239,38 @@ const initDb = async () => {
     $$ LANGUAGE plpgsql;
   `;
 
+  // Every serverless cold start calls this. Its ALTER TABLEs lock whole tables,
+  // so running them on each start stalled the first requests (the admin
+  // dashboard sat on "Loading…"). Now the DDL only runs when the schema text
+  // changes, only one instance runs it at a time, and it gives up rather than
+  // wait long for a lock (the next cold start tries again).
+  const version = createHash('sha256').update(schemaQuery).digest('hex').slice(0, 16);
+  let client;
   try {
-    const client = await pool.connect();
+    client = await pool.connect();
+    const applied = await client.query('SELECT version FROM app_schema WHERE id = 1').catch(() => null);
+    if (applied?.rows[0]?.version === version) return;
+
+    await client.query('BEGIN');
+    await client.query("SET LOCAL lock_timeout = '5s'");
+    const { rows } = await client.query('SELECT pg_try_advisory_xact_lock(724724) AS locked');
+    if (!rows[0]?.locked) {
+      await client.query('ROLLBACK'); // another instance is applying it right now
+      return;
+    }
     await client.query(schemaQuery);
-    client.release();
+    await client.query(
+      `INSERT INTO app_schema (id, version) VALUES (1, $1)
+       ON CONFLICT (id) DO UPDATE SET version = EXCLUDED.version, applied_at = now()`,
+      [version]
+    );
+    await client.query('COMMIT');
     if (process.env.NODE_ENV !== 'production') console.log('[DB] Schema initialized.');
   } catch (err: any) {
+    await client?.query('ROLLBACK').catch(() => { });
     console.error('[DB] Initialization failed:', err.message);
+  } finally {
+    client?.release();
   }
 };
 
