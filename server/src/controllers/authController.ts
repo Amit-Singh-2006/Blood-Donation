@@ -3,7 +3,8 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { createHash, timingSafeEqual } from 'crypto';
 import pool, { query } from '../config/db';
-import { authCookieOptions } from '../utils/authCookie';
+import { LEGACY_SESSION_COOKIE, SESSION_ROLES, authCookieOptions, isSessionRole, sessionCookieName } from '../utils/authCookie';
+import { requestedRole } from '../middleware/session';
 import { enrolDonor } from '../services/donorNetwork';
 import { hashInviteCode, inviteStatus, normalizeInviteCode } from '../utils/adminInvites';
 import { describeScope } from '../utils/jurisdiction';
@@ -33,8 +34,11 @@ const issueSession = (res: Response, user: { id: number; email: string; role: st
         process.env.JWT_SECRET as string,
         { expiresIn: '30m' }
     );
-    // HttpOnly cookie → prevents JavaScript/XSS from stealing the token
-    res.cookie('token', token, { ...authCookieOptions(), maxAge: JWT_EXPIRY_MS });
+    // HttpOnly cookie → prevents JavaScript/XSS from stealing the token. One per
+    // account type, so signing in as a donor leaves a hospital session alone.
+    if (!isSessionRole(user.role)) throw new Error(`Unknown role ${user.role}`);
+    res.cookie(sessionCookieName(user.role), token, { ...authCookieOptions(), maxAge: JWT_EXPIRY_MS });
+    res.clearCookie(LEGACY_SESSION_COOKIE, authCookieOptions());
 };
 
 const INVITE_PROBLEM: Record<string, string> = {
@@ -337,13 +341,15 @@ export const login = async (req: Request, res: Response) => {
  *  – Session Hijacking: clearing HttpOnly cookie ends the session
  */
 export const logout = async (req: Request, res: Response) => {
-    const token = req.cookies?.token;
+    // Sign out of the account the page acts as; with no role, sign out of all
+    const role = requestedRole(req);
+    const names = [...(role ? [role] : SESSION_ROLES).map(sessionCookieName), LEGACY_SESSION_COOKIE];
 
-    if (token) {
+    for (const name of names) {
+        const token = req.cookies?.[name];
         // Add to blacklist so it cannot be replayed even before it naturally expires
-        blacklistToken(token, JWT_EXPIRY_MS);
+        if (token) blacklistToken(token, JWT_EXPIRY_MS);
+        res.clearCookie(name, authCookieOptions());
     }
-
-    res.clearCookie('token', authCookieOptions());
     res.json({ message: 'Logged out successfully' });
 };

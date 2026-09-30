@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { signOut } from '@/lib/auth';
+import { DASHBOARD, ROLE_LABEL, Role, getUser, signedInUsers } from '@/lib/session';
 
 export default function Layout() {
   const [showProfile, setShowProfile] = useState(false);
@@ -9,15 +10,16 @@ export default function Layout() {
   const profileRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
+  // The donor pages use the donor account; the shared pages list every
+  // account signed in on this browser
   const [user, setUser] = useState<any>(null);
+  const [accounts, setAccounts] = useState<any[]>([]);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
+    setUser(getUser('donor'));
+    setAccounts(signedInUsers());
     setMenuOpen(false);
-  }, [location.pathname]); // Update when navigating in case user changes
+  }, [location.pathname]); // Update when navigating in case accounts change
 
   const hideNav = ['/', '/login', '/register-donor', '/register-hospital', '/register-admin', '/how-it-works', '/emergency-network', '/impact-reports', '/privacy', '/terms', '/partnership', '/support', '/track'].includes(location.pathname)
     || location.pathname.startsWith('/track/');
@@ -39,10 +41,12 @@ export default function Layout() {
     };
   }, []);
 
+  // Donor pages sign out the donor only; the shared pages sign out every account
   const handleSignOut = async () => {
     setShowProfile(false);
-    await signOut();
+    await signOut(isDonorLayout ? 'donor' : null);
     setUser(null);
+    setAccounts(isDonorLayout ? signedInUsers() : []);
     navigate('/login');
   };
 
@@ -68,41 +72,36 @@ export default function Layout() {
 
           <nav className="flex-1 px-4 space-y-2 mt-4">
             {/* Links follow the signed-in role; the dashboards themselves check access */}
-            {user?.role === 'admin' ? (
-              <NavLink to="/admin" icon="dashboard" label="Admin Dashboard" />
-            ) : user?.role === 'hospital' ? (
-              <NavLink to="/hospital" icon="dashboard" label="Hospital Dashboard" />
-            ) : user?.role === 'donor' ? (
-              <NavLink to="/donor" icon="dashboard" label="My Dashboard" />
-            ) : (
-              <NavLink to="/" icon="home" label="Home" />
-            )}
+            {accounts.length === 0 && <NavLink to="/" icon="home" label="Home" />}
+            {accounts.map((a) => (
+              <NavLink key={a.role} to={DASHBOARD[a.role as Role]} icon="dashboard" label={a.role === 'donor' ? 'My Dashboard' : `${ROLE_LABEL[a.role as Role]} Dashboard`} />
+            ))}
             <NavLink to="/analytics" icon="analytics" label="Network Analytics" />
             <NavLink to="/track" icon="map" label="Track a Request" />
           </nav>
 
           <div className="p-4 border-t border-slate-100">
-            {user ? (
+            {accounts.length > 0 ? (
               <>
-                <div className="flex items-center gap-3 px-2 mb-4">
-                  <div className="w-10 h-10 rounded-full bg-[#ee2b2b]/10 flex items-center justify-center overflow-hidden">
-                    <span className="material-symbols-outlined text-[#ee2b2b]">person</span>
-                  </div>
-                  <div className="overflow-hidden">
-                    <p className="text-sm font-bold truncate">
-                      {user?.name || user?.email?.split('@')[0] || 'User'}
-                    </p>
-                    <p className="text-xs text-slate-500 truncate capitalize">
-                      {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : 'User'}
-                    </p>
-                  </div>
+                <div className="space-y-3 px-2 mb-4">
+                  {accounts.map((a) => (
+                    <div key={a.role} className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full bg-[#ee2b2b]/10 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[#ee2b2b] text-lg">person</span>
+                      </div>
+                      <div className="overflow-hidden">
+                        <p className="text-sm font-bold truncate">{a.name || a.email?.split('@')[0] || 'User'}</p>
+                        <p className="text-xs text-slate-500 truncate">{ROLE_LABEL[a.role as Role]}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
                 <button
                   onClick={handleSignOut}
                   className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-slate-200 text-sm font-semibold hover:bg-slate-50 transition-colors"
                 >
                   <span className="material-symbols-outlined text-lg">logout</span>
-                  Sign Out
+                  {accounts.length > 1 ? 'Sign out of all' : 'Sign Out'}
                 </button>
               </>
             ) : (

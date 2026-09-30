@@ -148,7 +148,8 @@ const views = wanted.map(({ request_id, hospital_token }) => {
   const own = matches.filter((m) => m.request_id === req.id);
   const alerted = own.filter((m) => m.notified_at);
   const lastAlert = alerted.map((m) => m.notified_at).sort().pop();
-  const active = ['Open', 'Fulfilled'].includes(req.status);
+  // Anything not finished can be cancelled, including a search that ran out of donors
+  const cancellable = !['Completed', 'Cancelled'].includes(req.status);
   const link = (m, action) => BASE + '?m=' + m.id + '&h=' + req.hospital_token + '&a=' + action;
 
   const confirmed = own
@@ -190,7 +191,7 @@ const views = wanted.map(({ request_id, hospital_token }) => {
     donors_on_standby: count(own, 'queued'),
     next_check_at: req.status === 'Open' && lastAlert ? new Date(time(lastAlert) + (req.escalation_minutes ?? 10) * 60000).toISOString() : null,
     tracking_token: req.status_token,
-    cancel_url: active ? BASE + '?r=' + req.id + '&h=' + req.hospital_token + '&a=cancel' : null,
+    cancel_url: cancellable ? BASE + '?r=' + req.id + '&h=' + req.hospital_token + '&a=cancel' : null,
     donors: confirmed,
   };
 });

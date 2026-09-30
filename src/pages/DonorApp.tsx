@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import AgentChat from '../components/AgentChat';
 import { apiFetch } from '../lib/api';
+import { getUser } from '../lib/session';
 import { EMERGENCY } from '../lib/contact';
 
 /** A blood request the donor was alerted to, from GET /donor/network. */
@@ -135,10 +136,7 @@ export default function DonorApp() {
   const [donations, setDonations] = useState<any[]>([]);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) {
-      setUser(JSON.parse(savedUser));
-    }
+    setUser(getUser('donor'));
     fetchDonations();
     fetchNetwork();
   }, []);

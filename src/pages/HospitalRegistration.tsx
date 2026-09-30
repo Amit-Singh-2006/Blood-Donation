@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
+import { saveUser } from '../lib/session';
 import { PASSWORD_RULES, passwordProblems } from '../lib/password';
 import { INDIAN_STATES, PIN_CODE } from '../lib/india';
 
@@ -135,7 +136,7 @@ export default function HospitalRegistration() {
           ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : {}),
         }),
       });
-      localStorage.setItem('user', JSON.stringify(user));
+      saveUser(user);
       navigate('/hospital', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please try again.');

@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
+import { sessionToken } from './session';
 
 dotenv.config();
 
@@ -13,7 +14,8 @@ export interface AuthRequest extends Request {
 }
 
 export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
-    const token = req.cookies?.token || req.header('Authorization')?.split(' ')[1]; // fallback for legacy clients if needed
+    // The cookie for the account this page acts as (see middleware/session)
+    const token = sessionToken(req);
 
     if (!token) {
         return res.status(401).json({ message: 'No token, authorization denied' });

@@ -4,8 +4,10 @@ process.env.DATABASE_URL = 'postgres://test:test@127.0.0.1:1/test';
 process.env.NODE_ENV = 'production'; // silences db.ts connection-error logging
 
 export const fakeRes = () => {
-    const res: any = { statusCode: 200, body: undefined };
+    const res: any = { statusCode: 200, body: undefined, cookies: {} as Record<string, string>, cleared: [] as string[] };
     res.status = (code: number) => { res.statusCode = code; return res; };
     res.json = (body: unknown) => { res.body = body; return res; };
+    res.cookie = (name: string, value: string) => { res.cookies[name] = value; return res; };
+    res.clearCookie = (name: string) => { res.cleared.push(name); return res; };
     return res;
 };

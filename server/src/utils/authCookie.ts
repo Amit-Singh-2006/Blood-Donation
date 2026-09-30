@@ -21,3 +21,20 @@ export const authCookieOptions = (): CookieOptions => {
         path: '/',
     };
 };
+
+/**
+ * One browser can be signed in as an admin, a hospital and a donor at the same
+ * time: each account type has its own session cookie. Before, a single cookie
+ * meant registering a donor in one tab silently turned the hospital tab's
+ * session into the donor's ("Access denied: insufficient permissions").
+ */
+export const SESSION_ROLES = ['admin', 'hospital', 'donor'] as const;
+export type SessionRole = typeof SESSION_ROLES[number];
+
+export const isSessionRole = (value: unknown): value is SessionRole =>
+    typeof value === 'string' && (SESSION_ROLES as readonly string[]).includes(value);
+
+export const sessionCookieName = (role: SessionRole) => `ll_${role}`;
+
+/** The cookie that held the one-per-browser session before per-role cookies. */
+export const LEGACY_SESSION_COOKIE = 'token';

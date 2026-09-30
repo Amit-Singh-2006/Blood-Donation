@@ -20,6 +20,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from './authMiddleware';
 import { authCookieOptions } from '../utils/authCookie';
+import { sessionToken } from './session';
 
 // ─────────────────────────────────────────────
 // 🔐  TOKEN REPLAY / JWT BLACKLIST
@@ -55,7 +56,7 @@ setInterval(() => {
  * Prevents TOKEN REPLAY ATTACKS where a stolen JWT is reused after logout.
  */
 export const checkTokenBlacklist = (req: AuthRequest, res: Response, next: NextFunction): void => {
-    const token = req.cookies?.token || req.header('Authorization')?.split(' ')[1];
+    const token = sessionToken(req);
     if (token && jwtBlacklist.has(token)) {
         res.status(401).json({ message: 'Token has been revoked. Please log in again.' });
         return;
@@ -414,9 +415,8 @@ export const forcedBrowsingGuard = (req: Request, res: Response, next: NextFunct
     // Always allow explicitly public paths
     if (PUBLIC_PATHS.includes(req.path)) { next(); return; }
 
-    const cookieToken = (req as any).cookies?.token;
-    const authHeader = req.header('Authorization');
-    const hasToken = !!cookieToken || !!authHeader;
+    // The session for the account this path belongs to (see middleware/session)
+    const hasToken = !!sessionToken(req);
 
     const isProtected = PROTECTED_PREFIXES.some(prefix => req.path.startsWith(prefix));
 

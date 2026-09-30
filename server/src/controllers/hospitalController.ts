@@ -144,6 +144,35 @@ export const getHospitalRequests = async (req: AuthRequest, res: Response) => {
     }
 };
 
+// PUT /hospital/requests/:id/cancel: closes a request that never reached the
+// donor network. Requests on the network are cancelled through the network's
+// own link instead, which also stands down every donor it alerted.
+export const cancelHospitalRequest = async (req: AuthRequest, res: Response) => {
+    const requestId = Number(req.params.id);
+    if (!Number.isInteger(requestId) || requestId <= 0) {
+        return res.status(400).json({ message: 'Invalid request id.' });
+    }
+    try {
+        const { rows } = await query(
+            'SELECT id, status, network_request_id FROM blood_requests WHERE id = $1 AND hospital_id = $2',
+            [requestId, req.user?.id]
+        );
+        const request = rows[0];
+        if (!request) return res.status(404).json({ message: 'Request not found.' });
+        if (['Completed', 'Cancelled'].includes(request.status)) {
+            return res.status(409).json({ message: `This request is already ${request.status.toLowerCase()}.` });
+        }
+        if (request.network_request_id) {
+            return res.status(409).json({ message: 'This request is live on the donor network. Cancel it from its card so alerted donors are told to stand down.' });
+        }
+        const updated = await query(`UPDATE blood_requests SET status = 'Cancelled' WHERE id = $1 RETURNING *`, [requestId]);
+        res.json(publicRequest(updated.rows[0]));
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+};
+
 // POST /hospital/requests: saves the request and dispatches it to the donor network
 export const createHospitalRequest = async (req: AuthRequest, res: Response) => {
     const hospitalId = req.user?.id;

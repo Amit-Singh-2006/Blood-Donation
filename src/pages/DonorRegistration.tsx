@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { User, Phone, Mail, MapPin, Droplets, Calendar, CheckCircle2, ArrowRight, Lock, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '../lib/api';
+import { saveUser } from '../lib/session';
 
 type Step = 'personal' | 'medical' | 'contact' | 'location';
 
@@ -45,7 +46,7 @@ export default function DonorRegistration() {
         }),
       });
 
-      localStorage.setItem('user', JSON.stringify(response.user));
+      saveUser(response.user);
 
       setIsSuccess(true);
       setTimeout(() => {

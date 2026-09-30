@@ -6,6 +6,7 @@ import autoTable from 'jspdf-autotable';
 import { cn } from '../lib/utils';
 import { apiFetch } from '../lib/api';
 import { signOut } from '../lib/auth';
+import { getUser } from '../lib/session';
 import { NetworkAnalytics, RequestStatus, fetchRequestStatus, formatMinutes, useNetworkAnalytics } from '../lib/network';
 import Analytics from './Analytics';
 import { INDIAN_STATES } from '../lib/india';
@@ -60,8 +61,7 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) setUser(JSON.parse(savedUser));
+    setUser(getUser('admin'));
     loadOverview();
     apiFetch('/admin/me').then(setMe).catch(() => setMe(null));
   }, [loadOverview]);
@@ -77,7 +77,7 @@ export default function AdminDashboard() {
   }, [location.pathname]);
 
   const handleSignOut = async () => {
-    await signOut();
+    await signOut('admin'); // other accounts on this browser stay signed in
     navigate('/login');
   };
 

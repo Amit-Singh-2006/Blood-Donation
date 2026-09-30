@@ -1,26 +1,21 @@
 import React from 'react';
 import { Navigate, Outlet } from 'react-router-dom';
+import { Role, getUser } from '../lib/session';
 
 interface ProtectedRouteProps {
-    allowedRoles?: ('donor' | 'hospital' | 'admin')[];
+    allowedRoles: Role[];
 }
 
+/**
+ * Opens a dashboard only when this browser is signed in to that kind of
+ * account. Being signed in as another kind (say, an admin opening /hospital)
+ * leads to sign-in for this one, not away to the other dashboard.
+ */
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) => {
-    const userStr = localStorage.getItem('user');
-    const user = userStr ? JSON.parse(userStr) : null;
-
-    if (!user) {
-        return <Navigate to="/login" replace />;
+    const signedIn = allowedRoles.some((role) => getUser(role));
+    if (!signedIn) {
+        return <Navigate to={`/login?as=${allowedRoles[0]}`} replace />;
     }
-
-    if (allowedRoles && !allowedRoles.includes(user.role)) {
-        // Redirect to their respective dashboard if they try to access a route they don't have access to
-        if (user.role === 'donor') return <Navigate to="/donor" replace />;
-        if (user.role === 'hospital') return <Navigate to="/hospital" replace />;
-        if (user.role === 'admin') return <Navigate to="/admin" replace />;
-        return <Navigate to="/login" replace />;
-    }
-
     return <Outlet />;
 };
 

@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { apiFetch } from '../lib/api';
-
-const DASHBOARD: Record<string, string> = { donor: '/donor', hospital: '/hospital', admin: '/admin' };
+import { DASHBOARD, ROLES, ROLE_LABEL, Role, saveUser, signedInUsers } from '../lib/session';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -11,9 +10,13 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const params = new URLSearchParams(window.location.search);
+  // Sent here to open a dashboard this browser isn't signed in to yet
+  const asRole = (ROLES as string[]).includes(params.get('as') ?? '') ? (params.get('as') as Role) : null;
   const [error, setError] = useState<string | null>(() =>
-    new URLSearchParams(window.location.search).get('expired') ? 'Your session expired. Please sign in again.' : null
+    params.get('expired') ? `Your${asRole ? ` ${ROLE_LABEL[asRole].toLowerCase()}` : ''} session expired. Please sign in again.` : null
   );
+  const accounts = signedInUsers();
 
   // One form for everyone: the account itself says whether it is a donor,
   // hospital or admin, so there is no role to pick (and none to get wrong)
@@ -26,8 +29,8 @@ export default function Login() {
         method: 'POST',
         body: JSON.stringify({ email: email.trim(), password }),
       });
-      localStorage.setItem('user', JSON.stringify(user));
-      navigate(DASHBOARD[user.role] ?? '/', { replace: true });
+      saveUser(user);
+      navigate(DASHBOARD[user.role as Role] ?? '/', { replace: true });
     } catch (err: any) {
       setError(err.message === 'Invalid credentials' ? 'That email and password do not match an account.' : err.message || 'Sign-in failed. Please try again.');
     } finally {
@@ -61,8 +64,23 @@ export default function Login() {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-110 space-y-6">
           <div className="text-center space-y-2">
             <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900">Sign in</h2>
-            <p className="text-slate-500 font-medium">For donors, hospitals and LifeLink admins.</p>
+            <p className="text-slate-500 font-medium">
+              {asRole && !error ? `Sign in with your ${ROLE_LABEL[asRole].toLowerCase()} account to open the ${ROLE_LABEL[asRole].toLowerCase()} dashboard.` : 'For donors, hospitals and LifeLink admins.'}
+            </p>
           </div>
+
+          {accounts.length > 0 && (
+            <div className="bg-white/70 rounded-2xl border border-slate-200 p-4 space-y-2">
+              <p className="text-xs font-black uppercase tracking-widest text-slate-400">Signed in on this browser</p>
+              {accounts.map((a) => (
+                <div key={a.role} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate"><strong className="text-slate-900">{ROLE_LABEL[a.role as Role]}</strong> <span className="text-slate-500">· {a.name || a.email}</span></span>
+                  <Link to={DASHBOARD[a.role as Role]} className="shrink-0 text-xs font-black text-[#ee2b2b] hover:underline">Open dashboard →</Link>
+                </div>
+              ))}
+              <p className="text-[11px] text-slate-500">You can be signed in as an admin, a hospital and a donor at the same time.</p>
+            </div>
+          )}
 
           <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 space-y-5 shadow-[0_10px_25px_-5px_rgba(242,13,13,0.05)]">
             {error && (

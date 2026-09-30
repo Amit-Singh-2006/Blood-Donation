@@ -6,6 +6,7 @@ import AgentChat from '../components/AgentChat';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '../lib/api';
 import { signOut } from '../lib/auth';
+import { getUser } from '../lib/session';
 import { useNetworkAnalytics } from '../lib/network';
 import { EMERGENCY } from '../lib/contact';
 
@@ -141,8 +142,7 @@ export default function HospitalDashboard() {
   }, [loadRequests]);
 
   useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) setUser(JSON.parse(savedUser));
+    setUser(getUser('hospital'));
 
     function handleClickOutside(event: MouseEvent) {
       if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
@@ -186,7 +186,7 @@ export default function HospitalDashboard() {
   };
 
   const handleSignOut = async () => {
-    await signOut();
+    await signOut('hospital'); // other accounts on this browser stay signed in
     navigate('/login');
   };
 
@@ -744,6 +744,12 @@ function RequestCard({ req, open, onToggle, onRefresh }: { req: HospitalRequest;
   const live = req.live;
   const meta = STATUS_META[req.status] ?? { label: req.status, tone: 'bg-slate-100 text-slate-600' };
   const pct = live ? Math.min(100, Math.round((live.units_confirmed / Math.max(1, req.units_required)) * 100)) : 0;
+  const closed = ['Completed', 'Cancelled'].includes(req.status);
+  // Requests on the network are cancelled through its own link, which also tells
+  // every alerted donor to stand down; requests that never reached it close here
+  const neverSent = !req.tracking_token && !live;
+  const canCancel = !closed && (!!live?.cancel_url || neverSent);
+  const networkDown = !closed && !!req.tracking_token && !live;
 
   // The same one-tap links the network sends to hospital staff; format=json returns the outcome
   const act = async (key: string, url: string, confirmText?: string) => {
@@ -755,6 +761,22 @@ function RequestCard({ req, open, onToggle, onRefresh }: { req: HospitalRequest;
       setNotice({ ok: res.ok, text: `${outcome.title}. ${outcome.message}` });
     } catch {
       setNotice({ ok: false, text: 'The donor network could not be reached. Please try again.' });
+    } finally {
+      setBusy(null);
+      await onRefresh().catch(() => { });
+    }
+  };
+
+  const cancelRequest = async () => {
+    const question = `Cancel request #${req.id}?${live ? ' Every donor alerted for it will be told they are no longer needed.' : ''}`;
+    if (live?.cancel_url) return act('cancel', live.cancel_url, question);
+    if (!window.confirm(question)) return;
+    setBusy('cancel');
+    try {
+      await apiFetch(`/hospital/requests/${req.id}/cancel`, { method: 'PUT', body: JSON.stringify({}) });
+      setNotice({ ok: true, text: 'Request cancelled.' });
+    } catch (err: any) {
+      setNotice({ ok: false, text: err.message || 'Could not cancel the request.' });
     } finally {
       setBusy(null);
       await onRefresh().catch(() => { });
@@ -794,6 +816,24 @@ function RequestCard({ req, open, onToggle, onRefresh }: { req: HospitalRequest;
         <div className="border-t border-slate-100 p-6 space-y-5">
           {notice && (
             <div className={cn('rounded-xl p-3 text-sm font-medium border', notice.ok ? 'bg-green-50 border-green-200 text-green-800' : 'bg-amber-50 border-amber-200 text-amber-800')}>{notice.text}</div>
+          )}
+
+          {(canCancel || networkDown) && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+              <p className="text-xs text-slate-500">
+                {canCancel ? 'Got the blood elsewhere, or no longer needed? Cancel so no more donors are alerted.' : 'The donor network is unreachable right now, so this request cannot be cancelled yet. Try again shortly.'}
+              </p>
+              {canCancel && (
+                <button
+                  disabled={!!busy}
+                  onClick={cancelRequest}
+                  className="shrink-0 px-4 py-2 rounded-lg border border-red-200 bg-white text-xs font-black text-[#ee2b2b] hover:bg-red-50 disabled:opacity-50 flex items-center justify-center gap-1"
+                >
+                  <span className="material-symbols-outlined text-sm">cancel</span>
+                  {busy === 'cancel' ? 'Cancelling…' : 'Cancel request'}
+                </button>
+              )}
+            </div>
           )}
 
           {!live ? (
@@ -867,15 +907,6 @@ function RequestCard({ req, open, onToggle, onRefresh }: { req: HospitalRequest;
                 )}
               </div>
 
-              {live.cancel_url && (
-                <button
-                  disabled={!!busy}
-                  onClick={() => act('cancel', live.cancel_url!, `Cancel request #${req.id}? All alerted donors will be told they are no longer needed.`)}
-                  className="text-xs font-black text-slate-500 hover:text-[#ee2b2b] disabled:opacity-50"
-                >
-                  {busy === 'cancel' ? 'Cancelling…' : 'Cancel this request'}
-                </button>
-              )}
             </>
           )}
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiFetch } from '../lib/api';
+import { saveUser } from '../lib/session';
 import { PASSWORD_RULES, passwordProblems } from '../lib/password';
 
 interface InviteCheck {
@@ -75,7 +76,7 @@ export default function AdminRegistration() {
         method: 'POST',
         body: JSON.stringify({ name: name.trim(), email: email.trim(), password, role: 'admin', admin_invite_code: code.trim() }),
       });
-      localStorage.setItem('user', JSON.stringify(user));
+      saveUser(user);
       navigate('/admin', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please try again.');

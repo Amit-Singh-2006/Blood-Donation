@@ -4,6 +4,7 @@ import {
     getHospitalInventory,
     getHospitalRequests,
     createHospitalRequest,
+    cancelHospitalRequest,
     updateHospitalInventory,
     verifyDonation,
     getPotentialDonors,
@@ -59,6 +60,9 @@ router.put(
     validateRequest(updateHospitalInventorySchema),
     updateHospitalInventory
 );
+
+// Only for requests that never reached the donor network (see the controller)
+router.put('/requests/:id/cancel', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), massAssignmentGuard([]), cancelHospitalRequest);
 
 router.post(
     '/verify-donation',
