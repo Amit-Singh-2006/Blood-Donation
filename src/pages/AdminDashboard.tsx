@@ -6,7 +6,7 @@ import autoTable from 'jspdf-autotable';
 import { cn } from '../lib/utils';
 import { apiFetch } from '../lib/api';
 import { signOut } from '../lib/auth';
-import { NetworkAnalytics, formatMinutes, useNetworkAnalytics } from '../lib/network';
+import { NetworkAnalytics, RequestStatus, fetchRequestStatus, formatMinutes, useNetworkAnalytics } from '../lib/network';
 import Analytics from './Analytics';
 import { INDIAN_STATES } from '../lib/india';
 
@@ -47,7 +47,8 @@ export default function AdminDashboard() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [overviewError, setOverviewError] = useState('');
   const [me, setMe] = useState<AdminMe | null>(null);
-  const { data: network } = useNetworkAnalytics();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { data: network, error: networkError } = useNetworkAnalytics();
 
   const loadOverview = useCallback(async () => {
     try {
@@ -67,6 +68,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     if (location.pathname.includes('/hospitals')) setActiveTab('hospitals');
+    else if (location.pathname.includes('/requests')) setActiveTab('requests');
     else if (location.pathname.includes('/donors')) setActiveTab('donors');
     else if (location.pathname.includes('/analytics')) setActiveTab('analytics');
     else if (location.pathname.includes('/settings')) setActiveTab('settings');
@@ -82,6 +84,7 @@ export default function AdminDashboard() {
   const navItems = [
     { id: 'overview', label: 'Network Health', icon: 'dashboard' },
     { id: 'hospitals', label: 'Hospitals', icon: 'local_hospital' },
+    { id: 'requests', label: 'Requests', icon: 'emergency' },
     { id: 'donors', label: 'Donors', icon: 'group' },
     { id: 'analytics', label: 'Analytics', icon: 'monitoring' },
     ...(me?.is_national ? [{ id: 'admins', label: 'Admins', icon: 'manage_accounts' }] : []),
@@ -93,7 +96,7 @@ export default function AdminDashboard() {
   const pendingHospitals = overview ? overview.hospitals - overview.hospitals_verified : 0;
   const notifications = [
     pendingHospitals > 0 && { id: 'pending', title: `${pendingHospitals} hospital(s) awaiting verification`, msg: 'They cannot alert donors until you verify them.', tab: 'hospitals' },
-    overview && overview.requests_not_dispatched > 0 && { id: 'dispatch', title: `${overview.requests_not_dispatched} request(s) never reached the network`, msg: 'The donor network was unreachable or rejected them when they were raised.', tab: 'overview' },
+    overview && overview.requests_not_dispatched > 0 && { id: 'dispatch', title: `${overview.requests_not_dispatched} request(s) never reached the network`, msg: 'The donor network was unreachable or rejected them when they were raised.', tab: 'requests' },
     overview && !overview.network_configured && { id: 'network', title: 'Donor network not configured', msg: 'Set N8N_WEBHOOK_KEY on the backend so requests can alert donors.', tab: 'settings' },
     shortages.length > 0 && { id: 'shortage', title: `No eligible donors for ${shortages.join(', ')}`, msg: 'Consider a donor recruitment drive for these groups.', tab: 'analytics' },
   ].filter(Boolean) as { id: string; title: string; msg: string; tab: string }[];
@@ -109,11 +112,19 @@ export default function AdminDashboard() {
   };
 
   const displayName = me?.name || user?.name || user?.email?.split('@')[0] || 'Administrator';
+  const goTo = (tab: string) => { setActiveTab(tab); setMenuOpen(false); };
 
   return (
     <div className="flex min-h-screen bg-[#f8f6f6] overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col z-30">
+      {/* Phones and tablets: the sidebar slides in over the page */}
+      {menuOpen && <div className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
+      <aside className={cn(
+        'fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 flex flex-col overflow-y-auto transition-transform duration-200 lg:static lg:translate-x-0',
+        menuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
+      )}>
+        <button onClick={() => setMenuOpen(false)} aria-label="Close menu" className="lg:hidden absolute top-4 right-4 w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100">
+          <span className="material-symbols-outlined">close</span>
+        </button>
         <div className="p-8 pb-4">
           <div className="flex items-center gap-2 mb-8">
             <div className="w-10 h-10 bg-slate-900 rounded-xl flex items-center justify-center">
@@ -129,7 +140,7 @@ export default function AdminDashboard() {
             {navItems.map(item => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => goTo(item.id)}
                 className={cn(
                   'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all relative group',
                   activeTab === item.id ? 'bg-slate-900 shadow-lg shadow-slate-200 text-white' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
@@ -173,16 +184,21 @@ export default function AdminDashboard() {
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20 shrink-0">
-          <div>
-            <h1 className="text-xl font-black text-slate-900">{navItems.find((n) => n.id === activeTab)?.label}</h1>
-            {me && <p className="text-[11px] font-bold text-slate-500">Jurisdiction: {me.jurisdiction}</p>}
+      <main className="flex-1 min-w-0 flex flex-col h-screen overflow-hidden">
+        <header className="h-16 lg:h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 sticky top-0 z-20 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={() => setMenuOpen(true)} aria-label="Open menu" className="lg:hidden w-10 h-10 shrink-0 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
+              <span className="material-symbols-outlined">menu</span>
+            </button>
+            <div className="min-w-0">
+              <h1 className="text-lg lg:text-xl font-black text-slate-900 truncate">{navItems.find((n) => n.id === activeTab)?.label}</h1>
+              {me && <p className="text-[11px] font-bold text-slate-500 truncate">Jurisdiction: {me.jurisdiction}</p>}
+            </div>
           </div>
 
-          <div className="flex items-center gap-4 relative">
+          <div className="flex items-center gap-2 sm:gap-4 relative shrink-0">
             {showSearch && (
-              <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 240, opacity: 1 }} className="relative">
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute right-0 top-12 w-64 sm:static sm:w-60 z-30">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
                 <input
                   type="text"
@@ -211,7 +227,7 @@ export default function AdminDashboard() {
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 mt-3 w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-[100] overflow-hidden"
+                    className="absolute right-0 mt-3 w-[calc(100vw-2rem)] max-w-80 bg-white rounded-2xl shadow-2xl border border-slate-200 z-[100] overflow-hidden"
                   >
                     <div className="p-4 border-b border-slate-100">
                       <h4 className="font-black text-slate-900 text-xs uppercase tracking-widest">Needs attention</h4>
@@ -220,7 +236,7 @@ export default function AdminDashboard() {
                       {notifications.length === 0 ? (
                         <p className="p-6 text-center text-xs text-slate-400 font-bold">Nothing needs attention right now.</p>
                       ) : notifications.map(n => (
-                        <button key={n.id} onClick={() => { setActiveTab(n.tab); setShowNotifications(false); }} className="w-full text-left p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0">
+                        <button key={n.id} onClick={() => { goTo(n.tab); setShowNotifications(false); }} className="w-full text-left p-4 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0">
                           <p className="font-bold text-slate-900 text-xs">{n.title}</p>
                           <p className="text-[10px] text-slate-500 font-medium mt-1">{n.msg}</p>
                         </button>
@@ -241,15 +257,16 @@ export default function AdminDashboard() {
             <button
               onClick={handleExportPDF}
               disabled={isExporting || !overview}
-              className="flex items-center gap-2 px-4 py-2.5 bg-[#ee2b2b] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#ee2b2b]/90 shadow-lg shadow-[#ee2b2b]/10 transition-all disabled:opacity-50"
+              aria-label="Download PDF report"
+              className="flex items-center gap-2 h-10 px-3 sm:px-4 bg-[#ee2b2b] text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#ee2b2b]/90 shadow-lg shadow-[#ee2b2b]/10 transition-all disabled:opacity-50"
             >
               <span className="material-symbols-outlined text-sm">{isExporting ? 'sync' : 'description'}</span>
-              <span>Report</span>
+              <span className="hidden sm:inline">Report</span>
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -262,10 +279,11 @@ export default function AdminDashboard() {
               {overviewError && activeTab === 'overview' && (
                 <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">{overviewError}</div>
               )}
-              {activeTab === 'overview' && <OverviewView overview={overview} network={network} onGo={setActiveTab} />}
+              {activeTab === 'overview' && <OverviewView overview={overview} network={network} networkError={networkError} isNational={!!me?.is_national} onGo={goTo} />}
               {activeTab === 'hospitals' && <HospitalsView initialSearch={searchQuery} onChange={loadOverview} />}
+              {activeTab === 'requests' && <RequestsView initialSearch={searchQuery} />}
               {activeTab === 'donors' && <DonorsView initialSearch={searchQuery} />}
-              {activeTab === 'analytics' && <div className="-m-8"><Analytics /></div>}
+              {activeTab === 'analytics' && <div className="-m-4 sm:-m-6 lg:-m-8"><Analytics /></div>}
               {activeTab === 'admins' && me?.is_national && <AdminsView meId={me.id} />}
               {activeTab === 'settings' && <SettingsView user={user} overview={overview} />}
             </motion.div>
@@ -351,19 +369,88 @@ function exportReport(overview: Overview | null, network: NetworkAnalytics | nul
   doc.save(`LifeLink-Network-Report-${new Date().toISOString().split('T')[0]}.pdf`);
 }
 
-function OverviewView({ overview, network, onGo }: { overview: Overview | null; network: NetworkAnalytics | null; onGo: (tab: string) => void }) {
+const STATUS_BADGE: Record<string, [string, string]> = {
+  Open: ['Finding donors', 'bg-amber-100 text-amber-800'],
+  Fulfilled: ['Donors on the way', 'bg-blue-100 text-blue-800'],
+  Completed: ['Completed', 'bg-green-100 text-green-800'],
+  Exhausted: ['No donors left', 'bg-red-100 text-red-800'],
+  Cancelled: ['Cancelled', 'bg-slate-200 text-slate-700'],
+};
+
+const timeAgo = (iso: string) => {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} h ago`;
+  return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+/** A request's badge: never-sent requests are flagged before anything else. */
+const requestBadge = (r: any, liveStatus?: string): [string, string] => {
+  if (!r.dispatched && r.network_error) return ['Not sent to donors', 'bg-red-600 text-white'];
+  const status = liveStatus ?? r.status;
+  return STATUS_BADGE[status] ?? [status, 'bg-slate-100 text-slate-600'];
+};
+
+const urgencyTone = (urgency: string) => urgency === 'Emergency' ? 'bg-[#ee2b2b]' : urgency === 'Urgent' ? 'bg-amber-500' : 'bg-slate-800';
+
+function RecentRequestRow({ r }: { r: any }) {
+  const [label, tone] = requestBadge(r);
+  return (
+    <div className="flex items-center gap-3 py-3">
+      <span className={cn('w-11 h-11 shrink-0 rounded-xl flex items-center justify-center text-xs font-black text-white', urgencyTone(r.urgency))}>{r.blood_group}</span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-slate-900 truncate">{r.hospital_name}</p>
+        <p className="text-xs text-slate-500 truncate">{r.units_required} unit(s) · {r.urgency} · {r.city} · {timeAgo(r.created_at)}</p>
+      </div>
+      <span className={cn('shrink-0 px-2 py-0.5 rounded-md text-[10px] font-black uppercase', tone)}>{label}</span>
+    </div>
+  );
+}
+
+function OverviewView({ overview, network, networkError, isNational, onGo }: {
+  overview: Overview | null;
+  network: NetworkAnalytics | null;
+  networkError: string;
+  isNational: boolean;
+  onGo: (tab: string) => void;
+}) {
+  const [recent, setRecent] = useState<any[] | null>(null);
+  const [pending, setPending] = useState<any[] | null>(null);
+
+  useEffect(() => {
+    apiFetch('/admin/requests?limit=6').then(setRecent).catch(() => setRecent([]));
+    apiFetch('/admin/hospitals').then((rows: any[]) => setPending(rows.filter((h) => !h.is_verified))).catch(() => setPending([]));
+  }, []);
+
+  const shortages = network ? BLOOD_TYPES.filter((g) => (network.donor_pool.by_blood_group[g]?.eligible_now ?? 0) === 0) : [];
+  const tasks = [
+    ...(pending ?? []).slice(0, 3).map((h) => ({
+      key: `h${h.id}`, icon: 'local_hospital', title: `Verify ${h.hospital_name}`,
+      text: `${[h.city, h.state].filter(Boolean).join(', ')} · registration no. ${h.registration_number || 'not given'}`,
+      action: 'Review', tab: 'hospitals',
+    })),
+    (pending?.length ?? 0) > 3 && { key: 'more', icon: 'more_horiz', title: `${pending!.length - 3} more hospitals awaiting verification`, text: 'Only verified hospitals can alert donors.', action: 'Open', tab: 'hospitals' },
+    overview && overview.requests_not_dispatched > 0 && { key: 'dispatch', icon: 'error', title: `${overview.requests_not_dispatched} request(s) never reached donors`, text: 'The donor network was unreachable when they were raised. Contact the hospital.', action: 'See requests', tab: 'requests' },
+    overview && !overview.network_configured && { key: 'net', icon: 'cloud_off', title: 'Donor network not connected', text: 'Set N8N_WEBHOOK_KEY on the backend so requests can alert donors.', action: 'Settings', tab: 'settings' },
+    isNational && shortages.length > 0 && { key: 'short', icon: 'bloodtype', title: `No eligible donors right now for ${shortages.join(', ')}`, text: 'Requests for these groups rely on compatible groups. A recruitment drive would help.', action: 'Analytics', tab: 'analytics' },
+  ].filter(Boolean) as { key: string; icon: string; title: string; text: string; action: string; tab: string }[];
+
   const kpis = [
-    { label: 'Registered donors', value: overview?.donors, icon: 'group', tone: 'bg-blue-50 text-blue-600', note: network ? `${network.donor_pool.registered} on the donor network incl. SMS/USSD` : '' },
+    isNational
+      ? { label: 'Donors on the network', value: network?.donor_pool.registered ?? overview?.donors, icon: 'group', tone: 'bg-blue-50 text-blue-600', note: overview ? `${overview.donors} signed up on the website${network ? ` · ${network.donor_pool.eligible_now} eligible now` : ''}` : '' }
+      : { label: 'Donors in your cities', value: overview?.donors, icon: 'group', tone: 'bg-blue-50 text-blue-600', note: 'Signed up on the website' },
     { label: 'Verified hospitals', value: overview ? `${overview.hospitals_verified} / ${overview.hospitals}` : undefined, icon: 'local_hospital', tone: 'bg-green-50 text-green-600', note: overview && overview.hospitals > overview.hospitals_verified ? `${overview.hospitals - overview.hospitals_verified} awaiting verification` : 'None pending' },
     { label: 'Active requests', value: overview?.requests_active, icon: 'emergency', tone: 'bg-red-50 text-[#ee2b2b]', note: overview ? `${overview.requests} raised in total` : '' },
     { label: 'Donations (30 days)', value: overview?.donations_30d, icon: 'volunteer_activism', tone: 'bg-amber-50 text-amber-600', note: overview ? `${overview.donations} recorded in total` : '' },
   ];
 
   return (
-    <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 lg:gap-6">
         {kpis.map((k) => (
-          <div key={k.label} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+          <div key={k.label} className="bg-white rounded-2xl p-5 lg:p-6 border border-slate-200 shadow-sm">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-4 ${k.tone}`}>
               <span className="material-symbols-outlined">{k.icon}</span>
             </div>
@@ -375,54 +462,212 @@ function OverviewView({ overview, network, onGo }: { overview: Overview | null; 
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
-          <h4 className="font-black text-slate-900 mb-1">Request outcomes</h4>
-          <p className="text-xs text-slate-500 mb-6">Requests raised from hospital dashboards</p>
-          {overview && overview.requests > 0 ? (
-            <div className="space-y-4">
-              {([
-                ['Active (finding donors or donors on the way)', overview.requests_active, 'bg-amber-400'],
-                ['Completed (blood donated)', overview.requests_completed, 'bg-green-500'],
-                ['No donors left', overview.requests_exhausted, 'bg-red-500'],
-                ['Never reached the network', overview.requests_not_dispatched, 'bg-slate-400'],
-              ] as [string, number, string][]).map(([label, value, color]) => (
-                <div key={label}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="text-slate-600">{label}</span>
-                    <span className="font-bold text-slate-900">{value}</span>
-                  </div>
-                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${color}`} style={{ width: `${(value / overview.requests) * 100}%` }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-slate-400">{overview ? 'No requests have been raised yet.' : 'Loading…'}</p>
-          )}
-        </div>
-
-        <div className="bg-slate-900 rounded-2xl p-6 text-white">
-          <p className="text-[10px] font-black text-[#ee2b2b] uppercase tracking-[0.2em] mb-3">Donor network now</p>
-          {network ? (
-            <>
-              <p className="text-3xl font-black">{network.donor_pool.eligible_now}</p>
-              <p className="text-sm text-slate-400 mb-4">donors eligible to donate right now</p>
-              <div className="grid grid-cols-4 gap-2">
-                {BLOOD_TYPES.map((g) => (
-                  <div key={g} className="bg-white/5 rounded-lg p-2 text-center">
-                    <p className="text-[10px] font-black text-slate-400">{g}</p>
-                    <p className="font-black">{network.donor_pool.by_blood_group[g]?.eligible_now ?? 0}</p>
+        <div className="lg:col-span-2 space-y-6">
+          <section className="bg-white rounded-2xl p-5 lg:p-6 border border-slate-200 shadow-sm">
+            <h4 className="font-black text-slate-900 mb-1">Needs your attention</h4>
+            <p className="text-xs text-slate-500 mb-4">Things only an admin can move forward</p>
+            {pending === null ? (
+              <p className="text-sm text-slate-400">Loading…</p>
+            ) : tasks.length === 0 ? (
+              <div className="flex items-center gap-3 p-4 rounded-xl bg-green-50 border border-green-100 text-sm text-green-900">
+                <span className="material-symbols-outlined">task_alt</span>
+                All clear. New hospital registrations and delivery problems will appear here.
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {tasks.map((t) => (
+                  <div key={t.key} className="flex items-center gap-3 py-3">
+                    <span className="w-9 h-9 shrink-0 rounded-lg bg-amber-50 text-amber-700 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-lg">{t.icon}</span>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-slate-900">{t.title}</p>
+                      {t.text && <p className="text-xs text-slate-500">{t.text}</p>}
+                    </div>
+                    <button onClick={() => onGo(t.tab)} className="shrink-0 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-bold hover:bg-slate-800">{t.action}</button>
                   </div>
                 ))}
               </div>
-              <button onClick={() => onGo('analytics')} className="mt-4 text-xs font-black text-[#ee2b2b] hover:underline">Full analytics →</button>
-            </>
-          ) : (
-            <p className="text-sm text-slate-400">Loading…</p>
-          )}
+            )}
+          </section>
+
+          <section className="bg-white rounded-2xl p-5 lg:p-6 border border-slate-200 shadow-sm">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <h4 className="font-black text-slate-900">Recent blood requests</h4>
+                <p className="text-xs text-slate-500">Raised by hospitals {isNational ? 'across India' : 'in your cities'}</p>
+              </div>
+              <button onClick={() => onGo('requests')} className="text-xs font-black text-[#ee2b2b] hover:underline shrink-0">View all →</button>
+            </div>
+            {recent === null ? (
+              <p className="text-sm text-slate-400 py-4">Loading…</p>
+            ) : recent.length === 0 ? (
+              <p className="text-sm text-slate-400 py-4">No requests yet. Hospitals raise them from their dashboard once you have verified them.</p>
+            ) : (
+              <div className="divide-y divide-slate-100">{recent.map((r) => <RecentRequestRow key={r.id} r={r} />)}</div>
+            )}
+          </section>
+        </div>
+
+        <div className="space-y-6">
+          <section className="bg-slate-900 rounded-2xl p-6 text-white">
+            <p className="text-[10px] font-black text-[#ee2b2b] uppercase tracking-[0.2em] mb-3">{isNational ? 'Donor network now' : 'Whole donor network now'}</p>
+            {network ? (
+              <>
+                <p className="text-3xl font-black">{network.donor_pool.eligible_now}</p>
+                <p className="text-sm text-slate-400 mb-4">donors eligible to donate right now</p>
+                <div className="grid grid-cols-4 gap-2">
+                  {BLOOD_TYPES.map((g) => (
+                    <div key={g} className="bg-white/5 rounded-lg p-2 text-center">
+                      <p className="text-[10px] font-black text-slate-400">{g}</p>
+                      <p className="font-black">{network.donor_pool.by_blood_group[g]?.eligible_now ?? 0}</p>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => onGo('analytics')} className="mt-4 text-xs font-black text-[#ee2b2b] hover:underline">Full analytics →</button>
+              </>
+            ) : (
+              <p className="text-sm text-slate-400">{networkError ? 'Live network figures are unavailable right now.' : 'Loading live network figures…'}</p>
+            )}
+          </section>
+
+          <section className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm">
+            <h4 className="font-black text-slate-900 mb-4">Request outcomes</h4>
+            {overview && overview.requests > 0 ? (
+              <div className="space-y-4">
+                {([
+                  ['Active', overview.requests_active, 'bg-amber-400'],
+                  ['Completed', overview.requests_completed, 'bg-green-500'],
+                  ['No donors left', overview.requests_exhausted, 'bg-red-500'],
+                  ['Never reached donors', overview.requests_not_dispatched, 'bg-slate-400'],
+                ] as [string, number, string][]).map(([label, value, color]) => (
+                  <div key={label}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-slate-600">{label}</span>
+                      <span className="font-bold text-slate-900">{value}</span>
+                    </div>
+                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${color}`} style={{ width: `${(value / overview.requests) * 100}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-400">{overview ? 'No requests yet.' : 'Loading…'}</p>
+            )}
+          </section>
         </div>
       </div>
+    </div>
+  );
+}
+
+const REQUEST_FILTERS: [string, string, (r: any) => boolean][] = [
+  ['all', 'All', () => true],
+  ['active', 'Active', (r) => ['Open', 'Fulfilled'].includes(r.status)],
+  ['completed', 'Completed', (r) => r.status === 'Completed'],
+  ['exhausted', 'No donors left', (r) => r.status === 'Exhausted'],
+  ['cancelled', 'Cancelled', (r) => r.status === 'Cancelled'],
+  ['failed', 'Not sent', (r) => !r.dispatched && !!r.network_error],
+];
+
+/** Every request in the admin's jurisdiction; active ones show live progress from the network. */
+function RequestsView({ initialSearch = '' }: { initialSearch?: string }) {
+  const [rows, setRows] = useState<any[]>([]);
+  const [live, setLive] = useState<Record<number, RequestStatus | null>>({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState(initialSearch);
+
+  useEffect(() => { setSearch(initialSearch); }, [initialSearch]);
+  useEffect(() => {
+    apiFetch('/admin/requests?limit=500')
+      .then((data: any[]) => {
+        setRows(data);
+        // Stored statuses only change when the hospital opens its dashboard, so
+        // ask the network directly for requests that may still be moving
+        data.filter((r) => ['Open', 'Fulfilled'].includes(r.status) && r.tracking_token).slice(0, 15).forEach((r) => {
+          fetchRequestStatus(r.tracking_token).then((s) => setLive((m) => ({ ...m, [r.id]: s }))).catch(() => { });
+        });
+      })
+      .catch((err) => setError(err.message || 'Could not load requests.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Live status wins over the stored one when we have it
+  const withLive = rows.map((r) => (live[r.id] ? { ...r, status: live[r.id]!.status } : r));
+  const q = search.toLowerCase();
+  const matchFilter = REQUEST_FILTERS.find(([id]) => id === filter)![2];
+  const filtered = withLive.filter((r) => matchFilter(r) && [r.hospital_name, r.city, r.state, r.blood_group, r.patient_ref].some((v) => String(v ?? '').toLowerCase().includes(q)));
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        <div>
+          <h3 className="text-xl font-bold text-slate-800">Blood requests</h3>
+          <p className="text-xs text-slate-500 mt-1">{rows.length} raised by hospitals in your jurisdiction. Active requests show live progress.</p>
+        </div>
+        <div className="relative">
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Hospital, city, blood group…"
+            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-full md:w-72 focus:ring-2 focus:ring-[#ee2b2b]/20 outline-none"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {REQUEST_FILTERS.map(([id, label, fn]) => (
+          <button
+            key={id}
+            onClick={() => setFilter(id)}
+            aria-pressed={filter === id}
+            className={cn('px-3 py-1.5 rounded-full text-xs font-bold border', filter === id ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400')}
+          >
+            {label} <span className="opacity-60">{withLive.filter(fn).length}</span>
+          </button>
+        ))}
+      </div>
+
+      {error && <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">{error}</div>}
+
+      {loading ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-400">Loading requests…</div>
+      ) : filtered.length === 0 ? (
+        <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center text-sm text-slate-400">
+          {rows.length === 0 ? 'No blood requests yet. Verified hospitals raise them from their dashboard.' : 'No requests match.'}
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((r) => {
+            const status = live[r.id];
+            const [label, tone] = requestBadge(r, status?.status);
+            return (
+              <div key={r.id} className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                <span className={cn('w-12 h-12 shrink-0 rounded-xl flex items-center justify-center text-sm font-black text-white', urgencyTone(r.urgency))}>{r.blood_group}</span>
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <p className="font-extrabold text-slate-900">{r.hospital_name} <span className="font-medium text-slate-500">· {[r.city, r.state].filter(Boolean).join(', ')}</span></p>
+                  <p className="text-xs text-slate-500">
+                    #{r.id} · {r.units_required} unit(s) · {r.urgency}{r.patient_ref ? ` · ${r.patient_ref}` : ''} · raised {new Date(r.created_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}
+                    {r.required_by ? ` · needed by ${new Date(r.required_by).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}` : ''}
+                  </p>
+                  {status && <p className="text-xs font-bold text-slate-700">{status.units_confirmed} of {status.units_required} unit(s) confirmed · {status.donors_alerted} donors alerted · {status.donors_on_standby} on standby</p>}
+                  {!r.dispatched && r.network_error && <p className="text-xs font-bold text-red-700">{r.network_error}</p>}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={cn('px-2 py-0.5 rounded-md text-[10px] font-black uppercase', tone)}>{label}</span>
+                  {r.tracking_token && (
+                    <a href={`/track/${r.tracking_token}`} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50">Track</a>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -490,7 +735,7 @@ function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: strin
             value={localSearch}
             onChange={(e) => setLocalSearch(e.target.value)}
             placeholder="Search name, city, registration no…"
-            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-72 focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all outline-none"
+            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-full md:w-72 focus:ring-2 focus:ring-[#ee2b2b]/20 transition-all outline-none"
           />
         </div>
       </div>
@@ -834,7 +1079,7 @@ function DonorsView({ initialSearch = '' }: { initialSearch?: string }) {
             {donors.length} registered on the website. Donors who joined by SMS or USSD appear in the network analytics only.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <select value={group} onChange={(e) => setGroup(e.target.value)} className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-bold outline-none">
             <option value="">All groups</option>
             {BLOOD_TYPES.map((g) => <option key={g}>{g}</option>)}
@@ -845,7 +1090,7 @@ function DonorsView({ initialSearch = '' }: { initialSearch?: string }) {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Name, email, city, phone…"
-              className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-64 focus:ring-2 focus:ring-[#ee2b2b]/20 outline-none"
+              className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-xs w-full md:w-64 focus:ring-2 focus:ring-[#ee2b2b]/20 outline-none"
             />
           </div>
         </div>

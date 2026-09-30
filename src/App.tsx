@@ -67,6 +67,7 @@ export default function App() {
       <Route element={<ProtectedRoute allowedRoles={['admin']} />}>
         <Route path="admin" element={<AdminDashboard />} />
         <Route path="admin/hospitals" element={<AdminDashboard />} />
+        <Route path="admin/requests" element={<AdminDashboard />} />
         <Route path="admin/donors" element={<AdminDashboard />} />
         <Route path="admin/analytics" element={<AdminDashboard />} />
         <Route path="admin/settings" element={<AdminDashboard />} />

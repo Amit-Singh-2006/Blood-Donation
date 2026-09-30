@@ -5,6 +5,7 @@ import { signOut } from '@/lib/auth';
 
 export default function Layout() {
   const [showProfile, setShowProfile] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -15,6 +16,7 @@ export default function Layout() {
     if (savedUser) {
       setUser(JSON.parse(savedUser));
     }
+    setMenuOpen(false);
   }, [location.pathname]); // Update when navigating in case user changes
 
   const hideNav = ['/', '/login', '/register-donor', '/register-hospital', '/register-admin', '/how-it-works', '/emergency-network', '/impact-reports', '/privacy', '/terms', '/partnership', '/support', '/track'].includes(location.pathname)
@@ -51,8 +53,12 @@ export default function Layout() {
   if (isSidebarLayout) {
     return (
       <div className="flex min-h-screen bg-[#f8f6f6] font-sans text-slate-900">
-        {/* Sidebar */}
-        <aside className="w-64 bg-white border-r border-slate-200 flex flex-col fixed h-full z-20">
+        {/* Phones and tablets: the sidebar slides in over the page */}
+        {menuOpen && <div className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
+        <aside className={cn(
+          "w-64 bg-white border-r border-slate-200 flex flex-col fixed h-full z-50 transition-transform duration-200 lg:translate-x-0",
+          menuOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full"
+        )}>
           <div className="p-6 flex items-center gap-3">
             <div className="bg-[#ee2b2b] text-white p-1.5 rounded-lg">
               <span className="material-symbols-outlined block">emergency_share</span>
@@ -109,7 +115,13 @@ export default function Layout() {
         </aside>
 
         {/* Main Content */}
-        <main className="flex-1 ml-64">
+        <main className="flex-1 min-w-0 lg:ml-64">
+          <div className="lg:hidden sticky top-0 z-30 h-14 px-4 flex items-center gap-3 bg-white/90 backdrop-blur-md border-b border-slate-200">
+            <button onClick={() => setMenuOpen(true)} aria-label="Open menu" className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
+              <span className="material-symbols-outlined">menu</span>
+            </button>
+            <span className="text-lg font-bold tracking-tight text-[#ee2b2b]">LifeLink AI</span>
+          </div>
           <Outlet />
         </main>
       </div>

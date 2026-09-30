@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-    getAllDonations, getAllUsers, getHospitals, setHospitalVerification, getOverview, getDonors,
+    getAllDonations, getAllUsers, getHospitals, setHospitalVerification, getOverview, getDonors, getRequests,
     getMe, listAdmins, setAdminActive, listInvites, createInvite, revokeInvite,
 } from '../controllers/adminController';
 import { validateRequest } from '../middleware/validateZod';
@@ -45,6 +45,7 @@ router.get('/overview', adminLimiter, botDetection, auditAdminAccess, authMiddle
 router.get('/donors', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getDonors);
 router.put('/hospitals/:id/verification', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, validateRequest(hospitalVerificationSchema), setHospitalVerification);
 router.get('/me', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getMe);
+router.get('/requests', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getRequests);
 
 // Admin management: national admins invite city admins and can remove access
 const national = [adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, requireNationalAdmin];

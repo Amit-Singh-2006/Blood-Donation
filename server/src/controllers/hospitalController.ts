@@ -39,7 +39,9 @@ export const getHospitalInventory = async (req: AuthRequest, res: Response) => {
 
 const loadHospital = async (userId: number | undefined) => {
     const result = await query(
-        'SELECT hospital_name, city, contact_number, latitude, longitude, is_verified FROM hospitals WHERE user_id = $1',
+        `SELECT hospital_name, hospital_type, registration_number, address, city, state, pincode,
+                contact_number, latitude, longitude, is_verified
+         FROM hospitals WHERE user_id = $1`,
         [userId]
     );
     return result.rows[0];
@@ -57,8 +59,14 @@ export const getHospitalProfile = async (req: AuthRequest, res: Response) => {
         if (!hospital) return res.status(404).json({ message: 'Hospital profile not found.' });
         res.json({
             hospital_name: hospital.hospital_name,
+            hospital_type: hospital.hospital_type,
+            registration_number: hospital.registration_number,
+            address: hospital.address,
             city: hospital.city,
+            state: hospital.state,
+            pincode: hospital.pincode,
             contact_number: hospital.contact_number,
+            has_location: hospital.latitude != null && hospital.longitude != null,
             is_verified: !!hospital.is_verified,
             network_configured: networkConfigured(),
         });

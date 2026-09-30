@@ -1,7 +1,13 @@
-import { Pool } from 'pg';
+import { Pool, types } from 'pg';
 import dotenv from 'dotenv';
 
 dotenv.config();
+
+// Older columns are TIMESTAMP (no time zone) written in the database's UTC.
+// Read them as UTC too; by default pg uses the server's local zone, so a
+// machine on IST showed a request raised 25 minutes ago as "6 h ago".
+const TIMESTAMP_WITHOUT_TZ = 1114;
+types.setTypeParser(TIMESTAMP_WITHOUT_TZ, (value: string) => new Date(value.replace(' ', 'T') + 'Z'));
 
 export const pool = new Pool({
     connectionString: process.env.DATABASE_URL,

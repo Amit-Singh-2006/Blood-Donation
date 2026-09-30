@@ -37,7 +37,7 @@ export default function Analytics() {
   ] : [];
 
   return (
-    <div className="flex-1 p-8 max-w-[1400px] mx-auto w-full">
+    <div className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1400px] mx-auto w-full">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">Network Analytics</h2>

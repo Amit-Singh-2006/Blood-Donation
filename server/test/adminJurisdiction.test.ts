@@ -4,7 +4,7 @@ import { fakeRes } from './helpers';
 import * as db from '../src/config/db';
 import { generateInviteCode, hashInviteCode, inviteStatus, normalizeInviteCode } from '../src/utils/adminInvites';
 import { cleanCities, describeScope, hospitalScopeSql } from '../src/utils/jurisdiction';
-import { createInvite, getOverview, setHospitalVerification } from '../src/controllers/adminController';
+import { createInvite, getOverview, getRequests, setHospitalVerification } from '../src/controllers/adminController';
 import { checkAdminInvite, register } from '../src/controllers/authController';
 import { requireAdmin } from '../src/middleware/requireAdmin';
 import { adminInviteSchema } from '../src/schemas/adminSchemas';
@@ -225,4 +225,17 @@ test('deactivated admins are refused and active ones get their jurisdiction', as
     await requireAdmin(req, res, () => { passed = true; });
     assert.equal(res.statusCode, 403);
     assert.equal(passed, false);
+});
+
+test('admin request list is limited to the jurisdiction and never selects the hospital token', async () => {
+    const { calls, run } = fakeQueries([['FROM blood_requests r', [{ id: 1, hospital_name: 'Sassoon', status: 'Open' }]]]);
+    mock.method(db, 'query', run);
+    const res = fakeRes();
+    await getRequests({ adminScope: pune, query: { limit: '9999' } } as any, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.length, 1);
+    const { sql, params } = calls[0]!;
+    assert.doesNotMatch(sql, /hospital_token/);
+    assert.match(sql, /lower\(trim\(h\.city\)\) = ANY\(\$1::text\[\]\)/);
+    assert.deepEqual(params, [['pune', 'pimpri-chinchwad'], 'Maharashtra', 500]);
 });

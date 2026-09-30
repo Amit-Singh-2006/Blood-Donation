@@ -126,6 +126,30 @@ export const getOverview = async (req: AdminRequest, res: Response) => {
     }
 };
 
+// GET /admin/requests?limit=N: blood requests from hospitals in the admin's
+// jurisdiction, newest first (the hospital's control token never leaves the server)
+export const getRequests = async (req: AdminRequest, res: Response) => {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 200, 1), 500);
+    try {
+        const params: unknown[] = [];
+        const cond = hospitalScopeSql(scopeOf(req), params);
+        params.push(limit);
+        const result = await query(`
+            SELECT r.id, r.blood_group, r.units_required, r.urgency, r.status, r.patient_ref, r.required_by,
+                   r.created_at, r.tracking_token, r.network_error, (r.network_request_id IS NOT NULL) AS dispatched,
+                   h.user_id AS hospital_id, h.hospital_name, h.city, h.state
+            FROM blood_requests r JOIN hospitals h ON h.user_id = r.hospital_id
+            WHERE ${cond}
+            ORDER BY r.created_at DESC
+            LIMIT $${params.length}`,
+            params
+        );
+        res.json(result.rows);
+    } catch (err) {
+        serverError(res, err);
+    }
+};
+
 // GET /admin/donors: newest first, with their recorded donations
 export const getDonors = async (req: AdminRequest, res: Response) => {
     try {

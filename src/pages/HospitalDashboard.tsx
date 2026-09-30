@@ -73,8 +73,14 @@ interface HospitalRequest {
 
 interface HospitalProfile {
   hospital_name: string;
+  hospital_type: string | null;
+  registration_number: string | null;
+  address: string | null;
   city: string;
+  state: string | null;
+  pincode: string | null;
   contact_number: string;
+  has_location: boolean;
   is_verified: boolean;
   network_configured: boolean;
 }
@@ -103,6 +109,7 @@ export default function HospitalDashboard() {
 
   const [user, setUser] = useState<any>(null);
   const [profile, setProfile] = useState<HospitalProfile | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [requests, setRequests] = useState<HospitalRequest[]>([]);
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [inventory, setInventory] = useState<any[]>([]);
@@ -191,12 +198,20 @@ export default function HospitalDashboard() {
   ];
 
   const hospitalName = profile?.hospital_name || user?.hospital_name || user?.name || 'Your hospital';
+  const goTo = (tab: NavItem) => { setActiveTab(tab); setMenuOpen(false); };
   const initials = hospitalName.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <div className="flex min-h-screen bg-[#f8f6f6] overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-72 bg-white border-r border-slate-200 flex flex-col z-30">
+      {/* Phones and tablets: the sidebar slides in over the page */}
+      {menuOpen && <div className="fixed inset-0 bg-slate-900/40 z-40 lg:hidden" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
+      <aside className={cn(
+        'fixed inset-y-0 left-0 z-50 w-72 bg-white border-r border-slate-200 flex flex-col overflow-y-auto transition-transform duration-200 lg:static lg:translate-x-0',
+        menuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
+      )}>
+        <button onClick={() => setMenuOpen(false)} aria-label="Close menu" className="lg:hidden absolute top-4 right-4 w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100">
+          <span className="material-symbols-outlined">close</span>
+        </button>
         <div className="p-8 pb-4">
           <div className="flex items-center gap-2 mb-8">
             <div className="w-10 h-10 bg-[#ee2b2b] rounded-xl flex items-center justify-center">
@@ -212,7 +227,7 @@ export default function HospitalDashboard() {
             {navItems.map(item => (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => goTo(item.id)}
                 className={cn(
                   'w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all relative group',
                   activeTab === item.id ? 'bg-[#ee2b2b]/5 text-[#ee2b2b]' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
@@ -254,14 +269,17 @@ export default function HospitalDashboard() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 flex items-center justify-between sticky top-0 z-20">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-black text-slate-900">{navItems.find((n) => n.id === activeTab)?.label}</h1>
+      <main className="flex-1 min-w-0 flex flex-col h-screen overflow-hidden">
+        <header className="h-16 lg:h-20 bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 sticky top-0 z-20">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={() => setMenuOpen(true)} aria-label="Open menu" className="lg:hidden w-10 h-10 shrink-0 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center">
+              <span className="material-symbols-outlined">menu</span>
+            </button>
+            <h1 className="text-lg lg:text-xl font-black text-slate-900 truncate">{navItems.find((n) => n.id === activeTab)?.label}</h1>
             {hasActive && (
               <>
-                <div className="h-6 w-px bg-slate-200 mx-2"></div>
-                <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                <div className="h-6 w-px bg-slate-200 mx-2 hidden md:block"></div>
+                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-full text-[10px] font-bold uppercase tracking-wider">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
                   {requests.filter((r) => ACTIVE.includes(r.status)).length} active request(s)
                 </div>
@@ -269,7 +287,7 @@ export default function HospitalDashboard() {
             )}
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
             <div className="relative" ref={notificationRef}>
               <button
                 onClick={() => setShowNotifications(!showNotifications)}
@@ -286,7 +304,7 @@ export default function HospitalDashboard() {
                     initial={{ opacity: 0, y: 10, scale: 0.95 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute right-0 top-12 w-80 bg-white rounded-xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] border border-slate-100 overflow-hidden"
+                    className="absolute right-0 top-12 w-[calc(100vw-2rem)] max-w-80 bg-white rounded-xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.15)] border border-slate-100 overflow-hidden z-30"
                   >
                     <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
                       <h3 className="font-black text-xs text-slate-800 uppercase tracking-widest">Notifications</h3>
@@ -312,16 +330,17 @@ export default function HospitalDashboard() {
             </div>
 
             <button
-              onClick={() => setActiveTab('requests')}
-              className="bg-[#ee2b2b] text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-lg shadow-[#ee2b2b]/20 hover:scale-105 transition-all flex items-center gap-2"
+              onClick={() => goTo('requests')}
+              aria-label="New blood request"
+              className="bg-[#ee2b2b] text-white h-10 px-3 sm:px-5 rounded-xl text-xs font-black shadow-lg shadow-[#ee2b2b]/20 hover:scale-105 transition-all flex items-center gap-2"
             >
               <span className="material-symbols-outlined text-sm">emergency</span>
-              NEW REQUEST
+              <span className="hidden sm:inline">NEW REQUEST</span>
             </button>
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar space-y-6">
           {profile && !profile.is_verified && (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex gap-4">
               <span className="material-symbols-outlined text-amber-600">pending</span>
@@ -376,7 +395,7 @@ export default function HospitalDashboard() {
 
 // ─────────────────── OVERVIEW TAB ───────────────────
 function OverviewTab({ requests, inventory, donations, onGoToRequests }: { requests: HospitalRequest[]; inventory: any[]; donations: any[]; onGoToRequests: () => void }) {
-  const { data: network } = useNetworkAnalytics();
+  const { data: network, error: networkLoadError } = useNetworkAnalytics();
   const active = requests.filter((r) => ACTIVE.includes(r.status));
   const onTheWay = active.reduce((sum, r) => sum + Math.max(0, (r.live?.units_confirmed ?? 0) - (r.live?.units_donated ?? 0)), 0);
   const totalUnits = inventory.reduce((sum, i) => sum + (i.units || 0), 0);
@@ -448,7 +467,7 @@ function OverviewTab({ requests, inventory, donations, onGoToRequests }: { reque
           <div className="bg-slate-900 rounded-3xl p-8 text-white shadow-2xl shadow-slate-900/20">
             <span className="text-[10px] font-black text-[#ee2b2b] uppercase tracking-[0.2em] bg-red-500/10 px-3 py-1.5 rounded-full inline-block mb-4">Donor Network Now</span>
             {!network ? (
-              <p className="text-sm text-slate-400">Loading live network figures…</p>
+              <p className="text-sm text-slate-400">{networkLoadError ? 'Live network figures are unavailable right now.' : 'Loading live network figures…'}</p>
             ) : (
               <>
                 <h3 className="text-2xl font-black leading-tight mb-2">{network.donor_pool.eligible_now} donors eligible to donate right now</h3>
@@ -961,19 +980,22 @@ function InventoryTab({ inventory, onRefresh }: { inventory: any[]; onRefresh: (
 function SettingsTab({ user, profile }: { user: any; profile: HospitalProfile | null }) {
   return (
     <div className="max-w-2xl space-y-6">
-      <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
+      <div className="bg-white rounded-3xl p-5 sm:p-8 border border-slate-100 shadow-sm">
         <h3 className="text-lg font-black text-slate-900 mb-6">Hospital Account</h3>
         <div className="space-y-1">
           {[
-            ['Hospital', profile?.hospital_name ?? '—'],
-            ['City', profile?.city ?? '—'],
-            ['Contact number', profile?.contact_number ?? '—'],
-            ['Signed in as', user?.email ?? '—'],
-            ['Verification', profile ? (profile.is_verified ? 'Verified by LifeLink' : 'Awaiting admin verification') : '—'],
+            ['Hospital', profile?.hospital_name],
+            ['Type', profile?.hospital_type],
+            ['Registration / licence no.', profile?.registration_number],
+            ['Address', profile ? [profile.address, profile.city, profile.state, profile.pincode].filter(Boolean).join(', ') : ''],
+            ['Exact location', profile ? (profile.has_location ? 'Shared (donors ranked by distance)' : 'Not shared (donors matched by city)') : ''],
+            ['Contact number', profile?.contact_number],
+            ['Signed in as', user?.email],
+            ['Verification', profile ? (profile.is_verified ? 'Verified by LifeLink' : 'Awaiting admin verification') : ''],
           ].map(([label, value]) => (
-            <div key={label} className="flex justify-between items-center py-3 border-b border-slate-50 last:border-0">
+            <div key={label} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 py-3 border-b border-slate-50 last:border-0">
               <span className="text-sm font-bold text-slate-500">{label}</span>
-              <span className="text-sm font-black text-slate-900">{value}</span>
+              <span className="text-sm font-black text-slate-900 sm:text-right wrap-break-word">{value || '—'}</span>
             </div>
           ))}
         </div>
