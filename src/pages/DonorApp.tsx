@@ -388,8 +388,8 @@ export default function DonorApp() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-6 mb-8 border-b border-slate-200 overflow-x-auto">
+      {/* Tabs for phones only: on wider screens the same links are in the top bar */}
+      <div className="flex md:hidden gap-6 mb-8 border-b border-slate-200 overflow-x-auto">
         <Link
           to="/donor"
           className={`pb-4 text-sm font-bold transition-colors border-b-2 whitespace-nowrap ${activeTab === 'dashboard' ? 'border-[#ee2b2b] text-[#ee2b2b]' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
