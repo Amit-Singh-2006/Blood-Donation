@@ -9,11 +9,11 @@ import type { IncomingMessage, ServerResponse } from 'http';
 import app from '../src/app';
 import initDb from '../src/config/initDb';
 
-// Requests wait for the schema check (at most 10 s). Vercel pauses an instance
+// Requests wait for the schema check (at most 3 s). Vercel pauses an instance
 // once no request is in flight, and a pause in the middle of the check could
 // leave tables locked, so it must finish while a request is still open.
 const ready = initDb().catch(console.error);
-const settled = Promise.race([ready, new Promise((resolve) => setTimeout(resolve, 10000).unref())]);
+const settled = Promise.race([ready, new Promise((resolve) => setTimeout(resolve, 3000).unref())]);
 
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
     await settled;
