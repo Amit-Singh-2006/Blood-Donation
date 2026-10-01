@@ -30,6 +30,11 @@ dotenv.config();
 
 const app = express();
 
+// Vercel's proxy puts the visitor's real address in X-Forwarded-For. Without
+// this every visitor looked like 127.0.0.1, so per-IP limits (failed sign-ins,
+// campaign sign-ups, admin requests) were shared by the whole site.
+if (process.env.VERCEL) app.set('trust proxy', 1);
+
 // ──────────────────────────────────────────────────────────────────────────
 // 1. HTTP Security Headers (Helmet)
 //    Covers: XSS headers, Clickjacking, MIME sniffing, CSP, HSTS
