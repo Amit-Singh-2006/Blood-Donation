@@ -1,4 +1,4 @@
-import { workflow, node, trigger, newCredential, expr } from '@n8n/workflow-sdk';
+import { workflow, node, trigger, newCredential, expr, placeholder } from '@n8n/workflow-sdk';
 
 const campaignWebhook = trigger({
   type: 'n8n-nodes-base.webhook',
@@ -55,7 +55,7 @@ const sendSms = node({
     parameters: {
       resource: 'sms',
       operation: 'send',
-      from: '+18167938450',
+      from: placeholder('Your Twilio sender number, e.g. +14155550100'),
       to: expr("{{ $('Build Campaign Messages').item.json.phone }}"),
       toWhatsapp: false,
       message: expr("{{ $('Build Campaign Messages').item.json.sms_text }}"),
@@ -76,7 +76,7 @@ const sendWhatsApp = node({
     parameters: {
       resource: 'message',
       operation: 'send',
-      phoneNumberId: '1172437482609869',
+      phoneNumberId: placeholder('Meta WhatsApp phone number ID'),
       recipientPhoneNumber: expr("{{ $('Build Campaign Messages').item.json.phone }}"),
       messageType: 'text',
       textBody: expr("{{ $('Build Campaign Messages').item.json.sms_text }}"),

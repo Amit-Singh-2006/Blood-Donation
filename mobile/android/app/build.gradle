@@ -3,14 +3,19 @@ apply plugin: 'com.android.application'
 android {
     namespace = "com.lifelink.blooddonation"
     compileSdk = rootProject.ext.compileSdkVersion
-    // A shared debug key (the standard public "android" passwords, not a secret), so
-    // each new APK updates the installed app. Use a private release key for the Play Store.
+    // LifeLink's own debug key, so each new APK updates the installed app. The key file
+    // is kept out of git: it lives on the developer's PC, and the GitHub build restores
+    // it from the ANDROID_KEYSTORE_BASE64 secret. Without it, Gradle's default debug key
+    // is used. Use a private release key for the Play Store.
     signingConfigs {
         debug {
-            storeFile file('lifelink-debug.keystore')
-            storePassword 'android'
-            keyAlias 'androiddebugkey'
-            keyPassword 'android'
+            def lifelinkKey = file('lifelink-debug.keystore')
+            if (lifelinkKey.exists()) {
+                storeFile lifelinkKey
+                storePassword 'android'
+                keyAlias 'androiddebugkey'
+                keyPassword 'android'
+            }
         }
     }
     defaultConfig {

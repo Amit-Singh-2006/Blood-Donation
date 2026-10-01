@@ -15,3 +15,14 @@ server/src/**/*.d.ts.map
 
 # Android APKs copied out of the build
 mobile/*.apk
+
+# Personal and machine-local files (never pushed)
+n8n/exports/
+*.keystore
+*.jks
+keystore.properties
+.vercel/
+.vscode/
+.idea/
+.claude/settings.local.json
+Thumbs.db
