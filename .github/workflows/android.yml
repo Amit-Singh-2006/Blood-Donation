@@ -1,0 +1,62 @@
+# Builds the LifeLink Android app (mobile/) and publishes the APK to the
+# "android-latest" release, so this link always serves the newest build:
+# https://github.com/Amit-Singh-2006/Blood-Donation/releases/download/android-latest/LifeLink.apk
+# The app loads the live website, so website changes need no new APK; only
+# changes under mobile/ (icon, permissions, native settings) trigger a build.
+name: Android app
+
+on:
+  push:
+    branches: [main]
+    paths: ['mobile/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-app
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Install Capacitor
+        run: npm ci
+
+      - name: Copy the app config into the Android project
+        run: npx cap sync android
+
+      - name: Build the APK
+        working-directory: mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --console=plain
+
+      - name: Publish to the android-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk LifeLink.apk
+          if ! gh release view android-latest >/dev/null 2>&1; then
+            gh release create android-latest --title "LifeLink Android app" \
+              --notes "Install LifeLink.apk on your Android phone (allow installs from your browser when asked). The app opens the live LifeLink website, so it stays up to date on its own."
+          fi
+          gh release upload android-latest LifeLink.apk --clobber

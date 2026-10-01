@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion, useInView } from 'framer-motion';
 import { formatMinutes, useNetworkAnalytics } from '../lib/network';
 import { EMERGENCY } from '../lib/contact';
+import { ANDROID_APP_URL, isNativeApp } from '../lib/app';
 
 /* ── Animated counter ── */
 function Counter({ to, suffix = '' }: { to: number; suffix?: string }) {
@@ -437,6 +438,7 @@ export default function HomePage() {
                                 <Link to="/login" className="block hover:text-[#ee2b2b] transition-colors">Log In</Link>
                                 <Link to="/login" className="block hover:text-[#ee2b2b] transition-colors">Create Account</Link>
                                 <Link to="/partnership" className="block hover:text-[#ee2b2b] transition-colors">Hospital Partnership</Link>
+                                {!isNativeApp() && <a href={ANDROID_APP_URL} className="block hover:text-[#ee2b2b] transition-colors">Get the Android app</a>}
                             </div>
                             <div className="space-y-3">
                                 <p className="text-slate-900 font-black text-xs uppercase tracking-widest">Legal</p>

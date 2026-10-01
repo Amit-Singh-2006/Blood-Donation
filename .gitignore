@@ -12,3 +12,6 @@ server/src/**/*.js
 server/src/**/*.js.map
 server/src/**/*.d.ts
 server/src/**/*.d.ts.map
+
+# Android APKs copied out of the build
+mobile/*.apk
