@@ -1,7 +1,8 @@
 import { createHash } from 'crypto';
 import pool from './db';
 
-const initDb = async () => {
+/** Applies the schema if it changed; true once the database is up to date. */
+const initDb = async (): Promise<boolean> => {
   const schemaQuery = `
     -- Users Table
     CREATE TABLE IF NOT EXISTS users (
@@ -355,13 +356,13 @@ const initDb = async () => {
     if (!applied) await client.query('ROLLBACK TO SAVEPOINT version_check'); // first run, or the table is busy
     if (applied?.rows[0]?.version === version) {
       await client.query('COMMIT');
-      return;
+      return true;
     }
 
     const { rows } = await client.query('SELECT pg_try_advisory_xact_lock(724724) AS locked');
     if (!rows[0]?.locked) {
       await client.query('ROLLBACK'); // another instance is applying it right now
-      return;
+      return false;
     }
     await client.query(schemaQuery);
     await client.query(
@@ -371,9 +372,11 @@ const initDb = async () => {
     );
     await client.query('COMMIT');
     if (process.env.NODE_ENV !== 'production') console.log('[DB] Schema initialized.');
+    return true;
   } catch (err: any) {
     await client?.query('ROLLBACK').catch(() => { });
     console.error('[DB] Initialization failed:', err.message);
+    return false;
   } finally {
     client?.release();
   }
