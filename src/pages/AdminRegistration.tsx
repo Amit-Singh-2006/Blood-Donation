@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { apiFetch } from '../lib/api';
 import { saveUser } from '../lib/session';
 import { PASSWORD_RULES, passwordProblems } from '../lib/password';
+import TwoStepVerification, { type SecondStepChallenge } from '../components/TwoStepVerification';
 
 interface InviteCheck {
   valid: boolean;
@@ -20,6 +21,7 @@ const inputClass = 'w-full px-4 py-3 bg-white border border-slate-200 rounded-xl
 
 export default function AdminRegistration() {
   const navigate = useNavigate();
+  const [challenge, setChallenge] = useState<SecondStepChallenge | null>(null);
   const [params] = useSearchParams();
   const [code, setCode] = useState(params.get('code') ?? '');
   const [checking, setChecking] = useState(false);
@@ -72,11 +74,16 @@ export default function AdminRegistration() {
     setSubmitting(true);
     setError('');
     try {
-      const { user } = await apiFetch('/auth/register', {
+      const res = await apiFetch('/auth/register', {
         method: 'POST',
         body: JSON.stringify({ name: name.trim(), email: email.trim(), password, role: 'admin', admin_invite_code: code.trim() }),
       });
-      saveUser(user);
+      // The new admin account sets up its authenticator app before the first session
+      if (res.mfa) {
+        setChallenge(res.mfa);
+        return;
+      }
+      saveUser(res.user);
       navigate('/admin', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please try again.');
@@ -87,6 +94,13 @@ export default function AdminRegistration() {
 
   return (
     <div className="min-h-screen bg-[#f8f6f6] flex flex-col">
+      {challenge && (
+        <TwoStepVerification
+          challenge={challenge}
+          onDone={(user) => { saveUser(user); navigate('/admin', { replace: true }); }}
+          onCancel={() => navigate('/login')}
+        />
+      )}
       <header className="w-full px-4 sm:px-6 lg:px-20 py-4 flex items-center justify-between bg-white/80 backdrop-blur-md border-b border-slate-200">
         <Link to="/" className="flex items-center gap-2">
           <div className="bg-[#ee2b2b] p-1.5 rounded-lg text-white">

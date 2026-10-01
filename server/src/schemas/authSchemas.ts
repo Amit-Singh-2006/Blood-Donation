@@ -84,3 +84,8 @@ export const loginSchema = z.object({
     email: z.string().email('Invalid email address').max(254),
     password: z.string().min(1, 'Password is required').max(128),
 });
+
+export const mfaVerifySchema = z.object({
+    token: z.string().min(20).max(2000),
+    code: z.string().trim().min(6, 'Enter the 6-digit code from your authenticator app').max(12),
+});

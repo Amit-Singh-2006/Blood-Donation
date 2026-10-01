@@ -5,6 +5,7 @@ import { apiFetch } from '../lib/api';
 import { saveUser } from '../lib/session';
 import { PASSWORD_RULES, passwordProblems } from '../lib/password';
 import { INDIAN_STATES, PIN_CODE } from '../lib/india';
+import TwoStepVerification, { type SecondStepChallenge } from '../components/TwoStepVerification';
 
 type Step = 'hospital' | 'location' | 'account' | 'review';
 
@@ -35,6 +36,7 @@ function Field({ label, htmlFor, hint, children }: { label: string; htmlFor: str
 
 export default function HospitalRegistration() {
   const navigate = useNavigate();
+  const [challenge, setChallenge] = useState<SecondStepChallenge | null>(null);
   const [step, setStep] = useState<Step>('hospital');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -118,7 +120,7 @@ export default function HospitalRegistration() {
     setSubmitting(true);
     setError('');
     try {
-      const { user } = await apiFetch('/auth/register', {
+      const res = await apiFetch('/auth/register', {
         method: 'POST',
         body: JSON.stringify({
           role: 'hospital',
@@ -136,7 +138,12 @@ export default function HospitalRegistration() {
           ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : {}),
         }),
       });
-      saveUser(user);
+      // The new hospital account sets up its authenticator app before the first session
+      if (res.mfa) {
+        setChallenge(res.mfa);
+        return;
+      }
+      saveUser(res.user);
       navigate('/hospital', { replace: true });
     } catch (err: any) {
       setError(err.message || 'Registration failed. Please try again.');
@@ -157,6 +164,13 @@ export default function HospitalRegistration() {
 
   return (
     <div className="min-h-screen bg-[#f8f6f6] flex flex-col">
+      {challenge && (
+        <TwoStepVerification
+          challenge={challenge}
+          onDone={(user) => { saveUser(user); navigate('/hospital', { replace: true }); }}
+          onCancel={() => navigate('/login')}
+        />
+      )}
       <header className="w-full px-4 sm:px-6 lg:px-20 py-4 flex items-center justify-between bg-white/80 backdrop-blur-md border-b border-[#ee2b2b]/10">
         <Link to="/" className="flex items-center gap-2">
           <div className="bg-[#ee2b2b] p-1.5 rounded-lg text-white">

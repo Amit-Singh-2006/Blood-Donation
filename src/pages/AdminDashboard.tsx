@@ -719,6 +719,20 @@ function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: strin
     }
   };
 
+  // Lost phone: the hospital sets up its authenticator app again at its next sign-in
+  const resetTwoStep = async (h: any) => {
+    if (!window.confirm(`Reset two-step verification for ${h.hospital_name}? Only do this after confirming it is really them, for example by phoning ${h.contact_number || 'the hospital'}. At its next sign-in it sets up an authenticator app again.`)) return;
+    setBusyId(h.id);
+    try {
+      await apiFetch(`/admin/users/${h.id}/mfa-reset`, { method: 'POST' });
+      await load();
+    } catch (err: any) {
+      setError(err.message || 'Could not reset two-step verification.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   const q = localSearch.toLowerCase();
   const filtered = hospitals.filter(h =>
     [h.hospital_name, h.city, h.state, h.pincode, h.registration_number, h.email].some(v => String(v ?? '').toLowerCase().includes(q))
@@ -779,6 +793,10 @@ function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: strin
                 <p className="text-xs text-slate-500 mt-0.5">
                   Registration no.: <span className="font-bold text-slate-700">{h.registration_number || 'not provided'}</span>
                   {h.created_at ? ` · registered ${new Date(h.created_at).toLocaleDateString('en-IN')}` : ''}
+                </p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Two-step verification: <span className={h.mfa_enabled ? 'font-bold text-green-700' : 'font-bold text-amber-700'}>{h.mfa_enabled ? 'on' : 'set up at next sign-in'}</span>
+                  {h.mfa_enabled && <> · <button type="button" disabled={busyId === h.id} onClick={() => resetTwoStep(h)} className="font-bold text-[#ee2b2b] hover:underline disabled:opacity-50">reset (lost phone)</button></>}
                 </p>
               </div>
               <button
@@ -882,6 +900,17 @@ function AdminsView({ meId }: { meId?: number }) {
       load();
     } catch (err: any) {
       setError(err.message || 'Could not update access.');
+    }
+  };
+
+  // Lost phone: the admin sets up their authenticator app again at their next sign-in
+  const resetTwoStep = async (admin: any) => {
+    if (!window.confirm(`Reset two-step verification for ${admin.name}? Only do this after confirming it is really them. At their next sign-in they set up an authenticator app again.`)) return;
+    try {
+      await apiFetch(`/admin/users/${admin.id}/mfa-reset`, { method: 'POST' });
+      load();
+    } catch (err: any) {
+      setError(err.message || 'Could not reset two-step verification.');
     }
   };
 
@@ -1032,6 +1061,10 @@ function AdminsView({ meId }: { meId?: number }) {
                         {a.email} · {a.jurisdiction}
                         {a.invited_by ? ` · invited by ${a.invited_by}` : ''}
                         {a.last_login_at ? ` · last sign-in ${new Date(a.last_login_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}` : ' · never signed in'}
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        Two-step verification: <span className={a.mfa_enabled ? 'font-bold text-green-700' : 'font-bold text-amber-700'}>{a.mfa_enabled ? 'on' : 'set up at next sign-in'}</span>
+                        {a.mfa_enabled && a.id !== meId && <> · <button type="button" onClick={() => resetTwoStep(a)} className="font-bold text-[#ee2b2b] hover:underline">reset (lost phone)</button></>}
                       </p>
                     </div>
                     {a.id !== meId && (

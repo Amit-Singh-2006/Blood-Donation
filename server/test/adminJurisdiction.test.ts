@@ -8,6 +8,7 @@ import { createInvite, getOverview, getRequests, setHospitalVerification } from 
 import { checkAdminInvite, register } from '../src/controllers/authController';
 import { requireAdmin } from '../src/middleware/requireAdmin';
 import { adminInviteSchema } from '../src/schemas/adminSchemas';
+import { sealSecret } from '../src/utils/mfa';
 
 afterEach(() => {
     mock.restoreAll();
@@ -179,18 +180,24 @@ test('an invite only works with the email it was issued to', async () => {
     assert.ok(!calls.some((c) => c.startsWith('INSERT INTO users')));
 });
 
-test('a valid invite creates a city admin in one transaction and signs them in', async () => {
+test('a valid invite creates a city admin in one transaction, then asks for two-step setup', async () => {
+    process.env.JWT_SECRET ??= 'test-jwt-secret';
     const calls = fakeClient([
         ['UPDATE admin_invites SET used_at', [{ id: 3, email: 'rahul@example.com', is_national: false, state: 'Maharashtra', cities: ['Pune'], created_by: 1 }]],
         ['INSERT INTO users', [{ id: 42, name: 'Rahul Verma', email: 'Rahul@example.com', role: 'admin' }]],
     ]);
+    // The authenticator setup is stored outside the sign-up transaction
+    mock.method(db, 'query', async (sql: string) => ({
+        rows: sql.includes('INSERT INTO user_mfa') ? [{ secret_enc: sealSecret('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ') }] : [],
+    }));
     let cookieSet = false;
     const res = fakeRes();
     res.cookie = () => { cookieSet = true; return res; };
     await register({ body: adminBody('Rahul@example.com') } as any, res);
     assert.equal(res.statusCode, 201);
-    assert.equal(res.body.user.jurisdiction, 'Pune, Maharashtra');
-    assert.ok(cookieSet);
+    assert.equal(res.body.mfa.mode, 'setup');
+    assert.equal(res.body.mfa.role, 'admin');
+    assert.ok(!cookieSet, 'no session until the authenticator code is entered');
     assert.deepEqual(calls.filter((c) => ['BEGIN', 'COMMIT', 'ROLLBACK'].includes(c)), ['BEGIN', 'COMMIT']);
     assert.ok(calls.some((c) => c.startsWith('INSERT INTO admin_profiles')));
 });

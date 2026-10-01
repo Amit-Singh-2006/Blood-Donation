@@ -1,7 +1,7 @@
 import { Router } from 'express';
-import { register, login, logout, checkAdminInvite } from '../controllers/authController';
+import { register, login, logout, checkAdminInvite, verifySecondStep } from '../controllers/authController';
 import { validateRequest } from '../middleware/validateZod';
-import { registerSchema, loginSchema, adminInviteCheckSchema } from '../schemas/authSchemas';
+import { registerSchema, loginSchema, adminInviteCheckSchema, mfaVerifySchema } from '../schemas/authSchemas';
 import rateLimit from 'express-rate-limit';
 import { preventSessionFixation, botDetection, bruteForceDelay } from '../middleware/securityMiddleware';
 
@@ -67,6 +67,17 @@ router.post(
 );
 
 router.post('/admin-invite/check', inviteCheckLimiter, botDetection, validateRequest(adminInviteCheckSchema), checkAdminInvite);
+
+// Second step for admins and hospitals: at most 10 wrong codes per 10 minutes per IP
+const mfaLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many verification attempts. Please wait 10 minutes and sign in again.' },
+    skipSuccessfulRequests: true,
+});
+router.post('/mfa/verify', mfaLimiter, botDetection, validateRequest(mfaVerifySchema), verifySecondStep);
 
 router.post('/logout', logout);
 

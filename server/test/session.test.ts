@@ -4,6 +4,7 @@ import { fakeRes } from './helpers';
 import * as db from '../src/config/db';
 import { requestedRole, sessionToken } from '../src/middleware/session';
 import { logout, register } from '../src/controllers/authController';
+import { sealSecret } from '../src/utils/mfa';
 import { cancelHospitalRequest } from '../src/controllers/hospitalController';
 import { forcedBrowsingGuard } from '../src/middleware/securityMiddleware';
 
@@ -47,17 +48,21 @@ test('signing out of the hospital keeps the admin signed in', async () => {
     assert.deepEqual(all.cleared, ['ll_admin', 'll_hospital', 'll_donor', 'token']);
 });
 
-test('registering sets only that account type\'s cookie', async () => {
+test('a new hospital sets up two-step verification before it gets a session', async () => {
+    process.env.JWT_SECRET ??= 'test-jwt-secret';
     mock.method(db, 'query', async (sql: string) => ({
-        rows: sql.includes('INSERT INTO users') ? [{ id: 9, name: 'Civil Hospital', email: 'civil@example.com', role: 'hospital' }] : [],
+        rows: sql.includes('INSERT INTO users') ? [{ id: 9, name: 'Civil Hospital', email: 'civil@example.com', role: 'hospital' }]
+            : sql.includes('INSERT INTO user_mfa') ? [{ secret_enc: sealSecret('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ') }] : [],
     }));
     const res = fakeRes();
     await register({
         body: { role: 'hospital', name: 'Civil Hospital', email: 'civil@example.com', password: 'Str0ng*Pass', hospital_name: 'Civil Hospital', city: 'Jalandhar', contact_number: '+915550000931', registration_number: 'CEA-1' },
     } as any, res);
     assert.equal(res.statusCode, 201);
-    assert.deepEqual(Object.keys(res.cookies), ['ll_hospital']);
-    assert.ok(res.cleared.includes('token'), 'the old single-session cookie is removed');
+    assert.deepEqual(Object.keys(res.cookies), [], 'no session until the authenticator code is entered');
+    assert.equal(res.body.mfa.mode, 'setup');
+    assert.equal(res.body.mfa.secret, 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ');
+    assert.match(res.body.mfa.otpauth_url, /^otpauth:\/\/totp\/LifeLink%3Acivil%40example\.com\?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&issuer=LifeLink/);
 });
 
 const hospitalReq = (id: string) => ({ params: { id }, user: { id: 22, role: 'hospital' } }) as any;

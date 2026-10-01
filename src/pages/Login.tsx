@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { apiFetch } from '../lib/api';
 import { DASHBOARD, ROLES, ROLE_LABEL, Role, saveUser, signedInUsers } from '../lib/session';
+import TwoStepVerification, { type SecondStepChallenge } from '../components/TwoStepVerification';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -10,6 +11,8 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // Admins and hospitals continue with a code from their authenticator app
+  const [challenge, setChallenge] = useState<SecondStepChallenge | null>(null);
   const params = new URLSearchParams(window.location.search);
   // Sent here to open a dashboard this browser isn't signed in to yet
   const asRole = (ROLES as string[]).includes(params.get('as') ?? '') ? (params.get('as') as Role) : null;
@@ -18,6 +21,11 @@ export default function Login() {
   );
   const accounts = signedInUsers();
 
+  const finish = (user: any) => {
+    saveUser(user);
+    navigate(DASHBOARD[user.role as Role] ?? '/', { replace: true });
+  };
+
   // One form for everyone: the account itself says whether it is a donor,
   // hospital or admin, so there is no role to pick (and none to get wrong)
   const handleLogin = async (e: React.FormEvent) => {
@@ -25,12 +33,15 @@ export default function Login() {
     setIsLoading(true);
     setError(null);
     try {
-      const { user } = await apiFetch('/auth/login', {
+      const res = await apiFetch('/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email: email.trim(), password }),
       });
-      saveUser(user);
-      navigate(DASHBOARD[user.role as Role] ?? '/', { replace: true });
+      if (res.mfa) {
+        setChallenge(res.mfa);
+        return;
+      }
+      finish(res.user);
     } catch (err: any) {
       setError(err.message === 'Invalid credentials' ? 'That email and password do not match an account.' : err.message || 'Sign-in failed. Please try again.');
     } finally {
@@ -161,6 +172,10 @@ export default function Login() {
           </div>
         </motion.div>
       </main>
+
+      {challenge && (
+        <TwoStepVerification challenge={challenge} onDone={finish} onCancel={() => { setChallenge(null); setPassword(''); }} />
+      )}
 
       <footer className="w-full px-4 py-6 border-t border-slate-200">
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 text-center">

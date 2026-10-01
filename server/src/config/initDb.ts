@@ -305,6 +305,19 @@ const initDb = async () => {
     CREATE INDEX IF NOT EXISTS reviews_target ON reviews (target_type, target_id);
     ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
 
+    -- Two-step verification (authenticator app) for admin and hospital accounts.
+    -- The secret is encrypted; backup codes are kept only as hashes.
+    CREATE TABLE IF NOT EXISTS user_mfa (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      secret_enc TEXT NOT NULL,
+      enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      last_step BIGINT,
+      backup_hashes JSONB NOT NULL DEFAULT '[]',
+      enabled_at TIMESTAMPTZ,
+      updated_at TIMESTAMPTZ DEFAULT now()
+    );
+    ALTER TABLE user_mfa ENABLE ROW LEVEL SECURITY;
+
     -- Haversine Distance Function
     CREATE OR REPLACE FUNCTION calculate_distance(lat1 FLOAT, lon1 FLOAT, lat2 FLOAT, lon2 FLOAT)
     RETURNS FLOAT AS $$

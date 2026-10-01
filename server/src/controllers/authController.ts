@@ -8,6 +8,10 @@ import { requestedRole } from '../middleware/session';
 import { enrolDonor } from '../services/donorNetwork';
 import { hashInviteCode, inviteStatus, normalizeInviteCode } from '../utils/adminInvites';
 import { describeScope } from '../utils/jurisdiction';
+import {
+    base32Decode, generateSecret, hashBackupCode, matchTotp, newBackupCodes, openSecret, otpauthUrl,
+    readPendingToken, sealSecret, signPendingToken,
+} from '../utils/mfa';
 import dotenv from 'dotenv';
 import {
     blacklistToken,
@@ -39,6 +43,60 @@ const issueSession = (res: Response, user: { id: number; email: string; role: st
     if (!isSessionRole(user.role)) throw new Error(`Unknown role ${user.role}`);
     res.cookie(sessionCookieName(user.role), token, { ...authCookieOptions(), maxAge: JWT_EXPIRY_MS });
     res.clearCookie(LEGACY_SESSION_COOKIE, authCookieOptions());
+};
+
+// Admins and hospitals see donors' details and act on the network, so a password
+// alone is not enough: they also enter a code from an authenticator app
+const SECOND_STEP_ROLES = new Set(['admin', 'hospital']);
+
+type AccountRow = { id: number; name: string; email: string; role: string };
+
+/** The account details the frontend keeps after signing in. */
+const sessionUser = async (user: AccountRow) => {
+    let extra: Record<string, unknown> = {};
+    if (user.role === 'donor') {
+        extra = (await query(
+            'SELECT blood_group, city, phone, is_eligible, xp_points, current_level, badges FROM donors WHERE user_id = $1',
+            [user.id])).rows[0] ?? {};
+    } else if (user.role === 'hospital') {
+        extra = (await query('SELECT hospital_name, city, contact_number FROM hospitals WHERE user_id = $1', [user.id])).rows[0] ?? {};
+    } else if (user.role === 'admin') {
+        const p = (await query('SELECT is_national, state, cities FROM admin_profiles WHERE user_id = $1', [user.id])).rows[0];
+        if (p) extra = { jurisdiction: describeScope(p) };
+    }
+    return { id: user.id, name: user.name, email: user.email, role: user.role, ...extra };
+};
+
+// Last sign-in (admins also keep the IP, for spotting unusual access)
+const recordSignIn = (user: AccountRow, ip: string) =>
+    query('UPDATE users SET last_login_at = now(), last_login_ip = $1 WHERE id = $2',
+        [user.role === 'admin' ? ip : null, user.id]).catch(() => { });
+
+/**
+ * After the password, admins and hospitals get a 10-minute ticket instead of a
+ * session: the first time to set up an authenticator app (scan a QR code), after
+ * that to enter its 6-digit code. POST /auth/mfa/verify finishes the sign-in.
+ */
+const startSecondStep = async (res: Response, user: AccountRow, status = 200) => {
+    const row = (await query('SELECT enabled, secret_enc FROM user_mfa WHERE user_id = $1', [user.id])).rows[0];
+    if (row?.enabled) {
+        return res.status(status).json({
+            mfa: { mode: 'verify', role: user.role, name: user.name, token: signPendingToken(user.id, user.role, 'verify') },
+        });
+    }
+    // An unfinished setup keeps its secret, so a QR code already scanned still works
+    const stored = row ?? (await query(
+        `INSERT INTO user_mfa (user_id, secret_enc) VALUES ($1, $2)
+         ON CONFLICT (user_id) DO UPDATE SET updated_at = now() RETURNING secret_enc`,
+        [user.id, sealSecret(generateSecret())])).rows[0];
+    const secret = openSecret(stored.secret_enc);
+    return res.status(status).json({
+        mfa: {
+            mode: 'setup', role: user.role, name: user.name, email: user.email,
+            token: signPendingToken(user.id, user.role, 'setup'),
+            secret, otpauth_url: otpauthUrl(user.email, secret),
+        },
+    });
 };
 
 const INVITE_PROBLEM: Record<string, string> = {
@@ -154,8 +212,8 @@ const registerAdmin = async (req: Request, res: Response) => {
         if (inviteId) await client.query('UPDATE admin_invites SET used_by = $1 WHERE id = $2', [user.id, inviteId]);
         await client.query('COMMIT');
 
-        issueSession(res, user);
-        res.status(201).json({ user: { id: user.id, name: user.name, email: user.email, role: user.role, jurisdiction: describeScope(profile) } });
+        // The new admin sets up an authenticator app before their first session
+        await startSecondStep(res, user, 201);
     } catch (err: any) {
         await client.query('ROLLBACK').catch(() => { });
         console.error('Admin registration error:', err);
@@ -220,6 +278,9 @@ export const register = async (req: Request, res: Response) => {
             );
         }
 
+        // A new hospital sets up its authenticator app before its first session
+        if (SECOND_STEP_ROLES.has(user.role)) return await startSecondStep(res, user, 201);
+
         issueSession(res, user);
 
         // ── SENSITIVE DATA EXPOSURE PREVENTION ──────────────────────────
@@ -283,48 +344,21 @@ export const login = async (req: Request, res: Response) => {
         // Clear failed attempts on successful login
         clearFailedAttempts(ip);
 
-        let jurisdiction: string | undefined;
         if (user.role === 'admin') {
-            const adminProfile = await query('SELECT is_national, state, cities, active FROM admin_profiles WHERE user_id = $1', [user.id]);
+            const adminProfile = await query('SELECT active FROM admin_profiles WHERE user_id = $1', [user.id]);
             const p = adminProfile.rows[0];
             if (p && !p.active) {
                 return res.status(403).json({ message: 'Your admin access has been removed. Contact the national admin.' });
             }
-            if (p) jurisdiction = describeScope(p);
         }
 
-        // Last sign-in (admins also keep the IP, for spotting unusual access)
-        await query('UPDATE users SET last_login_at = now(), last_login_ip = $1 WHERE id = $2',
-            [user.role === 'admin' ? ip : null, user.id]).catch(() => { });
+        // Admins and hospitals finish signing in with a code from their authenticator app
+        if (SECOND_STEP_ROLES.has(user.role)) return await startSecondStep(res, user);
 
-        let profileData = {};
-        if (user.role === 'donor') {
-            const donorResult = await query(
-                'SELECT blood_group, city, phone, is_eligible, xp_points, current_level, badges FROM donors WHERE user_id = $1',
-                [user.id]
-            );
-            if (donorResult.rows.length > 0) profileData = donorResult.rows[0];
-        } else if (user.role === 'hospital') {
-            const hospitalResult = await query(
-                'SELECT hospital_name, city, contact_number FROM hospitals WHERE user_id = $1',
-                [user.id]
-            );
-            if (hospitalResult.rows.length > 0) profileData = hospitalResult.rows[0];
-        }
-
+        await recordSignIn(user, ip);
         // HttpOnly cookie prevents XSS token theft; see authCookieOptions for SameSite
         issueSession(res, user);
-
-        res.json({
-            user: {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                ...profileData,
-                ...(jurisdiction ? { jurisdiction } : {}),
-            }
-        });
+        res.json({ user: await sessionUser(user) });
     } catch (err: any) {
         // ── SENSITIVE DATA EXPOSURE PREVENTION ──────────────────────────
         // Never leak internal error details to the client
@@ -352,4 +386,75 @@ export const logout = async (req: Request, res: Response) => {
         res.clearCookie(name, authCookieOptions());
     }
     res.json({ message: 'Logged out successfully' });
+};
+
+const EXPIRED = { message: 'This sign-in has timed out. Please sign in again.', error: 'mfa_expired' };
+
+const wrongCode = (req: Request, res: Response, ip: string) => {
+    recordFailedAttempt(ip);
+    logSecurityEvent('BRUTE_FORCE', req, 'Wrong two-step verification code');
+    return res.status(401).json({
+        message: 'That code is not right. Enter the newest code from your authenticator app, and make sure your phone sets its time automatically.',
+        error: 'mfa_wrong_code',
+    });
+};
+
+/**
+ * POST /auth/mfa/verify  { token, code }
+ * The second step for admins and hospitals: a 6-digit authenticator code, or a
+ * single-use backup code. Finishing setup returns 10 backup codes, shown once.
+ */
+export const verifySecondStep = async (req: Request, res: Response) => {
+    const ip = req.ip || req.socket?.remoteAddress || 'unknown';
+    const ticket = readPendingToken(req.body.token);
+    if (!ticket) return res.status(401).json(EXPIRED);
+    await bruteForceDelay(req, res, () => { });
+    try {
+        const user: AccountRow | undefined = (await query('SELECT id, name, email, role FROM users WHERE id = $1', [ticket.uid])).rows[0];
+        const mfa = (await query('SELECT enabled, secret_enc, last_step FROM user_mfa WHERE user_id = $1', [ticket.uid])).rows[0];
+        // The account must still match the ticket and be in the state the ticket expects
+        if (!user || user.role !== ticket.role || !SECOND_STEP_ROLES.has(user.role) || !mfa || mfa.enabled !== (ticket.mode === 'verify')) {
+            return res.status(401).json(EXPIRED);
+        }
+        if (user.role === 'admin') {
+            const p = (await query('SELECT active FROM admin_profiles WHERE user_id = $1', [user.id])).rows[0];
+            if (p && !p.active) return res.status(403).json({ message: 'Your admin access has been removed. Contact the national admin.' });
+        }
+
+        const code = String(req.body.code);
+        const step = matchTotp(base32Decode(openSecret(mfa.secret_enc)), code, mfa.last_step == null ? null : Number(mfa.last_step));
+        let backupCodes: string[] | undefined;
+        let backupCodesLeft: number | undefined;
+        if (ticket.mode === 'setup') {
+            if (step === null) return wrongCode(req, res, ip);
+            backupCodes = newBackupCodes();
+            await query(
+                `UPDATE user_mfa SET enabled = TRUE, enabled_at = now(), last_step = $2, backup_hashes = $3::jsonb, updated_at = now()
+                 WHERE user_id = $1`,
+                [user.id, step, JSON.stringify(backupCodes.map(hashBackupCode))]);
+        } else if (step !== null) {
+            await query('UPDATE user_mfa SET last_step = $2, updated_at = now() WHERE user_id = $1', [user.id, step]);
+        } else {
+            // Each backup code works once
+            const used = await query(
+                `UPDATE user_mfa SET backup_hashes = backup_hashes - $2::text, updated_at = now()
+                 WHERE user_id = $1 AND backup_hashes ? $2::text
+                 RETURNING jsonb_array_length(backup_hashes) AS codes_left`,
+                [user.id, hashBackupCode(code)]);
+            if (!used.rows[0]) return wrongCode(req, res, ip);
+            backupCodesLeft = Number(used.rows[0].codes_left);
+        }
+
+        clearFailedAttempts(ip);
+        await recordSignIn(user, ip);
+        issueSession(res, user);
+        res.json({
+            user: await sessionUser(user),
+            ...(backupCodes ? { backup_codes: backupCodes } : {}),
+            ...(backupCodesLeft !== undefined ? { backup_codes_left: backupCodesLeft } : {}),
+        });
+    } catch (err: any) {
+        console.error('Two-step verification failed:', err.message);
+        res.status(500).json({ message: 'Verification failed. Please try again.' });
+    }
 };

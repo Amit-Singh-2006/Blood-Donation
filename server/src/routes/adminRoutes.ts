@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
     getAllDonations, getAllUsers, getHospitals, setHospitalVerification, getOverview, getDonors, getRequests,
-    getMe, listAdmins, setAdminActive, listInvites, createInvite, revokeInvite,
+    getMe, listAdmins, setAdminActive, listInvites, createInvite, revokeInvite, resetSecondStep,
 } from '../controllers/adminController';
 import { validateRequest } from '../middleware/validateZod';
 import { createCampaign, listCampaigns, listRegistrations, markAttendance, cancelCampaign } from '../controllers/campaignController';
@@ -64,5 +64,8 @@ router.post('/campaigns', ...anyAdmin, validateRequest(campaignSchema), createCa
 router.get('/campaigns/:id/registrations', ...anyAdmin, listRegistrations);
 router.put('/campaigns/:id/registrations/:regId', ...anyAdmin, validateRequest(attendanceSchema), markAttendance);
 router.put('/campaigns/:id/cancel', ...anyAdmin, cancelCampaign);
+
+// Lost phone: the account sets up two-step verification again at its next sign-in
+router.post('/users/:id/mfa-reset', ...anyAdmin, resetSecondStep);
 
 export default router;

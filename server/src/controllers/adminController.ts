@@ -61,7 +61,8 @@ export const getHospitals = async (req: AdminRequest, res: Response) => {
         const result = await query(
             `SELECT h.user_id AS id, h.hospital_name, h.hospital_type, h.address, h.city, h.state, h.pincode,
                     h.contact_number, h.registration_number, h.latitude, h.longitude,
-                    COALESCE(h.is_verified, FALSE) AS is_verified, u.email, u.created_at
+                    COALESCE(h.is_verified, FALSE) AS is_verified, u.email, u.created_at,
+                    EXISTS (SELECT 1 FROM user_mfa m WHERE m.user_id = h.user_id AND m.enabled) AS mfa_enabled
              FROM hospitals h JOIN users u ON u.id = h.user_id
              WHERE ${hospitalScopeSql(scopeOf(req), params)}
              ORDER BY COALESCE(h.is_verified, FALSE), u.created_at DESC`,
@@ -177,6 +178,7 @@ export const listAdmins = async (req: AdminRequest, res: Response) => {
     try {
         const result = await query(`
             SELECT u.id, u.name, u.email, u.created_at, u.last_login_at, p.is_national, p.state, p.cities, p.active,
+                   EXISTS (SELECT 1 FROM user_mfa m WHERE m.user_id = u.id AND m.enabled) AS mfa_enabled,
                    inviter.name AS invited_by
             FROM users u
             JOIN admin_profiles p ON p.user_id = u.id
@@ -274,6 +276,32 @@ export const revokeInvite = async (req: AdminRequest, res: Response) => {
         );
         if (!result.rows[0]) return res.status(404).json({ message: 'No open invite with that id.' });
         res.json({ id: inviteId, status: 'revoked' });
+    } catch (err) {
+        serverError(res, err);
+    }
+};
+
+// POST /admin/users/:id/mfa-reset
+// For a lost phone: the account sets up its authenticator app again at its next
+// sign-in. National admins can reset admins and hospitals; city admins, the
+// hospitals in their jurisdiction.
+export const resetSecondStep = async (req: AdminRequest, res: Response) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ message: 'Invalid account' });
+    try {
+        const target = (await query('SELECT id, role FROM users WHERE id = $1', [id])).rows[0];
+        if (!target || !['admin', 'hospital'].includes(target.role)) return res.status(404).json({ message: 'Account not found' });
+        const scope = scopeOf(req);
+        if (target.role === 'admin' && !scope.isNational) {
+            return res.status(403).json({ message: 'Only the national admin can reset another admin.' });
+        }
+        if (target.role === 'hospital' && !scope.isNational) {
+            const params: unknown[] = [id];
+            const inScope = await query(`SELECT 1 FROM hospitals h WHERE h.user_id = $1 AND ${hospitalScopeSql(scope, params)}`, params);
+            if (!inScope.rows[0]) return res.status(403).json({ message: 'This hospital is outside your jurisdiction.' });
+        }
+        await query('DELETE FROM user_mfa WHERE user_id = $1', [id]);
+        res.json({ ok: true });
     } catch (err) {
         serverError(res, err);
     }
