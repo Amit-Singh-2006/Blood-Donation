@@ -76,9 +76,10 @@ const sendEmail = node({
   output: [{ id: 'msg1' }]
 });
 
-// Successful runs are not saved, so reset codes do not sit in n8n's execution history
+// Workflow settings, applied in n8n (its code checker does not accept .settings()):
+// successful and manual runs are not saved, so reset codes do not sit in the
+// execution history; failed runs are kept and go to the LifeLink Error Handler.
 export default workflow('lifelink-account-emails', 'LifeLink – Account Emails')
   .add(emailWebhook)
   .to(buildEmail)
-  .to(sendEmail)
-  .settings({ saveDataSuccessExecution: 'none', saveManualExecutions: false, saveDataErrorExecution: 'all' });
+  .to(sendEmail);
