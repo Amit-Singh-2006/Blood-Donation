@@ -45,7 +45,7 @@ test('the right authenticator code signs an admin in, and the same code cannot b
     const res = fakeRes();
     await verifySecondStep(req(token, code), res);
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(Object.keys(res.cookies), ['ll_admin']);
+    assert.deepEqual(Object.keys(res.cookies), ['ll_admin', 'll_admin_keep']);
     assert.equal(res.body.user.jurisdiction, 'Pune, Maharashtra');
     assert.equal(state.last_step, currentStep());
 
@@ -85,7 +85,15 @@ test('finishing setup turns two-step on and returns 10 backup codes, once', asyn
     assert.equal(res.statusCode, 200);
     assert.ok(state.enabledNow);
     assert.equal(res.body.backup_codes.length, 10);
-    assert.deepEqual(Object.keys(res.cookies), ['ll_admin']);
+    assert.deepEqual(Object.keys(res.cookies), ['ll_admin', 'll_admin_keep']);
+});
+
+test('"keep me signed in" from the password step carries through the code step', async () => {
+    fakeAccount({ enabled: true });
+    const kept = fakeRes();
+    await verifySecondStep(req(signPendingToken(42, 'admin', 'verify', true), codeNow()), kept);
+    assert.equal(kept.statusCode, 200);
+    assert.ok(kept.cookieOptions.ll_admin_keep.maxAge > 29 * 24 * 60 * 60 * 1000);
 });
 
 test('a backup code works once, for a lost phone', async () => {

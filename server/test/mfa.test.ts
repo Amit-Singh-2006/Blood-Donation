@@ -48,7 +48,8 @@ test('authenticator secrets are stored encrypted and tamper-evident', () => {
 
 test('the ticket between password and code can never pass as a session', () => {
     const ticket = signPendingToken(7, 'hospital', 'verify');
-    assert.deepEqual(readPendingToken(ticket), { uid: 7, role: 'hospital', mode: 'verify' });
+    assert.deepEqual(readPendingToken(ticket), { uid: 7, role: 'hospital', mode: 'verify', remember: false });
+    assert.equal(readPendingToken(signPendingToken(7, 'hospital', 'verify', true))?.remember, true);
     assert.throws(() => jwt.verify(ticket, process.env.JWT_SECRET as string), 'not a valid session token');
     const forged = jwt.sign({ uid: 7, role: 'hospital', mode: 'verify' }, process.env.JWT_SECRET as string);
     assert.equal(readPendingToken(forged), null, 'a session-key token is not a ticket');

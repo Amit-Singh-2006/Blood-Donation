@@ -60,6 +60,7 @@ export const registerSchema = z.object({
 
     // Admin invite code (validated server-side in controller)
     admin_invite_code: z.string().trim().max(100).optional(),
+    remember: z.boolean().optional(),
 
 }).refine(data => {
     if (data.role === 'donor') {
@@ -83,6 +84,7 @@ export const adminInviteCheckSchema = z.object({
 export const loginSchema = z.object({
     email: z.string().email('Invalid email address').max(254),
     password: z.string().min(1, 'Password is required').max(128),
+    remember: z.boolean().optional(),
 });
 
 export const mfaVerifySchema = z.object({

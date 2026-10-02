@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, logout, checkAdminInvite, verifySecondStep } from '../controllers/authController';
+import { register, login, logout, checkAdminInvite, verifySecondStep, refreshSession } from '../controllers/authController';
 import { validateRequest } from '../middleware/validateZod';
 import { registerSchema, loginSchema, adminInviteCheckSchema, mfaVerifySchema } from '../schemas/authSchemas';
 import rateLimit from 'express-rate-limit';
@@ -78,6 +78,16 @@ const mfaLimiter = rateLimit({
     skipSuccessfulRequests: true,
 });
 router.post('/mfa/verify', mfaLimiter, botDetection, validateRequest(mfaVerifySchema), verifySecondStep);
+
+// Renews the 30-minute session from "keep me signed in"
+const refreshLimiter = rateLimit({
+    windowMs: 10 * 60 * 1000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many requests. Please wait a few minutes.' },
+});
+router.post('/refresh', refreshLimiter, botDetection, refreshSession);
 
 router.post('/logout', logout);
 

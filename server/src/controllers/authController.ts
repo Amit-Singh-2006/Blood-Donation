@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { createHash, timingSafeEqual } from 'crypto';
 import pool, { query } from '../config/db';
-import { LEGACY_SESSION_COOKIE, SESSION_ROLES, authCookieOptions, isSessionRole, sessionCookieName } from '../utils/authCookie';
+import { LEGACY_SESSION_COOKIE, SESSION_ROLES, SessionRole, authCookieOptions, isSessionRole, sessionCookieName } from '../utils/authCookie';
 import { requestedRole } from '../middleware/session';
 import { enrolDonor } from '../services/donorNetwork';
 import { hashInviteCode, inviteStatus, normalizeInviteCode } from '../utils/adminInvites';
@@ -12,6 +12,9 @@ import {
     base32Decode, generateSecret, hashBackupCode, matchTotp, newBackupCodes, openSecret, otpauthUrl,
     readPendingToken, sealSecret, signPendingToken,
 } from '../utils/mfa';
+import {
+    KEEP_IDLE_MS, endKeptSession, keepCookieMaxAge, keepCookieName, keepCookieOptions, resumeKeptSession, startKeptSession,
+} from '../utils/keepSignedIn';
 import dotenv from 'dotenv';
 import {
     blacklistToken,
@@ -32,7 +35,8 @@ export const inviteCodeMatches = (given: unknown, expected = process.env.ADMIN_I
     return timingSafeEqual(digest(given), digest(expected));
 };
 
-const issueSession = (res: Response, user: { id: number; email: string; role: string }) => {
+/** The 30-minute session cookie: a signed JWT. */
+const setSessionCookie = (res: Response, user: { id: number; email: string; role: string }) => {
     const token = jwt.sign(
         { id: user.id, email: user.email, role: user.role },
         process.env.JWT_SECRET as string,
@@ -43,6 +47,21 @@ const issueSession = (res: Response, user: { id: number; email: string; role: st
     if (!isSessionRole(user.role)) throw new Error(`Unknown role ${user.role}`);
     res.cookie(sessionCookieName(user.role), token, { ...authCookieOptions(), maxAge: JWT_EXPIRY_MS });
     res.clearCookie(LEGACY_SESSION_COOKIE, authCookieOptions());
+};
+
+/**
+ * Signs this browser in: the 30-minute session cookie, plus a kept sign-in that
+ * renews it (utils/keepSignedIn). `remember` keeps it for 30 days; otherwise it
+ * ends with the browser. An earlier kept sign-in for this account type ends.
+ */
+const issueSession = async (req: Request, res: Response, user: AccountRow, remember: boolean) => {
+    setSessionCookie(res, user);
+    const role = user.role as SessionRole;
+    const name = keepCookieName(role);
+    await endKeptSession(req.cookies?.[name]).catch(() => { });
+    const userAgent = req.headers?.['user-agent'];
+    const kept = await startKeptSession(user.id, role, remember, typeof userAgent === 'string' ? userAgent : undefined);
+    res.cookie(name, kept.value, keepCookieOptions(remember ? KEEP_IDLE_MS : undefined));
 };
 
 // Admins and hospitals see donors' details and act on the network, so a password
@@ -77,11 +96,11 @@ const recordSignIn = (user: AccountRow, ip: string) =>
  * session: the first time to set up an authenticator app (scan a QR code), after
  * that to enter its 6-digit code. POST /auth/mfa/verify finishes the sign-in.
  */
-const startSecondStep = async (res: Response, user: AccountRow, status = 200) => {
+const startSecondStep = async (res: Response, user: AccountRow, remember: boolean, status = 200) => {
     const row = (await query('SELECT enabled, secret_enc FROM user_mfa WHERE user_id = $1', [user.id])).rows[0];
     if (row?.enabled) {
         return res.status(status).json({
-            mfa: { mode: 'verify', role: user.role, name: user.name, token: signPendingToken(user.id, user.role, 'verify') },
+            mfa: { mode: 'verify', role: user.role, name: user.name, token: signPendingToken(user.id, user.role, 'verify', remember) },
         });
     }
     // An unfinished setup keeps its secret, so a QR code already scanned still works
@@ -93,7 +112,7 @@ const startSecondStep = async (res: Response, user: AccountRow, status = 200) =>
     return res.status(status).json({
         mfa: {
             mode: 'setup', role: user.role, name: user.name, email: user.email,
-            token: signPendingToken(user.id, user.role, 'setup'),
+            token: signPendingToken(user.id, user.role, 'setup', remember),
             secret, otpauth_url: otpauthUrl(user.email, secret),
         },
     });
@@ -213,7 +232,7 @@ const registerAdmin = async (req: Request, res: Response) => {
         await client.query('COMMIT');
 
         // The new admin sets up an authenticator app before their first session
-        await startSecondStep(res, user, 201);
+        await startSecondStep(res, user, req.body.remember === true, 201);
     } catch (err: any) {
         await client.query('ROLLBACK').catch(() => { });
         console.error('Admin registration error:', err);
@@ -279,9 +298,9 @@ export const register = async (req: Request, res: Response) => {
         }
 
         // A new hospital sets up its authenticator app before its first session
-        if (SECOND_STEP_ROLES.has(user.role)) return await startSecondStep(res, user, 201);
+        if (SECOND_STEP_ROLES.has(user.role)) return await startSecondStep(res, user, req.body.remember === true, 201);
 
-        issueSession(res, user);
+        await issueSession(req, res, user, req.body.remember === true);
 
         // ── SENSITIVE DATA EXPOSURE PREVENTION ──────────────────────────
         // Never return password_hash or internal DB fields
@@ -353,11 +372,11 @@ export const login = async (req: Request, res: Response) => {
         }
 
         // Admins and hospitals finish signing in with a code from their authenticator app
-        if (SECOND_STEP_ROLES.has(user.role)) return await startSecondStep(res, user);
+        if (SECOND_STEP_ROLES.has(user.role)) return await startSecondStep(res, user, req.body.remember === true);
 
         await recordSignIn(user, ip);
         // HttpOnly cookie prevents XSS token theft; see authCookieOptions for SameSite
-        issueSession(res, user);
+        await issueSession(req, res, user, req.body.remember === true);
         res.json({ user: await sessionUser(user) });
     } catch (err: any) {
         // ── SENSITIVE DATA EXPOSURE PREVENTION ──────────────────────────
@@ -377,14 +396,20 @@ export const login = async (req: Request, res: Response) => {
 export const logout = async (req: Request, res: Response) => {
     // Sign out of the account the page acts as; with no role, sign out of all
     const role = requestedRole(req);
-    const names = [...(role ? [role] : SESSION_ROLES).map(sessionCookieName), LEGACY_SESSION_COOKIE];
-
-    for (const name of names) {
+    for (const r of role ? [role] : SESSION_ROLES) {
+        const name = sessionCookieName(r);
         const token = req.cookies?.[name];
         // Add to blacklist so it cannot be replayed even before it naturally expires
         if (token) blacklistToken(token, JWT_EXPIRY_MS);
         res.clearCookie(name, authCookieOptions());
+        // End "keep me signed in" too, or the next refresh would sign straight back in
+        const keep = keepCookieName(r);
+        await endKeptSession(req.cookies?.[keep]).catch(() => { });
+        res.clearCookie(keep, keepCookieOptions());
     }
+    const legacy = req.cookies?.[LEGACY_SESSION_COOKIE];
+    if (legacy) blacklistToken(legacy, JWT_EXPIRY_MS);
+    res.clearCookie(LEGACY_SESSION_COOKIE, authCookieOptions());
     res.json({ message: 'Logged out successfully' });
 };
 
@@ -447,7 +472,7 @@ export const verifySecondStep = async (req: Request, res: Response) => {
 
         clearFailedAttempts(ip);
         await recordSignIn(user, ip);
-        issueSession(res, user);
+        await issueSession(req, res, user, ticket.remember);
         res.json({
             user: await sessionUser(user),
             ...(backupCodes ? { backup_codes: backupCodes } : {}),
@@ -457,4 +482,40 @@ export const verifySecondStep = async (req: Request, res: Response) => {
         console.error('Two-step verification failed:', err.message);
         res.status(500).json({ message: 'Verification failed. Please try again.' });
     }
+};
+
+/**
+ * POST /auth/refresh
+ * A new 30-minute session from the kept sign-in, so accounts stay signed in
+ * without the password or authenticator code. With X-LifeLink-Role: that account
+ * (401 once its sign-in has ended). Without: every account kept on this browser,
+ * which the app checks when it opens.
+ */
+export const refreshSession = async (req: Request, res: Response) => {
+    const asked = requestedRole(req);
+    const users: Record<string, unknown>[] = [];
+    try {
+        for (const role of asked ? [asked] : SESSION_ROLES) {
+            const name = keepCookieName(role);
+            const value = req.cookies?.[name];
+            if (!value) continue;
+            const kept = await resumeKeptSession(value, role);
+            // A removed admin's devices lose access straight away
+            const removed = !!kept && role === 'admin'
+                && (await query('SELECT active FROM admin_profiles WHERE user_id = $1', [kept.user.id])).rows[0]?.active === false;
+            if (!kept || removed) {
+                if (removed) await endKeptSession(value);
+                res.clearCookie(name, keepCookieOptions());
+                continue;
+            }
+            setSessionCookie(res, kept.user);
+            res.cookie(name, value, keepCookieOptions(keepCookieMaxAge(kept.session)));
+            users.push(await sessionUser(kept.user));
+        }
+    } catch (err: any) {
+        console.error('Session refresh failed:', err.message);
+        return res.status(500).json({ message: 'Could not check your sign-in. Please try again.' });
+    }
+    if (asked && !users.length) return res.status(401).json({ message: 'Please sign in again.', error: 'signed_out' });
+    res.json({ users });
 };

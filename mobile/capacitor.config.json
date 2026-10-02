@@ -3,6 +3,7 @@
   "appName": "LifeLink",
   "webDir": "www",
   "backgroundColor": "#ffffff",
+  "appendUserAgent": "LifeLinkApp",
   "server": {
     "url": "https://blood-donation-frontend-delta.vercel.app",
     "androidScheme": "https",

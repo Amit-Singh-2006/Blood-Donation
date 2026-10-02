@@ -12,4 +12,13 @@ public class MainActivity extends BridgeActivity {
         // domain. Chrome allows those; an app's WebView blocks them unless told to.
         CookieManager.getInstance().setAcceptThirdPartyCookies(getBridge().getWebView(), true);
     }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        // Android writes cookies to storage only every 30 seconds or so, so closing
+        // the app soon after signing in lost the sign-in. Save them as soon as the
+        // app leaves the screen.
+        CookieManager.getInstance().flush();
+    }
 }

@@ -721,7 +721,7 @@ function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: strin
 
   // Lost phone: the hospital sets up its authenticator app again at its next sign-in
   const resetTwoStep = async (h: any) => {
-    if (!window.confirm(`Reset two-step verification for ${h.hospital_name}? Only do this after confirming it is really them, for example by phoning ${h.contact_number || 'the hospital'}. At its next sign-in it sets up an authenticator app again.`)) return;
+    if (!window.confirm(`Reset two-step verification for ${h.hospital_name}? Only do this after confirming it is really them, for example by phoning ${h.contact_number || 'the hospital'}. It is signed out on every device, and at its next sign-in it sets up an authenticator app again.`)) return;
     setBusyId(h.id);
     try {
       await apiFetch(`/admin/users/${h.id}/mfa-reset`, { method: 'POST' });
@@ -905,7 +905,7 @@ function AdminsView({ meId }: { meId?: number }) {
 
   // Lost phone: the admin sets up their authenticator app again at their next sign-in
   const resetTwoStep = async (admin: any) => {
-    if (!window.confirm(`Reset two-step verification for ${admin.name}? Only do this after confirming it is really them. At their next sign-in they set up an authenticator app again.`)) return;
+    if (!window.confirm(`Reset two-step verification for ${admin.name}? Only do this after confirming it is really them. They are signed out on every device, and at their next sign-in they set up an authenticator app again.`)) return;
     try {
       await apiFetch(`/admin/users/${admin.id}/mfa-reset`, { method: 'POST' });
       load();

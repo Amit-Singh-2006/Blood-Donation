@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { apiFetch } from '../lib/api';
 import { saveUser } from '../lib/session';
+import { isNativeApp } from '../lib/app';
 import { PASSWORD_RULES, passwordProblems } from '../lib/password';
 import TwoStepVerification, { type SecondStepChallenge } from '../components/TwoStepVerification';
 
@@ -76,7 +77,7 @@ export default function AdminRegistration() {
     try {
       const res = await apiFetch('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), password, role: 'admin', admin_invite_code: code.trim() }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), password, role: 'admin', admin_invite_code: code.trim(), remember: isNativeApp() }),
       });
       // The new admin account sets up its authenticator app before the first session
       if (res.mfa) {

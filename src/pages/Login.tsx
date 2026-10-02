@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { apiFetch } from '../lib/api';
 import { DASHBOARD, ROLES, ROLE_LABEL, Role, saveUser, signedInUsers } from '../lib/session';
 import TwoStepVerification, { type SecondStepChallenge } from '../components/TwoStepVerification';
+import { isNativeApp } from '../lib/app';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -11,6 +12,8 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // Stay signed in for 30 days; ticked in the app, a choice on shared computers
+  const [remember, setRemember] = useState(isNativeApp);
   // Admins and hospitals continue with a code from their authenticator app
   const [challenge, setChallenge] = useState<SecondStepChallenge | null>(null);
   const params = new URLSearchParams(window.location.search);
@@ -35,7 +38,7 @@ export default function Login() {
     try {
       const res = await apiFetch('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email: email.trim(), password }),
+        body: JSON.stringify({ email: email.trim(), password, remember }),
       });
       if (res.mfa) {
         setChallenge(res.mfa);
@@ -145,6 +148,17 @@ export default function Login() {
                   </button>
                 </div>
               </div>
+
+              <label className="flex items-center gap-2.5 text-sm font-medium text-slate-600 cursor-pointer select-none ml-1">
+                <input
+                  type="checkbox"
+                  checked={remember}
+                  onChange={(e) => setRemember(e.target.checked)}
+                  className="w-4 h-4 accent-[#ee2b2b]"
+                />
+                Keep me signed in
+                <span className="text-xs text-slate-400">(not on a shared computer)</span>
+              </label>
 
               <button
                 type="submit"

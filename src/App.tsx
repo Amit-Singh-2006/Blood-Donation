@@ -1,5 +1,5 @@
-import React, { Suspense, lazy } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import React, { Suspense, lazy, useEffect } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import HomePage from './pages/HomePage';
@@ -16,6 +16,9 @@ import TermsOfService from './pages/TermsOfService';
 import HospitalPartnership from './pages/HospitalPartnership';
 import Support from './pages/Support';
 import ProtectedRoute from './components/ProtectedRoute';
+import { isNativeApp } from './lib/app';
+import { refreshSession } from './lib/api';
+import { DASHBOARD, Role, lastRole, signedInUsers } from './lib/session';
 
 // Signed-in dashboards pull in PDF/QR libraries; load them only when visited
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
@@ -28,7 +31,33 @@ const Loading = () => (
   <div className="min-h-screen flex items-center justify-center text-sm font-bold text-slate-400">Loading…</div>
 );
 
+/**
+ * In the Android app, opening it goes straight to the signed-in dashboard (the
+ * one used last), like other apps. Only when the app opens: tapping Home inside
+ * it still shows the home page.
+ */
+function useOpenAppOnDashboard() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!isNativeApp() || window.location.pathname !== '/') return;
+    try {
+      if (sessionStorage.getItem('lifelink.opened')) return;
+      sessionStorage.setItem('lifelink.opened', '1');
+    } catch { /* storage unavailable: still open the dashboard */ }
+    const open = (roles: Role[]) => {
+      if (!roles.length) return;
+      const last = lastRole();
+      navigate(DASHBOARD[last && roles.includes(last) ? last : roles[0]!], { replace: true });
+    };
+    const local = signedInUsers().map((u) => u.role as Role);
+    if (local.length) return open(local);
+    // The page's own record can be lost when Android closes the app: ask the server
+    refreshSession().then((users) => open((users ?? []).map((u) => u.role as Role)));
+  }, [navigate]);
+}
+
 export default function App() {
+  useOpenAppOnDashboard();
   return (
     <Suspense fallback={<Loading />}>
     <Routes>

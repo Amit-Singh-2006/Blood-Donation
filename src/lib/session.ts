@@ -39,6 +39,22 @@ export const forgetUser = (role: Role) => {
   try { localStorage.removeItem(storageKey(role)); } catch { /* storage unavailable */ }
 };
 
+const LAST_ROLE_KEY = 'lifelink.lastRole';
+
+/** The dashboard opened most recently, so the app can reopen on it. */
+export const rememberLastRole = (role: Role) => {
+  try { localStorage.setItem(LAST_ROLE_KEY, role); } catch { /* storage unavailable */ }
+};
+
+export const lastRole = (): Role | null => {
+  try {
+    const role = localStorage.getItem(LAST_ROLE_KEY);
+    return isRole(role) ? role : null;
+  } catch {
+    return null;
+  }
+};
+
 /** Every account signed in on this browser, in a fixed order. */
 export const signedInUsers = (): any[] => ROLES.map((role) => getUser(role)).filter(Boolean);
 

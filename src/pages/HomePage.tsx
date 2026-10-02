@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion, useInView } from 'framer-motion';
 import { formatMinutes, useNetworkAnalytics } from '../lib/network';
 import { EMERGENCY } from '../lib/contact';
+import { DASHBOARD, Role, lastRole, signedInUsers } from '../lib/session';
 import { ANDROID_APP_URL, isNativeApp } from '../lib/app';
 
 /* ── Animated counter ── */
@@ -28,6 +29,13 @@ const fadeUp = { hidden: { opacity: 0, y: 32 }, show: { opacity: 1, y: 0, transi
 const stagger = { show: { transition: { staggerChildren: 0.12 } } };
 
 export default function HomePage() {
+    // Signed-in visitors see their dashboard link (the one used last), not "Get Started"
+    const signedInRoles = signedInUsers().map((u) => u.role as Role);
+    const preferredRole = lastRole();
+    const dashboard = signedInRoles.length
+        ? DASHBOARD[preferredRole && signedInRoles.includes(preferredRole) ? preferredRole : signedInRoles[0]!]
+        : null;
+
     const [menuOpen, setMenuOpen] = useState(false);
     const { data: stats } = useNetworkAnalytics();
 
@@ -56,18 +64,29 @@ export default function HomePage() {
 
                     {/* CTA */}
                     <div className="flex items-center gap-3">
-                        <Link
-                            to="/login"
-                            className="hidden sm:block text-sm font-bold text-slate-700 hover:text-[#ee2b2b] transition-colors"
-                        >
-                            Log In
-                        </Link>
-                        <Link
-                            to="/login"
-                            className="bg-[#ee2b2b] text-white px-5 py-2.5 rounded-xl text-sm font-black shadow-lg shadow-[#ee2b2b]/25 hover:bg-[#ee2b2b]/90 transition-all active:scale-95"
-                        >
-                            Get Started
-                        </Link>
+                        {dashboard ? (
+                            <Link
+                                to={dashboard}
+                                className="bg-[#ee2b2b] text-white px-5 py-2.5 rounded-xl text-sm font-black shadow-lg shadow-[#ee2b2b]/25 hover:bg-[#ee2b2b]/90 transition-all active:scale-95"
+                            >
+                                My dashboard
+                            </Link>
+                        ) : (
+                            <>
+                                <Link
+                                    to="/login"
+                                    className="hidden sm:block text-sm font-bold text-slate-700 hover:text-[#ee2b2b] transition-colors"
+                                >
+                                    Log In
+                                </Link>
+                                <Link
+                                    to="/login"
+                                    className="bg-[#ee2b2b] text-white px-5 py-2.5 rounded-xl text-sm font-black shadow-lg shadow-[#ee2b2b]/25 hover:bg-[#ee2b2b]/90 transition-all active:scale-95"
+                                >
+                                    Get Started
+                                </Link>
+                            </>
+                        )}
                     </div>
                 </div>
             </header>

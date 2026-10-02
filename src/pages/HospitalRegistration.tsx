@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiFetch } from '../lib/api';
 import { saveUser } from '../lib/session';
+import { isNativeApp } from '../lib/app';
 import { PASSWORD_RULES, passwordProblems } from '../lib/password';
 import { INDIAN_STATES, PIN_CODE } from '../lib/india';
 import TwoStepVerification, { type SecondStepChallenge } from '../components/TwoStepVerification';
@@ -124,6 +125,7 @@ export default function HospitalRegistration() {
         method: 'POST',
         body: JSON.stringify({
           role: 'hospital',
+          remember: isNativeApp(),
           name: form.hospitalName.trim(),
           email: form.email.trim(),
           password: form.password,

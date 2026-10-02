@@ -319,6 +319,23 @@ const initDb = async (): Promise<boolean> => {
     );
     ALTER TABLE user_mfa ENABLE ROW LEVEL SECURITY;
 
+    -- "Keep me signed in": long-lived sign-ins that renew the 30-minute session
+    -- cookie (utils/keepSignedIn). Only a hash of each token is stored.
+    CREATE TABLE IF NOT EXISTS user_sessions (
+      id UUID PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role VARCHAR(20) NOT NULL,
+      token_hash CHAR(64) NOT NULL,
+      persistent BOOLEAN NOT NULL DEFAULT TRUE,
+      user_agent VARCHAR(300),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      last_used_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      revoked_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS user_sessions_user ON user_sessions (user_id);
+    ALTER TABLE user_sessions ENABLE ROW LEVEL SECURITY;
+
     -- Haversine Distance Function
     CREATE OR REPLACE FUNCTION calculate_distance(lat1 FLOAT, lon1 FLOAT, lat2 FLOAT, lon2 FLOAT)
     RETURNS FLOAT AS $$

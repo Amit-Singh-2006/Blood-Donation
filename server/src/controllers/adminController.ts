@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { endAllKeptSessions } from '../utils/keepSignedIn';
 import { query } from '../config/db';
 import { networkConfigured } from '../services/donorNetwork';
 import { AdminRequest } from '../middleware/requireAdmin';
@@ -207,6 +208,8 @@ export const setAdminActive = async (req: AdminRequest, res: Response) => {
             [req.body.active, adminId]
         );
         if (!result.rows[0]) return res.status(404).json({ message: 'Admin not found.' });
+        // Removing access also signs them out of "keep me signed in" on every device
+        if (!req.body.active) await endAllKeptSessions(adminId);
         res.json(result.rows[0]);
     } catch (err) {
         serverError(res, err);
@@ -301,6 +304,8 @@ export const resetSecondStep = async (req: AdminRequest, res: Response) => {
             if (!inScope.rows[0]) return res.status(403).json({ message: 'This hospital is outside your jurisdiction.' });
         }
         await query('DELETE FROM user_mfa WHERE user_id = $1', [id]);
+        // A lost phone may still be signed in: end the account's sign-ins everywhere
+        await endAllKeptSessions(id);
         res.json({ ok: true });
     } catch (err) {
         serverError(res, err);

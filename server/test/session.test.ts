@@ -41,11 +41,11 @@ test('without a role, only an unambiguous session is used', () => {
 test('signing out of the hospital keeps the admin signed in', async () => {
     const res = fakeRes();
     await logout(fakeReq({ path: '/auth/logout', cookies: both, headers: { 'x-lifelink-role': 'hospital' } }), res);
-    assert.deepEqual(res.cleared, ['ll_hospital', 'token']);
+    assert.deepEqual(res.cleared, ['ll_hospital', 'll_hospital_keep', 'token']);
 
     const all = fakeRes();
     await logout(fakeReq({ path: '/auth/logout', cookies: both }), all);
-    assert.deepEqual(all.cleared, ['ll_admin', 'll_hospital', 'll_donor', 'token']);
+    assert.deepEqual(all.cleared, ['ll_admin', 'll_admin_keep', 'll_hospital', 'll_hospital_keep', 'll_donor', 'll_donor_keep', 'token']);
 });
 
 test('a new hospital sets up two-step verification before it gets a session', async () => {

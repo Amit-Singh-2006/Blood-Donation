@@ -97,21 +97,21 @@ export const openSecret = (stored: string): string => {
 };
 
 export type SecondStepMode = 'setup' | 'verify';
-export interface PendingSignIn { uid: number; role: string; mode: SecondStepMode }
+export interface PendingSignIn { uid: number; role: string; mode: SecondStepMode; remember: boolean }
 
 /**
  * The 10-minute ticket between the password and the code. It is signed with its
  * own key, so it can never pass as a session token.
  */
-export const signPendingToken = (uid: number, role: string, mode: SecondStepMode): string =>
-    jwt.sign({ uid, role, mode }, derivedKey('pending-sign-in-v1'), { expiresIn: '10m' });
+export const signPendingToken = (uid: number, role: string, mode: SecondStepMode, remember = false): string =>
+    jwt.sign({ uid, role, mode, remember }, derivedKey('pending-sign-in-v1'), { expiresIn: '10m' });
 
 export const readPendingToken = (token: unknown): PendingSignIn | null => {
     if (typeof token !== 'string') return null;
     try {
         const t = jwt.verify(token, derivedKey('pending-sign-in-v1')) as any;
         return Number.isInteger(t?.uid) && typeof t.role === 'string' && (t.mode === 'setup' || t.mode === 'verify')
-            ? { uid: t.uid, role: t.role, mode: t.mode }
+            ? { uid: t.uid, role: t.role, mode: t.mode, remember: t.remember === true }
             : null;
     } catch {
         return null;

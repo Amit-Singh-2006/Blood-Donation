@@ -5,6 +5,7 @@ import { User, Phone, Mail, MapPin, Droplets, Calendar, CheckCircle2, ArrowRight
 import { cn } from '@/lib/utils';
 import { apiFetch } from '../lib/api';
 import { saveUser } from '../lib/session';
+import { isNativeApp } from '../lib/app';
 
 type Step = 'personal' | 'medical' | 'contact' | 'location';
 
@@ -42,7 +43,8 @@ export default function DonorRegistration() {
         method: 'POST',
         body: JSON.stringify({
           ...formData,
-          role: 'donor'
+          role: 'donor',
+          remember: isNativeApp(),
         }),
       });
 
