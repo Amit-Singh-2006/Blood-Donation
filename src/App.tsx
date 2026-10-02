@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
 import HomePage from './pages/HomePage';
 import HospitalRegistration from './pages/HospitalRegistration';
 import DonorRegistration from './pages/DonorRegistration';
@@ -65,6 +66,7 @@ export default function App() {
       <Route path="/" element={<Layout />}>
         <Route index element={<HomePage />} />
         <Route path="login" element={<Login />} />
+        <Route path="forgot-password" element={<ForgotPassword />} />
         <Route path="register-donor" element={<DonorRegistration />} />
         <Route path="register-hospital" element={<HospitalRegistration />} />
         <Route path="register-admin" element={<AdminRegistration />} />

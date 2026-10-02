@@ -21,7 +21,7 @@ export default function Layout() {
     setMenuOpen(false);
   }, [location.pathname]); // Update when navigating in case accounts change
 
-  const hideNav = ['/', '/login', '/register-donor', '/register-hospital', '/register-admin', '/how-it-works', '/emergency-network', '/impact-reports', '/privacy', '/terms', '/partnership', '/support', '/track'].includes(location.pathname)
+  const hideNav = ['/', '/login', '/forgot-password', '/register-donor', '/register-hospital', '/register-admin', '/how-it-works', '/emergency-network', '/impact-reports', '/privacy', '/terms', '/partnership', '/support', '/track'].includes(location.pathname)
     || location.pathname.startsWith('/track/') || location.pathname.startsWith('/pass/');
 
   // Determine layout type based on path

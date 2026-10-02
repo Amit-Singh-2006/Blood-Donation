@@ -15,6 +15,7 @@ import {
 import {
     KEEP_IDLE_MS, endKeptSession, keepCookieMaxAge, keepCookieName, keepCookieOptions, resumeKeptSession, startKeptSession,
 } from '../utils/keepSignedIn';
+import { SECOND_STEP_ROLES, useSecondStepCode } from '../services/twoStep';
 import dotenv from 'dotenv';
 import {
     blacklistToken,
@@ -64,9 +65,6 @@ const issueSession = async (req: Request, res: Response, user: AccountRow, remem
     res.cookie(name, kept.value, keepCookieOptions(remember ? KEEP_IDLE_MS : undefined));
 };
 
-// Admins and hospitals see donors' details and act on the network, so a password
-// alone is not enough: they also enter a code from an authenticator app
-const SECOND_STEP_ROLES = new Set(['admin', 'hospital']);
 
 type AccountRow = { id: number; name: string; email: string; role: string };
 
@@ -447,27 +445,21 @@ export const verifySecondStep = async (req: Request, res: Response) => {
         }
 
         const code = String(req.body.code);
-        const step = matchTotp(base32Decode(openSecret(mfa.secret_enc)), code, mfa.last_step == null ? null : Number(mfa.last_step));
         let backupCodes: string[] | undefined;
         let backupCodesLeft: number | undefined;
         if (ticket.mode === 'setup') {
+            const step = matchTotp(base32Decode(openSecret(mfa.secret_enc)), code, mfa.last_step == null ? null : Number(mfa.last_step));
             if (step === null) return wrongCode(req, res, ip);
             backupCodes = newBackupCodes();
             await query(
                 `UPDATE user_mfa SET enabled = TRUE, enabled_at = now(), last_step = $2, backup_hashes = $3::jsonb, updated_at = now()
                  WHERE user_id = $1`,
                 [user.id, step, JSON.stringify(backupCodes.map(hashBackupCode))]);
-        } else if (step !== null) {
-            await query('UPDATE user_mfa SET last_step = $2, updated_at = now() WHERE user_id = $1', [user.id, step]);
         } else {
-            // Each backup code works once
-            const used = await query(
-                `UPDATE user_mfa SET backup_hashes = backup_hashes - $2::text, updated_at = now()
-                 WHERE user_id = $1 AND backup_hashes ? $2::text
-                 RETURNING jsonb_array_length(backup_hashes) AS codes_left`,
-                [user.id, hashBackupCode(code)]);
-            if (!used.rows[0]) return wrongCode(req, res, ip);
-            backupCodesLeft = Number(used.rows[0].codes_left);
+            // The app's code, or a single-use backup code for a lost phone
+            const checked = await useSecondStepCode(user.id, code, mfa);
+            if (!checked.ok) return wrongCode(req, res, ip);
+            backupCodesLeft = checked.backupCodesLeft;
         }
 
         clearFailedAttempts(ip);

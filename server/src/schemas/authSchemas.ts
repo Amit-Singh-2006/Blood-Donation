@@ -91,3 +91,17 @@ export const mfaVerifySchema = z.object({
     token: z.string().min(20).max(2000),
     code: z.string().trim().min(6, 'Enter the 6-digit code from your authenticator app').max(12),
 });
+
+// Forgot password (controllers/passwordResetController)
+const resetEmail = z.string().trim().email('Enter a valid email address').max(254);
+const resetTicket = z.string().min(20).max(2000);
+export const forgotPasswordSchema = z.object({ email: resetEmail });
+export const verifyResetCodeSchema = z.object({
+    email: resetEmail,
+    code: z.string().trim().regex(/^\d{6}$/, 'Enter the 6-digit code from the email'),
+});
+export const resetSecondStepSchema = z.object({
+    token: resetTicket,
+    code: z.string().trim().min(6, 'Enter the 6-digit code from your authenticator app').max(12),
+});
+export const resetPasswordSchema = z.object({ token: resetTicket, password: strongPasswordSchema });

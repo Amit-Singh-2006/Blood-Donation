@@ -172,3 +172,17 @@ export const broadcastCampaign = async (payload: object) => {
     if (status < 200 || status >= 300) throw new NetworkError(`The alert service rejected the campaign (${status})`, status);
     return data;
 };
+
+/** Emails an account holder through n8n: a password reset code, or a "password changed" notice. */
+export const sendAccountEmail = async (payload: {
+    type: 'reset_code' | 'password_changed';
+    to: string;
+    name: string;
+    code?: string;
+    minutes?: number;
+    needs_authenticator?: boolean;
+    when?: string;
+}) => {
+    const { status } = await post('account-email', payload);
+    if (status < 200 || status >= 300) throw new NetworkError(`The email service rejected the message (${status})`, status);
+};

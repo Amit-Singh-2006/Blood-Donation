@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { register, login, logout, checkAdminInvite, verifySecondStep, refreshSession } from '../controllers/authController';
 import { validateRequest } from '../middleware/validateZod';
-import { registerSchema, loginSchema, adminInviteCheckSchema, mfaVerifySchema } from '../schemas/authSchemas';
+import {
+    registerSchema, loginSchema, adminInviteCheckSchema, mfaVerifySchema,
+    forgotPasswordSchema, verifyResetCodeSchema, resetSecondStepSchema, resetPasswordSchema,
+} from '../schemas/authSchemas';
+import { forgotPassword, verifyResetCode, confirmResetSecondStep, resetPassword } from '../controllers/passwordResetController';
 import rateLimit from 'express-rate-limit';
 import { preventSessionFixation, botDetection, bruteForceDelay } from '../middleware/securityMiddleware';
 
@@ -88,6 +92,26 @@ const refreshLimiter = rateLimit({
     message: { message: 'Too many requests. Please wait a few minutes.' },
 });
 router.post('/refresh', refreshLimiter, botDetection, refreshSession);
+
+// Forgot password: an emailed code, then (admins and hospitals) the authenticator code
+const forgotLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10, // per IP; many mobile users share one (each account also gets at most one code a minute)
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many reset requests. Please try again in 15 minutes.' },
+});
+const resetStepLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many attempts. Please wait 15 minutes and try again.' },
+});
+router.post('/password/forgot', forgotLimiter, botDetection, validateRequest(forgotPasswordSchema), forgotPassword);
+router.post('/password/verify', resetStepLimiter, botDetection, validateRequest(verifyResetCodeSchema), verifyResetCode);
+router.post('/password/second-step', resetStepLimiter, botDetection, validateRequest(resetSecondStepSchema), confirmResetSecondStep);
+router.post('/password/reset', resetStepLimiter, botDetection, validateRequest(resetPasswordSchema), resetPassword);
 
 router.post('/logout', logout);
 

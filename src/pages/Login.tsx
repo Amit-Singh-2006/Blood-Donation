@@ -9,7 +9,7 @@ import { isNativeApp } from '../lib/app';
 export default function Login() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(() => new URLSearchParams(window.location.search).get('email') ?? '');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   // Stay signed in for 30 days; ticked in the app, a choice on shared computers
@@ -124,7 +124,7 @@ export default function Login() {
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label htmlFor="password" className="text-sm font-bold text-slate-700 ml-1">Password</label>
-                  <Link to="/support" className="text-xs font-bold text-[#ee2b2b] hover:underline">Forgot password?</Link>
+                  <Link to={`/forgot-password${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''}`} className="text-xs font-bold text-[#ee2b2b] hover:underline">Forgot password?</Link>
                 </div>
                 <div className="relative group">
                   <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#ee2b2b] transition-colors">lock</span>

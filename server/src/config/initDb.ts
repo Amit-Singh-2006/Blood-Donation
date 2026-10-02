@@ -336,6 +336,21 @@ const initDb = async (): Promise<boolean> => {
     CREATE INDEX IF NOT EXISTS user_sessions_user ON user_sessions (user_id);
     ALTER TABLE user_sessions ENABLE ROW LEVEL SECURITY;
 
+    -- Forgot password: emailed codes (only a keyed hash is stored) and how far each reset got
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id UUID PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      code_hash CHAR(64) NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      verified_at TIMESTAMPTZ,
+      second_step_at TIMESTAMPTZ,
+      used_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS password_resets_user ON password_resets (user_id, created_at);
+    ALTER TABLE password_resets ENABLE ROW LEVEL SECURITY;
+
     -- Haversine Distance Function
     CREATE OR REPLACE FUNCTION calculate_distance(lat1 FLOAT, lon1 FLOAT, lat2 FLOAT, lon2 FLOAT)
     RETURNS FLOAT AS $$
