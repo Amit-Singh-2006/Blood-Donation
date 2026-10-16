@@ -127,7 +127,7 @@ export const getImpactPrediction = async (req: AuthRequest, res: Response) => {
 };
 
 /**
- * Answers with the donor's view from the n8n donor network (live alerts with
+ * Answers with the donor's view from the donor network (live alerts with
  * their one-tap links, eligibility, history), applying `change` first when
  * given. Donors who signed up before the network existed are enrolled here.
  */

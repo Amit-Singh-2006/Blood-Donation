@@ -2,7 +2,7 @@ import { Role, forgetUser, getUser, roleForPath, saveUser } from './session';
 
 // Local dev: keep the API on localhost (not 127.0.0.1) so it is the same site as
 // the Vite dev server on localhost:3000, otherwise the session cookie is dropped
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000';
 
 const pendingRefresh = new Map<string, Promise<any[] | null | undefined>>();
 

@@ -10,6 +10,7 @@ import adminRoutes from './routes/adminRoutes';
 import userRoutes from './routes/userRoutes';
 import aiRoutes from './routes/aiRoutes';
 import { campaignRoutes, reviewRoutes } from './routes/campaignRoutes';
+import networkRoutes from './routes/networkRoutes';
 import { healthCheck } from './controllers/healthController';
 import rateLimit from 'express-rate-limit';
 
@@ -166,6 +167,8 @@ app.use('/user', userRoutes);
 app.use('/ai', aiRoutes);
 app.use('/campaigns', campaignRoutes);
 app.use('/reviews', reviewRoutes);
+// The donor network's public pages and links (one-tap replies, tracking, statistics, USSD, timer)
+app.use('/network', networkRoutes);
 
 // ──────────────────────────────────────────────────────────────────────────
 // 13. Health Check (public)

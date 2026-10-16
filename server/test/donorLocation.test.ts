@@ -2,15 +2,14 @@ import { test, mock, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeRes } from './helpers';
 import * as db from '../src/config/db';
+import * as network from '../src/services/donorNetwork';
 import { getNetworkStatus, shareLocation, stopSharingLocation } from '../src/controllers/donorController';
 import { getDonorLocations } from '../src/controllers/hospitalController';
 
-afterEach(() => {
-    mock.restoreAll();
-    delete process.env.N8N_WEBHOOK_KEY;
-});
+afterEach(() => mock.restoreAll());
 
-const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
+/** The donor's network view, as the donor portal answers it. */
+const portalAnswer = (alerts: unknown[]) => async () => ({ status: 200, data: { registered: true, alerts } });
 const donorReq = (body: unknown = {}, params: Record<string, string> = {}) => ({ user: { id: 24, role: 'donor' }, body, params }) as any;
 const report = { match_id: 31, latitude: 31.326, longitude: 75.5762, accuracy_m: 12.6 };
 const accepted = { match_id: 31, request_id: 17, status: 'accepted', hospital_name: 'Civil Hospital', hospital_city: 'Jalandhar' };
@@ -27,18 +26,18 @@ const fakeDb = (answers: [string, any[]][]) => {
 };
 
 test('a donor can start sharing only for a request they accepted', async () => {
-    process.env.N8N_WEBHOOK_KEY = 'k';
     const calls = fakeDb([['SELECT phone FROM donors', [{ phone: '98765 43210' }]]]);
-    const fetchMock = mock.method(globalThis, 'fetch', async () => json(200, { registered: true, alerts: [accepted] }));
+    const portal = mock.method(network, 'donorPortal', portalAnswer([accepted]));
 
     const res = fakeRes();
     await shareLocation(donorReq(report), res);
     assert.equal(res.statusCode, 200);
-    assert.equal(fetchMock.mock.callCount(), 1, 'the network confirms the YES once');
+    assert.equal(portal.mock.callCount(), 1, 'the network confirms the YES once');
+    assert.equal(portal.mock.calls[0]!.arguments[0], '+919876543210');
     const insert = calls.find((c) => c.sql.includes('INSERT INTO donor_locations'))!;
     assert.deepEqual(insert.params, [31, 17, 24, 31.326, 75.5762, 13]);
 
-    fetchMock.mock.mockImplementation(async () => json(200, { registered: true, alerts: [{ ...accepted, status: 'awaiting_reply' }] }));
+    portal.mock.mockImplementation(portalAnswer([{ ...accepted, status: 'awaiting_reply' }]));
     const other = fakeRes();
     await shareLocation(donorReq({ ...report, match_id: 99 }), other);
     assert.equal(other.statusCode, 403);
@@ -46,11 +45,11 @@ test('a donor can start sharing only for a request they accepted', async () => {
 
 test('later position reports just move the pin, without asking the network', async () => {
     fakeDb([['UPDATE donor_locations', [{ match_id: 31 }]]]);
-    const fetchMock = mock.method(globalThis, 'fetch', async () => json(500, {}));
+    const portal = mock.method(network, 'donorPortal', portalAnswer([]));
     const res = fakeRes();
     await shareLocation(donorReq(report), res);
     assert.equal(res.statusCode, 200);
-    assert.equal(fetchMock.mock.callCount(), 0);
+    assert.equal(portal.mock.callCount(), 0);
 });
 
 test('stopping deletes only this donor\'s position', async () => {
@@ -75,7 +74,6 @@ test('a hospital sees only donors coming to its own requests, and only recent po
 });
 
 test('donors see the hospital\'s location, and its phone only once they said YES', async () => {
-    process.env.N8N_WEBHOOK_KEY = 'k';
     fakeDb([
         ['FROM donors d JOIN users u', [{ name: 'Amit', phone: '98765 43210', blood_group: 'A-', city: 'Jalandhar', gender: 'male' }]],
         ['FROM blood_requests r JOIN hospitals h', [
@@ -84,10 +82,9 @@ test('donors see the hospital\'s location, and its phone only once they said YES
         ]],
         ['SELECT match_id FROM donor_locations', [{ match_id: 31 }]],
     ]);
-    mock.method(globalThis, 'fetch', async () => json(200, {
-        registered: true,
-        alerts: [accepted, { match_id: 32, request_id: 18, status: 'awaiting_reply', hospital_name: 'DMC', hospital_city: 'Ludhiana' }],
-    }));
+    mock.method(network, 'donorPortal', portalAnswer([
+        accepted, { match_id: 32, request_id: 18, status: 'awaiting_reply', hospital_name: 'DMC', hospital_city: 'Ludhiana' },
+    ]));
     const res = fakeRes();
     await getNetworkStatus(donorReq(), res);
     assert.equal(res.statusCode, 200);

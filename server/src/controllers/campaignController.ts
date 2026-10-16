@@ -5,7 +5,8 @@ import { AdminRequest } from '../middleware/requireAdmin';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { sessionToken } from '../middleware/session';
 import { AdminScope, normalizeCity } from '../utils/jurisdiction';
-import { broadcastCampaign, networkConfigured, toE164 } from '../services/donorNetwork';
+import { broadcastCampaign, toE164 } from '../services/donorNetwork';
+import { messagingStatus } from '../services/messaging';
 
 const FRONTEND = (process.env.FRONTEND_URL || 'https://blood-donation-frontend-delta.vercel.app').split(',')[0]!.trim().replace(/\/$/, '');
 
@@ -26,16 +27,19 @@ const findCampaign = async (id: unknown) => {
     return Number.isInteger(n) ? (await query(`SELECT ${COLUMNS} FROM campaigns c WHERE c.id = $1`, [n])).rows[0] ?? null : null;
 };
 
-/** Alerts every donor in the campaign's city: in the app (the donor's Campaigns tab), and by SMS, WhatsApp and email through n8n. */
+/** Alerts every donor in the campaign's city: in the app (the donor's Campaigns tab), and by SMS, WhatsApp and email. */
 const alertDonors = async (c: any) => {
     const donors = (await query(
         `SELECT u.name, u.email, d.phone FROM users u JOIN donors d ON d.user_id = u.id
          WHERE u.role = 'donor' AND lower(trim(d.city)) = lower(trim($1))`, [c.city])).rows;
+    const channels = messagingStatus();
     let error: string | null = null;
-    if (donors.length && !networkConfigured()) error = 'The alert service is not configured';
-    else if (donors.length) {
+    if (donors.length && !channels.sms && !channels.whatsapp && !channels.email) {
+        error = 'SMS, WhatsApp and email are not set up, so donors see this campaign only in the app';
+    } else if (donors.length) {
         try {
             await broadcastCampaign({
+                campaign_id: c.id,
                 campaign: { name: c.name, city: c.city, venue: c.venue, address: c.address, when: when(c), rewards: c.rewards, refreshments: c.refreshments, contact_phone: c.contact_phone, description: c.description },
                 register_url: `${FRONTEND}/campaign/${c.id}`,
                 recipients: donors.map((d: any) => ({ name: d.name, email: d.email, phone: toE164(d.phone) })),
@@ -123,6 +127,12 @@ export const markAttendance = async (req: AdminRequest, res: Response) => {
         // A donation at the camp restarts the member's 90/120-day gap
         if (gave && rows[0].donor_user_id) {
             await query(`UPDATE donors SET last_donation_date = GREATEST(coalesce(last_donation_date, '1900-01-01'::date), CURRENT_DATE) WHERE user_id = $1`, [rows[0].donor_user_id]);
+        }
+        // ...and the donor network's, so it does not ask them for blood before then
+        if (gave) {
+            await query(
+                `UPDATE network_donors SET last_donation_date = GREATEST(coalesce(last_donation_date, '1900-01-01'::date), CURRENT_DATE), updated_at = now()
+                 WHERE phone = (SELECT phone FROM campaign_registrations WHERE id = $1)`, [rows[0].id]);
         }
         res.json(rows[0]);
     } catch (err: any) {

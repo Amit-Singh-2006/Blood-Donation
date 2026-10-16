@@ -2,6 +2,8 @@ import { Response } from 'express';
 import { endAllKeptSessions } from '../utils/keepSignedIn';
 import { query } from '../config/db';
 import { networkConfigured } from '../services/donorNetwork';
+import { messagingStatus, outboxSummary } from '../services/messaging';
+import { timerStatus } from '../network/engine';
 import { AdminRequest } from '../middleware/requireAdmin';
 import { AdminScope, cleanCities, describeScope, donorScopeSql, hospitalScopeSql } from '../utils/jurisdiction';
 import { generateInviteCode, hashInviteCode, inviteStatus } from '../utils/adminInvites';
@@ -122,7 +124,16 @@ export const getOverview = async (req: AdminRequest, res: Response) => {
                 (SELECT count(*) FROM donations WHERE ${inScope} AND donation_date >= CURRENT_DATE - 30)::int AS donations_30d`,
             params
         );
-        res.json({ ...result.rows[0], network_configured: networkConfigured(), jurisdiction: describeScope(scope) });
+        const [messages, timer] = await Promise.all([outboxSummary().catch(() => null), timerStatus()]);
+        res.json({
+            ...result.rows[0],
+            network_configured: networkConfigured(),
+            // Which message channels have their settings, the escalation timer, and messages in the last day
+            messaging: messagingStatus(),
+            network_timer: timer,
+            messages,
+            jurisdiction: describeScope(scope),
+        });
     } catch (err) {
         serverError(res, err);
     }

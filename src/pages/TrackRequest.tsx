@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { RequestStatus, extractTrackingToken, fetchRequestStatus } from '../lib/network';
 import { EMERGENCY } from '../lib/contact';
 
-// Matches the n8n tracking page; each refresh is a billed n8n execution
+// Matches the network's own tracking page (GET /network/request-status)
 const REFRESH_MS = 2 * 60 * 1000;
 const ACTIVE = ['Open', 'Fulfilled'];
 

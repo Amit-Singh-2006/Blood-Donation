@@ -26,6 +26,11 @@ interface Overview {
   donations: number;
   donations_30d: number;
   network_configured: boolean;
+  // Which message channels have their settings on the backend
+  messaging?: { sms: boolean; whatsapp: boolean; email: boolean };
+  // Whether the one-minute escalation timer (Supabase pg_cron) is running
+  network_timer?: boolean;
+  messages?: { pending: number; failed_24h: number; sent_24h: number } | null;
   jurisdiction?: string;
 }
 
@@ -100,7 +105,8 @@ export default function AdminDashboard() {
   const notifications = [
     pendingHospitals > 0 && { id: 'pending', title: `${pendingHospitals} hospital(s) awaiting verification`, msg: 'They cannot alert donors until you verify them.', tab: 'hospitals' },
     overview && overview.requests_not_dispatched > 0 && { id: 'dispatch', title: `${overview.requests_not_dispatched} request(s) never reached the network`, msg: 'The donor network was unreachable or rejected them when they were raised.', tab: 'requests' },
-    overview && !overview.network_configured && { id: 'network', title: 'Donor network not configured', msg: 'Set N8N_WEBHOOK_KEY on the backend so requests can alert donors.', tab: 'settings' },
+    overview?.messaging && !overview.messaging.sms && !overview.messaging.whatsapp && { id: 'channels', title: 'Donors are alerted in the app only', msg: 'Add the Twilio or WhatsApp settings on the backend so alerts also reach donors by SMS or WhatsApp.', tab: 'settings' },
+    overview?.messages && overview.messages.failed_24h > 0 && { id: 'failed', title: `${overview.messages.failed_24h} message(s) could not be sent today`, msg: 'Check the SMS, WhatsApp and email settings.', tab: 'settings' },
     shortages.length > 0 && { id: 'shortage', title: `No eligible donors for ${shortages.join(', ')}`, msg: 'Consider a donor recruitment drive for these groups.', tab: 'analytics' },
   ].filter(Boolean) as { id: string; title: string; msg: string; tab: string }[];
 
@@ -437,7 +443,7 @@ function OverviewView({ overview, network, networkError, isNational, onGo }: {
     })),
     (pending?.length ?? 0) > 3 && { key: 'more', icon: 'more_horiz', title: `${pending!.length - 3} more hospitals awaiting verification`, text: 'Only verified hospitals can alert donors.', action: 'Open', tab: 'hospitals' },
     overview && overview.requests_not_dispatched > 0 && { key: 'dispatch', icon: 'error', title: `${overview.requests_not_dispatched} request(s) never reached donors`, text: 'The donor network was unreachable when they were raised. Contact the hospital.', action: 'See requests', tab: 'requests' },
-    overview && !overview.network_configured && { key: 'net', icon: 'cloud_off', title: 'Donor network not connected', text: 'Set N8N_WEBHOOK_KEY on the backend so requests can alert donors.', action: 'Settings', tab: 'settings' },
+    overview?.messaging && !overview.messaging.sms && !overview.messaging.whatsapp && { key: 'net', icon: 'sms_failed', title: 'Donors are alerted in the app only', text: 'Add the Twilio or WhatsApp settings on the backend so alerts also reach donors by SMS or WhatsApp.', action: 'Settings', tab: 'settings' },
     isNational && shortages.length > 0 && { key: 'short', icon: 'bloodtype', title: `No eligible donors right now for ${shortages.join(', ')}`, text: 'Requests for these groups rely on compatible groups. A recruitment drive would help.', action: 'Analytics', tab: 'analytics' },
   ].filter(Boolean) as { key: string; icon: string; title: string; text: string; action: string; tab: string }[];
 
@@ -1177,7 +1183,11 @@ function SettingsView({ user, overview }: { user: any; overview: Overview | null
 
   const rows: [string, React.ReactNode, boolean | null][] = [
     ['Database', health ? (health.database.reachable ? `Connected (${health.database.target})` : `Unreachable${health.database.error_code ? ` (${health.database.error_code})` : ''}`) : 'Checking…', health ? health.database.reachable : null],
-    ['Donor network (n8n)', overview ? (overview.network_configured ? 'Configured' : 'N8N_WEBHOOK_KEY is not set') : 'Checking…', overview ? overview.network_configured : null],
+    ['Donor network', overview ? 'Built into LifeLink' : 'Checking…', overview ? true : null],
+    ['Escalation timer', overview ? (overview.network_timer ? 'Runs every minute' : 'Not running: requests escalate only when someone opens them') : 'Checking…', overview ? !!overview.network_timer : null],
+    ...([['sms', 'SMS (Twilio)'], ['whatsapp', 'WhatsApp'], ['email', 'Email (reset codes, campaigns)']] as const).map(([key, label]): [string, React.ReactNode, boolean | null] =>
+      [label, overview?.messaging ? (overview.messaging[key] ? 'Set up' : 'Not set up') : 'Checking…', overview?.messaging ? overview.messaging[key] : null]),
+    ['Messages today', overview?.messages ? `${overview.messages.sent_24h} sent · ${overview.messages.failed_24h} failed · ${overview.messages.pending} waiting` : 'Checking…', overview?.messages ? overview.messages.failed_24h === 0 : null],
   ];
 
   return (
@@ -1204,7 +1214,7 @@ function SettingsView({ user, overview }: { user: any; overview: Overview | null
             </div>
           ))}
         </div>
-        <p className="text-xs text-slate-500 mt-4">Secrets such as API keys live in the Vercel project settings and the n8n credential store, never in this dashboard.</p>
+        <p className="text-xs text-slate-500 mt-4">Secrets such as API keys live in the Vercel project settings, never in this dashboard.</p>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 p-6 text-sm text-slate-600 space-y-2">

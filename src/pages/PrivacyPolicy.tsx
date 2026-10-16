@@ -85,7 +85,7 @@ export default function PrivacyPolicy() {
                     <ul className="list-disc pl-5 space-y-1">
                         <li><strong>Hospitals:</strong> when you are alerted for a request, the hospital sees your blood group and distance. If you accept, it also sees your first name and phone number so it can coordinate your donation.</li>
                         <li><strong>Patients' families:</strong> they see request progress only (counts, blood groups and distances), never donor names or phone numbers.</li>
-                        <li><strong>Service providers</strong> who process data for us under contract (Data Processors): website hosting (Vercel), database (Supabase, hosted in India), workflow automation (n8n), SMS (Twilio), WhatsApp messaging (Meta), sign-in (Google Firebase) and the AI assistant (Groq). Please do not share health details in the AI chat.</li>
+                        <li><strong>Service providers</strong> who process data for us under contract (Data Processors): website hosting (Vercel), database (Supabase, hosted in India), SMS (Twilio), WhatsApp messaging (Meta), email (Google Gmail) and the AI assistant (Groq). Please do not share health details in the AI chat.</li>
                         <li><strong>Authorities:</strong> when disclosure is required by Indian law, for example under a lawful order.</li>
                     </ul>
                 </Section>

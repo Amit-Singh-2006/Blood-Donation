@@ -4,6 +4,7 @@ import { randomUUID } from 'crypto';
 import { query } from '../config/db';
 import { sendAccountEmail } from '../services/donorNetwork';
 import { SECOND_STEP_ROLES, twoStepRecord, useSecondStepCode } from '../services/twoStep';
+import { background } from '../utils/background';
 import { endAllKeptSessions } from '../utils/keepSignedIn';
 import {
     RESET_CODE_MINUTES, RESET_CODE_TRIES, hashResetCode, newResetCode, readResetTicket, resetCodeMatches, signResetTicket,
@@ -52,10 +53,12 @@ export const forgotPassword = async (req: Request, res: Response) => {
                 await query(
                     'INSERT INTO password_resets (id, user_id, code_hash, expires_at) VALUES ($1, $2, $3, $4)',
                     [id, user.id, hashResetCode(id, code), new Date(Date.now() + RESET_CODE_MINUTES * 60_000)]);
-                await sendAccountEmail({
+                // Sent alongside the answer: how long the email takes must not tell anyone the account exists
+                const needsAuthenticator = await twoStepOn(user.role, user.id);
+                background(sendAccountEmail({
                     type: 'reset_code', to: user.email, name: user.name, code, minutes: RESET_CODE_MINUTES,
-                    needs_authenticator: await twoStepOn(user.role, user.id),
-                }).catch((err: any) => console.error('Password reset email failed:', err.message));
+                    needs_authenticator: needsAuthenticator,
+                }).catch((err: any) => console.error('Password reset email failed:', err.message)));
             }
         }
     } catch (err: any) {
@@ -146,10 +149,10 @@ export const resetPassword = async (req: Request, res: Response) => {
         // Whoever knew the old password is signed out too, on every device
         await endAllKeptSessions(reset.user_id);
         clearFailedAttempts(ipOf(req));
-        await sendAccountEmail({
+        background(sendAccountEmail({
             type: 'password_changed', to: reset.email, name: reset.name,
             when: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' }),
-        }).catch((err: any) => console.error('Password changed email failed:', err.message));
+        }).catch((err: any) => console.error('Password changed email failed:', err.message)));
         res.json({ message: 'Your password has been changed. Sign in with your new password.', email: reset.email });
     } catch (err: any) {
         console.error('resetPassword failed:', err.message);

@@ -1,10 +1,12 @@
 /**
- * Bridge to the LifeLink donor network that runs in n8n (matching, alerts,
- * one-tap replies, escalation). The webhook key stays on the server; the
- * browser only ever talks to this API.
+ * The LifeLink donor network as the rest of the API sees it: matching, alerts,
+ * one-tap replies and escalation (src/network), plus the account emails.
+ * Until October 2026 this module called n8n webhooks; the network now runs
+ * inside this API and its Postgres database, so nothing here needs a key.
  */
-const DEFAULT_BASE = 'https://amitsingh7291.app.n8n.cloud/webhook/lifelink';
-const TIMEOUT_MS = 10000;
+import * as engine from '../network/engine';
+import { AccountEmail, CampaignDetails, CampaignRecipient, accountEmail } from '../network/messages';
+import { sendEmail } from './messaging';
 
 export const ALERT_CHANNELS = ['sms', 'whatsapp', 'in_app'] as const;
 export type AlertChannel = (typeof ALERT_CHANNELS)[number];
@@ -28,7 +30,8 @@ export interface PreferenceChange {
     preferred_channel?: AlertChannel;
 }
 
-export const networkConfigured = (): boolean => !!process.env.N8N_WEBHOOK_KEY;
+/** The network is part of LifeLink; only its SMS, WhatsApp and email channels need settings. */
+export const networkConfigured = (): boolean => true;
 
 /** Normalises to E.164, treating bare 10-digit numbers as Indian mobiles. */
 export const toE164 = (phone: string | null | undefined): string | null => {
@@ -39,23 +42,9 @@ export const toE164 = (phone: string | null | undefined): string | null => {
     return null;
 };
 
-const post = async (path: string, body: object): Promise<{ status: number; data: any }> => {
-    const key = process.env.N8N_WEBHOOK_KEY;
-    if (!key) throw new NetworkError('The donor network is not configured.', 503);
-
-    const res = await fetch(`${process.env.N8N_WEBHOOK_BASE || DEFAULT_BASE}/${path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-LifeLink-Key': key },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-    });
-    const data = await res.json().catch(() => ({}));
-    return { status: res.status, data };
-};
-
 /** Creates or updates the donor in the network registry (keyed by phone). */
 export const registerDonor = async (profile: NetworkProfile, change: PreferenceChange = {}) => {
-    const { status, data } = await post('donors', {
+    const { status, data } = await engine.upsertDonor({
         name: profile.name,
         phone: profile.phone,
         blood_group: profile.blood_group,
@@ -71,8 +60,8 @@ export const registerDonor = async (profile: NetworkProfile, change: PreferenceC
 };
 
 /** Reads the donor's view, applying `change` first when given. 404 = not enrolled. */
-export const donorPortal = (phone: string, change?: PreferenceChange) =>
-    post('donor-portal', change ? { phone, action: 'update', ...change } : { phone, action: 'status' });
+export const donorPortal = (phone: string, change?: PreferenceChange): Promise<{ status: number; data: any }> =>
+    engine.donorPortal(change ? { phone, action: 'update', ...change } : { phone, action: 'status' });
 
 export interface DispatchPayload {
     hospital_name: string;
@@ -101,12 +90,11 @@ export interface DispatchResult {
 
 /** Raises the request on the network, which matches and alerts donors straight away. */
 export const dispatchRequest = async (payload: DispatchPayload): Promise<DispatchResult> => {
-    const { status, data } = await post('emergency-request', payload);
+    const { status, data } = await engine.dispatch({ ...payload });
     if (status === 400) {
         const reasons = Array.isArray(data?.errors) ? data.errors.map((e: any) => e.message).join('; ') : '';
         throw new NetworkError(reasons || 'The donor network rejected the request.', 400);
     }
-    if (status !== 201 && status !== 200) throw new NetworkError(`Donor network answered ${status}`, status);
 
     const token = String(data.tracking_url ?? '').match(/token=([0-9a-f-]{36})/i);
     return {
@@ -147,18 +135,18 @@ export interface HospitalRequestView {
 
 /** Live progress of a hospital's own requests, with confirmed donors and action links. */
 export const hospitalPortal = async (requests: { request_id: number; hospital_token: string }[]): Promise<HospitalRequestView[]> => {
-    const { status, data } = await post('hospital-portal', { requests });
+    const { status, data } = await engine.hospitalPortal(requests);
     if (status !== 200 || !Array.isArray(data?.requests)) throw new NetworkError(`Hospital portal answered ${status}`, status);
     return data.requests;
 };
 
 /**
- * Enrols a newly registered donor. Sign-up must not fail because the network
- * is down or not configured, so errors are logged and swallowed.
+ * Enrols a newly registered donor. Sign-up must not fail because of the
+ * network, so errors are logged and swallowed.
  */
 export const enrolDonor = async (profile: Omit<NetworkProfile, 'phone'> & { phone?: string | null }, change: PreferenceChange = {}) => {
     const phone = toE164(profile.phone);
-    if (!networkConfigured() || !phone) return;
+    if (!phone) return;
     try {
         await registerDonor({ ...profile, phone }, change);
     } catch (err: any) {
@@ -166,23 +154,14 @@ export const enrolDonor = async (profile: Omit<NetworkProfile, 'phone'> & { phon
     }
 };
 
-/** Hands a campaign alert to n8n, which texts, WhatsApps and emails each donor. */
-export const broadcastCampaign = async (payload: object) => {
-    const { status, data } = await post('campaign-broadcast', payload);
-    if (status < 200 || status >= 300) throw new NetworkError(`The alert service rejected the campaign (${status})`, status);
-    return data;
-};
+/** Invites donors to a campaign by SMS, WhatsApp and email (sent in the background). */
+export const broadcastCampaign = (payload: {
+    campaign_id?: number | null; campaign: CampaignDetails; register_url: string; recipients: CampaignRecipient[];
+}) => engine.broadcastCampaign(payload);
 
-/** Emails an account holder through n8n: a password reset code, or a "password changed" notice. */
-export const sendAccountEmail = async (payload: {
-    type: 'reset_code' | 'password_changed';
-    to: string;
-    name: string;
-    code?: string;
-    minutes?: number;
-    needs_authenticator?: boolean;
-    when?: string;
-}) => {
-    const { status } = await post('account-email', payload);
-    if (status < 200 || status >= 300) throw new NetworkError(`The email service rejected the message (${status})`, status);
+/** Emails an account holder: a password reset code, or a "password changed" notice. */
+export const sendAccountEmail = async (payload: AccountEmail) => {
+    const mail = accountEmail(payload);
+    const result = await sendEmail(mail.to, mail.subject, mail.html);
+    if (result.status !== 'sent') throw new NetworkError(result.error, result.status === 'skipped' ? 503 : 502);
 };

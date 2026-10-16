@@ -3,8 +3,6 @@
 interface ImportMetaEnv {
     // Backend / API
     readonly VITE_API_BASE_URL: string;
-    // LifeLink donor network (n8n) public endpoints; defaults to the n8n Cloud instance
-    readonly VITE_NETWORK_BASE_URL?: string;
     // The project's contact inbox; email contact is hidden until it is set
     readonly VITE_CONTACT_EMAIL?: string;
     // Grievance Officer named on the Terms and Privacy Policy (IT Rules, 2021)

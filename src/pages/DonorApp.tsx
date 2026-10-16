@@ -9,6 +9,7 @@ import { getUser } from '../lib/session';
 import DonationPass from '../components/DonationPass';
 import { agoText, directionsUrl, distanceKm, Point } from '../lib/geo';
 import { EMERGENCY } from '../lib/contact';
+import { outcomeText } from '../lib/network';
 
 /** A blood request the donor was alerted to, from GET /donor/network. */
 interface NetworkAlert {
@@ -289,7 +290,7 @@ export default function DonorApp() {
     try {
       const res = await fetch(`${url}&format=json`);
       const outcome = await res.json();
-      setReplyNotice({ ok: res.ok, text: `${outcome.title}. ${outcome.message}` });
+      setReplyNotice({ ok: res.ok, text: outcomeText(outcome) });
     } catch {
       window.open(url, '_blank', 'noopener');
     } finally {
@@ -460,7 +461,7 @@ export default function DonorApp() {
         onAction={(actionName, outcome) => {
           // The assistant already accepted through the network; show the result and refresh
           if (actionName === 'accept_blood_request') {
-            if (outcome?.title) setReplyNotice({ ok: true, text: `${outcome.title}. ${outcome.message}` });
+            if (outcome?.title) setReplyNotice({ ok: true, text: outcomeText(outcome) });
             fetchNetwork();
           }
         }}

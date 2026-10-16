@@ -24,7 +24,7 @@ const donorApiLimiter = rateLimit({
 router.get('/donations', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), getDonorDonations);
 router.get('/matches', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), getMatchedRequests);
 router.get('/impact/:requestId', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), getImpactPrediction);
-// Live alerts, eligibility and preferences from the n8n donor network
+// Live alerts, eligibility and preferences from the donor network
 router.get('/network', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), getNetworkStatus);
 router.put('/network', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), validateRequest(networkPreferencesSchema), updateNetworkPreferences);
 router.get('/centers', donorApiLimiter, authMiddleware, roleMiddleware(['donor']), getDonationCenters);

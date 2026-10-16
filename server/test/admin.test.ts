@@ -5,10 +5,7 @@ import * as db from '../src/config/db';
 import { getDonors, getOverview } from '../src/controllers/adminController';
 import { inviteCodeMatches } from '../src/controllers/authController';
 
-afterEach(() => {
-    mock.restoreAll();
-    delete process.env.N8N_WEBHOOK_KEY;
-});
+afterEach(() => mock.restoreAll());
 
 const national = { adminScope: { userId: 1, isNational: true, state: null, cities: [] } } as any;
 
@@ -17,19 +14,46 @@ const counts = {
     requests_exhausted: 1, requests_not_dispatched: 1, donations: 7, donations_30d: 4,
 };
 
-test('overview returns the database counts and whether the donor network is configured', async () => {
-    delete process.env.N8N_WEBHOOK_KEY; // server/.env may set it
-    mock.method(db, 'query', async () => ({ rows: [counts], rowCount: 1 }));
+test('overview returns the counts, which message channels are set up and whether the timer runs', async () => {
+    const keys = ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_FROM', 'WHATSAPP_TOKEN', 'WHATSAPP_PHONE_NUMBER_ID', 'SMTP_USER', 'SMTP_PASS'];
+    const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    for (const k of keys) delete process.env[k]; // server/.env may set them
+    process.env.SMTP_USER = 'lifelink@example.com';
+    process.env.SMTP_PASS = 'app password';
+    const messages = { pending: 1, failed_24h: 2, sent_24h: 30 };
+    mock.method(db, 'query', async (sql: string) => ({
+        rows: sql.includes('FROM network_outbox') ? [messages] : sql.includes('cron.job') ? [{ active: true }] : [counts],
+    }));
+    try {
+        const res = fakeRes();
+        await getOverview(national, res);
+        assert.equal(res.statusCode, 200);
+        assert.deepEqual(res.body, {
+            ...counts,
+            network_configured: true,
+            messaging: { sms: false, whatsapp: false, email: true },
+            network_timer: true,
+            messages,
+            jurisdiction: 'All India',
+        });
+        assert.doesNotMatch(JSON.stringify(res.body), /app password/, 'never the settings themselves');
+    } finally {
+        for (const k of keys) {
+            if (saved[k] === undefined) delete process.env[k];
+            else process.env[k] = saved[k];
+        }
+    }
+});
 
+test('overview still loads when the database has no pg_cron', async () => {
+    mock.method(db, 'query', async (sql: string) => {
+        if (sql.includes('cron.job')) throw new Error('relation "cron.job" does not exist');
+        return { rows: [sql.includes('FROM network_outbox') ? { pending: 0, failed_24h: 0, sent_24h: 0 } : counts] };
+    });
     const res = fakeRes();
     await getOverview(national, res);
     assert.equal(res.statusCode, 200);
-    assert.deepEqual(res.body, { ...counts, network_configured: false, jurisdiction: 'All India' });
-
-    process.env.N8N_WEBHOOK_KEY = 'server-key';
-    const configured = fakeRes();
-    await getOverview(national, configured);
-    assert.equal(configured.body.network_configured, true);
+    assert.equal(res.body.network_timer, false);
 });
 
 test('overview hides database errors behind a generic 500', async () => {

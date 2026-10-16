@@ -131,7 +131,7 @@ const initDb = async (): Promise<boolean> => {
     ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE;
     ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS registration_number VARCHAR(100);
 
-    -- Link each request to the n8n donor network (tokens stay server-side)
+    -- Link each request to the donor network (tokens stay server-side)
     ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS patient_ref VARCHAR(40);
     ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS required_by TIMESTAMPTZ;
     ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS network_request_id INTEGER;
@@ -350,6 +350,186 @@ const initDb = async (): Promise<boolean> => {
     );
     CREATE INDEX IF NOT EXISTS password_resets_user ON password_resets (user_id, created_at);
     ALTER TABLE password_resets ENABLE ROW LEVEL SECURITY;
+
+    -- The donor network (src/network), which ran in n8n until October 2026: the
+    -- donor registry (keyed by phone, so USSD donors without a website account
+    -- fit too), requests, each donor ranked for each request, a log of what
+    -- everyone was told, and the queue of SMS, WhatsApp and email to send.
+    CREATE TABLE IF NOT EXISTS network_donors (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      phone VARCHAR(20) NOT NULL UNIQUE,
+      blood_group VARCHAR(3) NOT NULL CHECK (blood_group IN ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-')),
+      gender VARCHAR(12) NOT NULL DEFAULT 'unspecified',
+      city VARCHAR(100) NOT NULL,
+      latitude DOUBLE PRECISION,
+      longitude DOUBLE PRECISION,
+      available BOOLEAN NOT NULL DEFAULT TRUE,
+      last_donation_date DATE,
+      total_donations INTEGER NOT NULL DEFAULT 0,
+      preferred_channel VARCHAR(10) NOT NULL DEFAULT 'sms',
+      fcm_token TEXT,
+      xp_points INTEGER NOT NULL DEFAULT 0,
+      committed_until TIMESTAMPTZ,
+      source VARCHAR(10) NOT NULL DEFAULT 'web',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    ALTER TABLE network_donors ENABLE ROW LEVEL SECURITY;
+
+    CREATE TABLE IF NOT EXISTS network_requests (
+      id SERIAL PRIMARY KEY,
+      hospital_name VARCHAR(200) NOT NULL,
+      hospital_city VARCHAR(100) NOT NULL,
+      hospital_contact VARCHAR(20),
+      patient_ref VARCHAR(40),
+      blood_group VARCHAR(3) NOT NULL,
+      units_required INTEGER NOT NULL CHECK (units_required BETWEEN 1 AND 20),
+      urgency VARCHAR(10) NOT NULL CHECK (urgency IN ('Normal', 'Urgent', 'Emergency')),
+      latitude DOUBLE PRECISION,
+      longitude DOUBLE PRECISION,
+      required_by TIMESTAMPTZ,
+      status VARCHAR(10) NOT NULL DEFAULT 'Open' CHECK (status IN ('Open', 'Fulfilled', 'Completed', 'Exhausted', 'Cancelled')),
+      units_confirmed INTEGER NOT NULL DEFAULT 0,
+      units_donated INTEGER NOT NULL DEFAULT 0,
+      compatible_donors INTEGER NOT NULL DEFAULT 0,
+      donors_notified INTEGER NOT NULL DEFAULT 0,
+      wave_size INTEGER NOT NULL,
+      escalation_minutes INTEGER NOT NULL,
+      escalation_rounds INTEGER NOT NULL DEFAULT 0,
+      status_token VARCHAR(36) NOT NULL UNIQUE,
+      hospital_token VARCHAR(36) NOT NULL,
+      first_accept_at TIMESTAMPTZ,
+      fulfilled_at TIMESTAMPTZ,
+      closed_reason VARCHAR(40),
+      closed_at TIMESTAMPTZ,
+      -- When escalation next looks at the request; NULL once it has stopped
+      next_check_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS network_requests_due ON network_requests (next_check_at) WHERE next_check_at IS NOT NULL;
+    ALTER TABLE network_requests ENABLE ROW LEVEL SECURITY;
+
+    CREATE TABLE IF NOT EXISTS network_matches (
+      id SERIAL PRIMARY KEY,
+      request_id INTEGER NOT NULL REFERENCES network_requests(id) ON DELETE CASCADE,
+      donor_id INTEGER REFERENCES network_donors(id) ON DELETE SET NULL,
+      donor_blood_group VARCHAR(3) NOT NULL,
+      request_blood_group VARCHAR(3) NOT NULL,
+      rank INTEGER NOT NULL,
+      distance_km DOUBLE PRECISION,
+      exact_match BOOLEAN NOT NULL DEFAULT FALSE,
+      status VARCHAR(12) NOT NULL,
+      response_token VARCHAR(36) NOT NULL,
+      channel VARCHAR(10) NOT NULL DEFAULT 'in_app',
+      contact TEXT,
+      hospital_name VARCHAR(200) NOT NULL,
+      hospital_city VARCHAR(100) NOT NULL,
+      urgency VARCHAR(10) NOT NULL,
+      units_required INTEGER NOT NULL,
+      notified_at TIMESTAMPTZ,
+      responded_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS network_matches_request ON network_matches (request_id);
+    CREATE INDEX IF NOT EXISTS network_matches_donor ON network_matches (donor_id);
+    ALTER TABLE network_matches ENABLE ROW LEVEL SECURITY;
+
+    -- Request and match ids carry on above the n8n ones, which blood_requests,
+    -- donations and donor_locations still hold for older requests
+    SELECT setval(pg_get_serial_sequence('network_requests', 'id'), GREATEST(1000, (SELECT last_value FROM network_requests_id_seq)));
+    SELECT setval(pg_get_serial_sequence('network_matches', 'id'), GREATEST(10000, (SELECT last_value FROM network_matches_id_seq)));
+
+    CREATE TABLE IF NOT EXISTS network_notifications (
+      id SERIAL PRIMARY KEY,
+      donor_id INTEGER,
+      request_id INTEGER,
+      match_id INTEGER,
+      title VARCHAR(255) NOT NULL,
+      message TEXT NOT NULL,
+      type VARCHAR(40) NOT NULL,
+      channel VARCHAR(10) NOT NULL DEFAULT 'in_app',
+      recipient VARCHAR(255) NOT NULL,
+      accept_url TEXT,
+      decline_url TEXT,
+      confirm_donation_url TEXT,
+      no_show_url TEXT,
+      is_read BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS network_notifications_request ON network_notifications (request_id);
+    ALTER TABLE network_notifications ENABLE ROW LEVEL SECURITY;
+
+    CREATE TABLE IF NOT EXISTS network_outbox (
+      id SERIAL PRIMARY KEY,
+      channel VARCHAR(10) NOT NULL CHECK (channel IN ('sms', 'whatsapp', 'email')),
+      recipient VARCHAR(320) NOT NULL,
+      payload JSONB NOT NULL,
+      purpose VARCHAR(20) NOT NULL,
+      ref_id INTEGER,
+      status VARCHAR(10) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'failed', 'skipped')),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      provider_id VARCHAR(120),
+      next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      sent_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS network_outbox_due ON network_outbox (next_attempt_at) WHERE status = 'pending';
+    ALTER TABLE network_outbox ENABLE ROW LEVEL SECURITY;
+
+    -- Website donors join the registry (the n8n registry went with the n8n
+    -- instance). Phones are normalised like toE164 in services/donorNetwork.
+    INSERT INTO network_donors (name, phone, blood_group, gender, city, available, last_donation_date, total_donations, preferred_channel, xp_points, source)
+    SELECT DISTINCT ON (p.phone)
+           left(trim(u.name), 100), p.phone, d.blood_group,
+           CASE WHEN lower(d.gender) IN ('male', 'female', 'other') THEN lower(d.gender) ELSE 'unspecified' END,
+           left(trim(d.city), 100), TRUE, d.last_donation_date,
+           (SELECT count(*) FROM donations x WHERE x.donor_id = u.id)::int, 'sms', COALESCE(d.xp_points, 0), 'web'
+    FROM users u
+    JOIN donors d ON d.user_id = u.id
+    CROSS JOIN LATERAL (SELECT regexp_replace(COALESCE(d.phone, ''), '[\\s()-]', '', 'g') AS raw) r
+    CROSS JOIN LATERAL (SELECT CASE WHEN r.raw ~ '^\\+\\d{10,15}$' THEN r.raw
+                                    WHEN r.raw ~ '^0?\\d{10}$' THEN '+91' || right(r.raw, 10)
+                                    WHEN r.raw ~ '^91\\d{10}$' THEN '+' || r.raw END AS phone) p
+    WHERE u.role = 'donor' AND p.phone IS NOT NULL AND d.blood_group IS NOT NULL
+      AND length(trim(COALESCE(d.city, ''))) >= 2 AND length(trim(u.name)) >= 2
+    ORDER BY p.phone, u.id DESC
+    ON CONFLICT (phone) DO NOTHING;
+
+    -- The one-minute timer that drives escalation and message retries
+    -- (Supabase pg_cron + pg_net). It calls the API only when something is
+    -- due. Elsewhere these extensions may be missing; the timer is then
+    -- skipped and escalation runs whenever a hospital or family checks a request.
+    DO $timer$
+    BEGIN
+      CREATE EXTENSION IF NOT EXISTS pg_net;
+      CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
+      PERFORM cron.schedule('lifelink-network-tick', '* * * * *', $job$
+        SELECT net.http_post(
+          url := 'https://blood-donation-backend-sepia.vercel.app/network/tick',
+          body := '{}'::jsonb,
+          headers := '{"Content-Type": "application/json"}'::jsonb,
+          timeout_milliseconds := 30000)
+        WHERE EXISTS (SELECT 1 FROM public.network_requests WHERE next_check_at <= now())
+           OR EXISTS (SELECT 1 FROM public.network_outbox WHERE status = 'pending' AND next_attempt_at <= now())
+      $job$);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'LifeLink network timer not set up: %', SQLERRM;
+    END
+    $timer$;
+
+    -- pg_cron logs every run; keep a week of it
+    DO $cleanup$
+    BEGIN
+      PERFORM cron.schedule('lifelink-cron-cleanup', '17 3 * * *',
+        $job$ DELETE FROM cron.job_run_details WHERE end_time < now() - interval '7 days' $job$);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'LifeLink cron cleanup not set up: %', SQLERRM;
+    END
+    $cleanup$;
 
     -- Haversine Distance Function
     CREATE OR REPLACE FUNCTION calculate_distance(lat1 FLOAT, lon1 FLOAT, lat2 FLOAT, lon2 FLOAT)

@@ -283,7 +283,7 @@ export const register = async (req: Request, res: Response) => {
                 'INSERT INTO donors (user_id, blood_group, city, phone, dob, gender) VALUES ($1, $2, $3, $4, $5, $6)',
                 [user.id, blood_group, city, phone, dob, gender]
             );
-            // Join the n8n donor network so this donor can be matched and alerted
+            // Join the donor network so this donor can be matched and alerted
             await enrolDonor({ name, phone, blood_group, city, gender }, { preferred_channel });
         } else if (role === 'hospital') {
             await query(

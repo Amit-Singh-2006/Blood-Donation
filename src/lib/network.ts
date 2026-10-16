@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
+import { API_BASE_URL } from './api';
 
 /**
- * Public, read-only endpoints of the LifeLink donor network (n8n). They carry
- * no donor identities: request tracking is keyed by an unguessable token, and
- * analytics are aggregate counts.
+ * Public, read-only endpoints of the LifeLink donor network (part of the API).
+ * They carry no donor identities: request tracking is keyed by an unguessable
+ * token, and analytics are aggregate counts.
  */
-export const NETWORK_BASE_URL = import.meta.env.VITE_NETWORK_BASE_URL || 'https://amitsingh7291.app.n8n.cloud/webhook/lifelink';
+export const NETWORK_BASE_URL = `${API_BASE_URL}/network`;
 
 export interface RequestStatus {
   request_id: number;
@@ -80,6 +81,12 @@ export const useNetworkAnalytics = () => {
     return () => { active = false; };
   }, []);
   return { data, error };
+};
+
+/** A one-tap reply as one sentence: "Thank you, Asha! …" without doubling the title's punctuation. */
+export const outcomeText = (outcome: { title?: string; message?: string }) => {
+  const title = outcome.title ?? '';
+  return `${title}${/[.!?]$/.test(title) ? '' : '.'} ${outcome.message ?? ''}`.trim();
 };
 
 /** "Under a minute", "12 min", "1 h 5 min"; null-safe. */

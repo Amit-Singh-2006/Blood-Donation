@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 import { cn } from '@/lib/utils';
 import { apiFetch } from '../lib/api';
+import { outcomeText } from '../lib/network';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -177,7 +178,7 @@ async function executeTool(name: string, args: any, onAction?: (action: string, 
                 // Same one-tap link the donor gets by SMS/WhatsApp; format=json returns the outcome
                 const outcome = await (await fetch(`${next.accept_url}&format=json`)).json();
                 onAction?.('accept_blood_request', outcome);
-                return `${outcome.title}. ${outcome.message}`;
+                return outcomeText(outcome);
             }
 
             case 'get_all_hospitals': {

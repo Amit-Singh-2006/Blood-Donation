@@ -299,7 +299,7 @@ export const verifyDonation = async (req: AuthRequest, res: Response) => {
 
         // 2. Update Hospital Inventory
         // First, get the blood group of the donor
-        const donorData = await client.query('SELECT blood_group FROM donors WHERE user_id = $1', [donor_id]);
+        const donorData = await client.query('SELECT blood_group, phone FROM donors WHERE user_id = $1', [donor_id]);
         if (donorData.rows.length === 0) {
             await client.query('ROLLBACK');
             return res.status(404).json({ message: 'Donor not found' });
@@ -324,6 +324,13 @@ export const verifyDonation = async (req: AuthRequest, res: Response) => {
              WHERE user_id = $2`,
             [earnedXP, donor_id]
         );
+        // The donor network rests them too, so it does not ask them for blood too soon
+        const phone = toE164(donorData.rows[0].phone);
+        if (phone) {
+            await client.query(
+                `UPDATE network_donors SET last_donation_date = GREATEST(coalesce(last_donation_date, '1900-01-01'::date), CURRENT_DATE), updated_at = now()
+                 WHERE phone = $1`, [phone]);
+        }
 
         await client.query('COMMIT');
 

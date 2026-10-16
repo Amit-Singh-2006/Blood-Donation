@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Zap, ArrowLeft } from 'lucide-react';
 
-// Mirrors what the donor network actually does (n8n/workflows/emergency-dispatch)
+// Mirrors what the donor network actually does (server/src/network/rules.ts)
 const STEPS = [
   {
     icon: 'local_hospital',

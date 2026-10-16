@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils';
 import { apiFetch } from '../lib/api';
 import { signOut } from '../lib/auth';
 import { getUser } from '../lib/session';
-import { useNetworkAnalytics } from '../lib/network';
+import { outcomeText, useNetworkAnalytics } from '../lib/network';
 import { EMERGENCY } from '../lib/contact';
 import { Point, agoText, distanceKm, etaMinutes } from '../lib/geo';
 
@@ -19,7 +19,7 @@ const DonorMap = lazy(() => import('../components/DonorMap'));
 type NavItem = 'overview' | 'requests' | 'inventory' | 'reviews' | 'settings';
 
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
-// Live data refresh while requests are active; each refresh is one n8n execution
+// Live data refresh while requests are active (each refresh also runs any escalation that is due)
 const REFRESH_MS = 2 * 60 * 1000;
 const ACTIVE = ['Open', 'Fulfilled'];
 
@@ -918,7 +918,7 @@ function RequestCard({ req, open, onToggle, onRefresh, locations, hospitalPoint,
     try {
       const res = await fetch(`${url}&format=json`);
       const outcome = await res.json();
-      setNotice({ ok: res.ok, text: `${outcome.title}. ${outcome.message}` });
+      setNotice({ ok: res.ok, text: outcomeText(outcome) });
     } catch {
       setNotice({ ok: false, text: 'The donor network could not be reached. Please try again.' });
     } finally {
