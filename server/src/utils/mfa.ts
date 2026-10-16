@@ -109,7 +109,7 @@ export const signPendingToken = (uid: number, role: string, mode: SecondStepMode
 export const readPendingToken = (token: unknown): PendingSignIn | null => {
     if (typeof token !== 'string') return null;
     try {
-        const t = jwt.verify(token, derivedKey('pending-sign-in-v1')) as any;
+        const t = jwt.verify(token, derivedKey('pending-sign-in-v1'), { algorithms: ['HS256'] }) as any;
         return Number.isInteger(t?.uid) && typeof t.role === 'string' && (t.mode === 'setup' || t.mode === 'verify')
             ? { uid: t.uid, role: t.role, mode: t.mode, remember: t.remember === true }
             : null;

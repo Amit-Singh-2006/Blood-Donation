@@ -11,7 +11,7 @@ const num = (v: unknown): number | null => (v == null ? null : Number(v));
 // DATE columns are read as text: pg would turn them into local-midnight Date objects
 export const DONOR_COLUMNS = `id, name, phone, blood_group, gender, city, latitude, longitude, available,
     to_char(last_donation_date, 'YYYY-MM-DD') AS last_donation_date, total_donations, preferred_channel,
-    fcm_token, xp_points, committed_until, source`;
+    fcm_token, xp_points, committed_until, source, user_id`;
 
 export const REQUEST_COLUMNS = `id, hospital_name, hospital_city, hospital_contact, patient_ref, blood_group,
     units_required, urgency, latitude, longitude, required_by, status, units_confirmed, units_donated,
@@ -39,6 +39,7 @@ export const toDonor = (r: any): NetDonor => ({
     xp_points: Number(r.xp_points ?? 0),
     committed_until: iso(r.committed_until),
     source: r.source,
+    user_id: r.user_id ?? null,
 });
 
 export const toRequest = (r: any): NetRequest => ({

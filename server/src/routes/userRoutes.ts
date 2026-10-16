@@ -1,9 +1,6 @@
 import { Router } from 'express';
-import { getNotifications, markNotificationRead, updateProfile } from '../controllers/userController';
+import { getNotifications, markNotificationRead } from '../controllers/userController';
 import { authMiddleware } from '../middleware/authMiddleware';
-import { validateRequest } from '../middleware/validateZod';
-import { updateProfileSchema } from '../schemas/userSchemas';
-import { massAssignmentGuard } from '../middleware/securityMiddleware';
 import rateLimit from 'express-rate-limit';
 
 const router = Router();
@@ -24,16 +21,5 @@ const userApiLimiter = rateLimit({
 // UPDATE to WHERE id = $1 AND user_id = $2 (user can only mark their own).
 router.get('/notifications', userApiLimiter, authMiddleware, getNotifications);
 router.put('/notifications/:id/read', userApiLimiter, authMiddleware, markNotificationRead);
-
-// updateProfile: massAssignmentGuard ensures attackers cannot inject `role`,
-// `password_hash`, or any other field outside the whitelist.
-router.put(
-    '/profile',
-    userApiLimiter,
-    authMiddleware,
-    massAssignmentGuard(['latitude', 'longitude', 'city', 'phone']),
-    validateRequest(updateProfileSchema),
-    updateProfile
-);
 
 export default router;

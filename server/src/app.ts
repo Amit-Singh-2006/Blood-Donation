@@ -52,7 +52,7 @@ app.use(helmet({
             scriptSrc: ["'self'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
             imgSrc: ["'self'", "data:", "https:"],
-            connectSrc: ["'self'", "http://localhost:5173", "https://jadmqstbutzbclbuqium.supabase.co"],
+            connectSrc: ["'self'"],
             fontSrc: ["'self'", "https:", "data:"],
             objectSrc: ["'none'"],
             frameAncestors: ["'none'"],     // Prevent clickjacking
@@ -189,7 +189,15 @@ app.use((req, res) => {
 // 15. Global Error Handler – never leak stack traces to clients
 // ──────────────────────────────────────────────────────────────────────────
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    console.error('[ERROR]', err);
+    // A body that cannot be parsed comes with the raw body attached, and JSON
+    // errors quote its start, which can hold a password: log only the kind
+    if (String(err?.type ?? '').startsWith('entity.') || err?.type === 'encoding.unsupported' || err instanceof SyntaxError) {
+        console.error('[ERROR] unreadable request body:', err?.type ?? 'invalid JSON');
+        const status = err?.status === 413 ? 413 : 400;
+        return res.status(status).json({ message: status === 413 ? 'The request is too large.' : 'The request body is not valid JSON.' });
+    }
+    // The stack, not the whole object: database errors carry the offending values in `detail`
+    console.error('[ERROR]', err?.stack ?? err?.message ?? err);
     res.status(err.status || 500).json({ message: 'An internal error occurred.' });
 });
 

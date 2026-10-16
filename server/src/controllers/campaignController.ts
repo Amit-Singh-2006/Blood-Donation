@@ -169,7 +169,7 @@ const donorIdFrom = (req: Request): number | null => {
     const token = sessionToken(req);
     if (!token) return null;
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET as string, { algorithms: ['HS256'] }) as any;
         return decoded?.role === 'donor' ? Number(decoded.id) : null;
     } catch {
         return null;

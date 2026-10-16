@@ -22,10 +22,14 @@ const agentPayload = {
         },
         { role: 'tool', name: 'create_emergency_request', tool_call_id: 'call_1', content: 'created' },
     ],
-    tools: [{ type: 'function', function: { name: 'get_requests', description: 'List requests', parameters: { type: 'object', properties: {} } } }],
+    tools: [
+        { type: 'function', function: { name: 'get_requests', description: 'List requests', parameters: { type: 'object', properties: {} } } },
+        { type: 'function', function: { name: 'run_any_code', description: 'Not a LifeLink tool', parameters: { type: 'object', properties: {} } } },
+    ],
     tool_choice: 'auto',
     temperature: 0,
 };
+const hospitalStaff = { id: 7, email: 'staff@hospital.example', role: 'hospital' };
 
 test('chat schema accepts the AgentChat and ChatBot payloads', () => {
     assert.ok(chatCompletionSchema.safeParse(agentPayload).success);
@@ -56,7 +60,7 @@ test('injectionGuard skips /ai/chat but still checks other routes', () => {
 test('chatCompletion returns 503 when the server key is not configured', async () => {
     const fetchMock = mock.method(globalThis, 'fetch', async () => { throw new Error('should not be called'); });
     const res = fakeRes();
-    await chatCompletion({ body: agentPayload } as any, res);
+    await chatCompletion({ body: agentPayload, user: hospitalStaff } as any, res);
     assert.equal(res.statusCode, 503);
     assert.equal(fetchMock.mock.callCount(), 0);
 });
@@ -66,7 +70,7 @@ test('chatCompletion forwards with the server-side key, a token cap and short hi
     const fetchMock = mock.method(globalThis, 'fetch', async () =>
         new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Hi' } }] }), { status: 200 }));
     const res = fakeRes();
-    await chatCompletion({ body: agentPayload } as any, res);
+    await chatCompletion({ body: agentPayload, user: hospitalStaff } as any, res);
 
     const [url, init] = fetchMock.mock.calls[0]!.arguments as [string, RequestInit];
     assert.equal(url, 'https://api.groq.com/openai/v1/chat/completions');
@@ -86,7 +90,29 @@ test('chatCompletion hides upstream error details', async () => {
         new Response(JSON.stringify({ error: { message: 'Invalid API Key: gsk_live_...' } }), { status: 401 }));
     mock.method(console, 'error', () => { });
     const res = fakeRes();
-    await chatCompletion({ body: agentPayload } as any, res);
+    await chatCompletion({ body: agentPayload, user: hospitalStaff } as any, res);
     assert.equal(res.statusCode, 502);
     assert.doesNotMatch(JSON.stringify(res.body), /gsk_|API Key/);
+});
+
+test('the server sets the instructions and tools for each role; the browser cannot replace them', async () => {
+    process.env.GROQ_API_KEY = 'server-secret';
+    const fetchMock = mock.method(globalThis, 'fetch', async () =>
+        new Response(JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'Hi' } }] }), { status: 200 }));
+    await chatCompletion({ body: agentPayload, user: hospitalStaff } as any, fakeRes());
+    const sent = JSON.parse((fetchMock.mock.calls[0]!.arguments[1] as RequestInit).body as string);
+    assert.equal(sent.messages[0].role, 'system');
+    assert.match(sent.messages[0].content, /CURRENT CONTEXT: Hospital Dashboard/);
+    assert.equal(sent.messages.filter((m: any) => m.role === 'system').length, 1, 'the client system prompt is dropped');
+    assert.deepEqual(sent.tools.map((t: any) => t.function.name), ['get_requests'], 'tools outside the role are dropped');
+
+    await chatCompletion({ body: agentPayload, user: { id: 9, email: 'd@example.com', role: 'donor' } } as any, fakeRes());
+    const asDonor = JSON.parse((fetchMock.mock.calls[1]!.arguments[1] as RequestInit).body as string);
+    assert.match(asDonor.messages[0].content, /CURRENT CONTEXT: Donor Dashboard/);
+    assert.equal(asDonor.tools, undefined, 'a donor gets none of the hospital tools');
+
+    const stranger = fakeRes();
+    await chatCompletion({ body: agentPayload, user: { id: 1, email: 'x@example.com', role: 'guest' } } as any, stranger);
+    assert.equal(stranger.statusCode, 403);
+    assert.equal(fetchMock.mock.callCount(), 2);
 });

@@ -38,7 +38,7 @@ export const signResetTicket = (rid: string, uid: number): string =>
 export const readResetTicket = (token: unknown): ResetTicket | null => {
     if (typeof token !== 'string') return null;
     try {
-        const t = jwt.verify(token, derivedKey('ticket-v1')) as any;
+        const t = jwt.verify(token, derivedKey('ticket-v1'), { algorithms: ['HS256'] }) as any;
         return typeof t?.rid === 'string' && Number.isInteger(t.uid) ? { rid: t.rid, uid: t.uid } : null;
     } catch {
         return null;

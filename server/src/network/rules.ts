@@ -33,6 +33,8 @@ export interface NetDonor {
     xp_points: number;
     committed_until: string | null; // ISO time
     source: string;
+    /** The website account this entry belongs to; USSD donors have none. */
+    user_id?: number | null;
 }
 
 export interface NetRequest {

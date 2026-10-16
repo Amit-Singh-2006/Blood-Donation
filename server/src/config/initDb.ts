@@ -376,6 +376,11 @@ const initDb = async (): Promise<boolean> => {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     ALTER TABLE network_donors ENABLE ROW LEVEL SECURITY;
+    -- The website account a registry entry belongs to (USSD donors have none).
+    -- Phones are not verified, so without this anyone signing up with someone
+    -- else's number saw that donor's alerts and could answer them.
+    ALTER TABLE network_donors ADD COLUMN IF NOT EXISTS user_id INTEGER REFERENCES users(id) ON DELETE CASCADE;
+    CREATE UNIQUE INDEX IF NOT EXISTS network_donors_user_id ON network_donors (user_id);
 
     CREATE TABLE IF NOT EXISTS network_requests (
       id SERIAL PRIMARY KEY,
@@ -499,13 +504,42 @@ const initDb = async (): Promise<boolean> => {
     ORDER BY p.phone, u.id DESC
     ON CONFLICT (phone) DO NOTHING;
 
+    -- Imported entries belong to the website account with that phone (the newest, as above)
+    UPDATE network_donors n SET user_id = s.user_id
+    FROM (
+      SELECT DISTINCT ON (p.phone) p.phone, u.id AS user_id
+      FROM users u
+      JOIN donors d ON d.user_id = u.id
+      CROSS JOIN LATERAL (SELECT regexp_replace(COALESCE(d.phone, ''), '[\\s()-]', '', 'g') AS raw) r
+      CROSS JOIN LATERAL (SELECT CASE WHEN r.raw ~ '^\\+\\d{10,15}$' THEN r.raw
+                                      WHEN r.raw ~ '^0?\\d{10}$' THEN '+91' || right(r.raw, 10)
+                                      WHEN r.raw ~ '^91\\d{10}$' THEN '+' || r.raw END AS phone) p
+      WHERE u.role = 'donor' AND p.phone IS NOT NULL
+      ORDER BY p.phone, u.id DESC
+    ) s
+    WHERE n.phone = s.phone AND n.user_id IS NULL AND n.source = 'web'
+      AND NOT EXISTS (SELECT 1 FROM network_donors x WHERE x.user_id = s.user_id);
+
+    -- pg_net belongs in the extensions schema, not in public (Supabase's advice)
+    DO $netschema$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM pg_extension e JOIN pg_namespace n ON n.oid = e.extnamespace
+                 WHERE e.extname = 'pg_net' AND n.nspname = 'public') THEN
+        DROP EXTENSION pg_net;
+        CREATE EXTENSION pg_net WITH SCHEMA extensions;
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'pg_net not moved: %', SQLERRM;
+    END
+    $netschema$;
+
     -- The one-minute timer that drives escalation and message retries
     -- (Supabase pg_cron + pg_net). It calls the API only when something is
     -- due. Elsewhere these extensions may be missing; the timer is then
     -- skipped and escalation runs whenever a hospital or family checks a request.
     DO $timer$
     BEGIN
-      CREATE EXTENSION IF NOT EXISTS pg_net;
+      CREATE EXTENSION IF NOT EXISTS pg_net WITH SCHEMA extensions;
       CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
       PERFORM cron.schedule('lifelink-network-tick', '* * * * *', $job$
         SELECT net.http_post(
@@ -531,21 +565,27 @@ const initDb = async (): Promise<boolean> => {
     END
     $cleanup$;
 
-    -- Haversine Distance Function
-    CREATE OR REPLACE FUNCTION calculate_distance(lat1 FLOAT, lon1 FLOAT, lat2 FLOAT, lon2 FLOAT)
-    RETURNS FLOAT AS $$
-    DECLARE
-        phi1 FLOAT := lat1 * PI() / 180;
-        phi2 FLOAT := lat2 * PI() / 180;
-        delta_phi FLOAT := (lat2 - lat1) * PI() / 180;
-        delta_lambda FLOAT := (lon2 - lon1) * PI() / 180;
-        a FLOAT := SIN(delta_phi / 2) * SIN(delta_phi / 2) + COS(phi1) * COS(phi2) * SIN(delta_lambda / 2) * SIN(delta_lambda / 2);
-        c FLOAT := 2 * ATAN2(SQRT(a), SQRT(1 - a));
-        r FLOAT := 6371; -- Radius of earth in km
+    -- The old SQL distance helper: the network now measures distances itself
+    DROP FUNCTION IF EXISTS calculate_distance(FLOAT, FLOAT, FLOAT, FLOAT);
+
+    -- Only this API (the tables' owner) reads these tables. Supabase's public
+    -- REST and GraphQL APIs already see nothing (RLS with no policies); taking
+    -- away their table rights too keeps a table closed even if RLS is ever
+    -- switched off by mistake. Off Supabase those roles do not exist.
+    DO $grants$
     BEGIN
-        RETURN r * c;
-    END;
-    $$ LANGUAGE plpgsql;
+      REVOKE ALL ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+      REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+      -- Supabase's own "turn on RLS for new tables" trigger function needs no public callers
+      IF to_regprocedure('public.rls_auto_enable()') IS NOT NULL THEN
+        REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM PUBLIC, anon, authenticated;
+      END IF;
+    EXCEPTION WHEN undefined_object THEN
+      NULL;
+    END
+    $grants$;
   `;
 
   // Every serverless cold start calls this. Its ALTER TABLEs lock whole tables,

@@ -22,7 +22,7 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
     }
 
     try {
-        const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as any;
+        const decoded = jwt.verify(token, process.env.JWT_SECRET as string, { algorithms: ['HS256'] }) as any;
         req.user = decoded;
         next();
     } catch (err) {

@@ -23,6 +23,7 @@ import {
     clearFailedAttempts,
     bruteForceDelay,
     logSecurityEvent,
+    maskEmail,
 } from '../middleware/securityMiddleware';
 
 dotenv.config();
@@ -284,7 +285,7 @@ export const register = async (req: Request, res: Response) => {
                 [user.id, blood_group, city, phone, dob, gender]
             );
             // Join the donor network so this donor can be matched and alerted
-            await enrolDonor({ name, phone, blood_group, city, gender }, { preferred_channel });
+            await enrolDonor({ name, phone, blood_group, city, gender }, { preferred_channel }, user.id);
         } else if (role === 'hospital') {
             await query(
                 `INSERT INTO hospitals (user_id, hospital_name, city, contact_number, registration_number, latitude, longitude,
@@ -353,7 +354,7 @@ export const login = async (req: Request, res: Response) => {
 
         if (!userFound || !isMatch) {
             recordFailedAttempt(ip);
-            logSecurityEvent('BRUTE_FORCE', req, `Failed login attempt for email: ${email}`);
+            logSecurityEvent('BRUTE_FORCE', req, `Failed login attempt for ${maskEmail(email)}`);
             // Generic error message prevents username enumeration
             return res.status(401).json({ message: 'Invalid credentials' });
         }

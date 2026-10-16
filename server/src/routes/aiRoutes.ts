@@ -1,15 +1,16 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { chatCompletion } from '../controllers/aiController';
+import { AuthRequest, authMiddleware } from '../middleware/authMiddleware';
 import { validateRequest } from '../middleware/validateZod';
 import { chatCompletionSchema } from '../schemas/aiSchemas';
 
 const router = Router();
 
 // ─────────────────────────────────────────────
-// Rate limiter – the chat assistants are public, so cap how much of the
-// server-side Groq quota a single IP can consume (one agent turn can make
-// up to 5 calls).
+// The assistant runs on the server-side Groq quota, so it is for signed-in
+// accounts only, and each IP and each account gets a limited share (one
+// agent turn can make up to 5 calls).
 // ─────────────────────────────────────────────
 const aiLimiter = rateLimit({
     windowMs: 5 * 60 * 1000, // 5 minutes
@@ -18,7 +19,15 @@ const aiLimiter = rateLimit({
     legacyHeaders: false,
     message: { message: 'Too many AI requests. Please slow down.' },
 });
+const accountLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => `account:${(req as AuthRequest).user?.id}`,
+    message: { message: 'You have used the assistant a lot this hour. Please try again later.' },
+});
 
-router.post('/chat', aiLimiter, validateRequest(chatCompletionSchema), chatCompletion);
+router.post('/chat', aiLimiter, authMiddleware, accountLimiter, validateRequest(chatCompletionSchema), chatCompletion);
 
 export default router;

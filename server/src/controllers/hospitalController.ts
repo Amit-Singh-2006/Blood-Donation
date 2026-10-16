@@ -1,7 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware';
-import pool, { query } from '../config/db';
-import { compatibleDonorGroups, ELIGIBILITY_WINDOW_SQL } from '../utils/bloodCompatibility';
+import { query } from '../config/db';
 import {
     DispatchResult, HospitalDonorView, HospitalRequestView, NetworkError,
     dispatchRequest, hospitalPortal, networkConfigured, toE164,
@@ -275,127 +274,6 @@ export const updateHospitalInventory = async (req: AuthRequest, res: Response) =
             [hospitalId, blood_group, units]
         );
         res.json(result.rows[0]);
-    } catch (err: any) {
-        console.error(err);
-        res.status(500).json({ message: 'Internal server error.' });
-    }
-};
-
-export const verifyDonation = async (req: AuthRequest, res: Response) => {
-    const hospitalId = req.user?.id;
-    const { donor_id, units, xp_earned } = req.body;
-
-    // A transaction must run on a single connection: pool.query() may hand each
-    // statement to a different client, so BEGIN/COMMIT/ROLLBACK would not apply.
-    const client = await pool.connect();
-    try {
-        await client.query('BEGIN');
-
-        // 1. Insert into donations
-        const donationResult = await client.query(
-            'INSERT INTO donations (donor_id, hospital_id, units, xp_earned) VALUES ($1, $2, $3, $4) RETURNING id, donation_date',
-            [donor_id, hospitalId, units, xp_earned || (units * 10)]
-        );
-
-        // 2. Update Hospital Inventory
-        // First, get the blood group of the donor
-        const donorData = await client.query('SELECT blood_group, phone FROM donors WHERE user_id = $1', [donor_id]);
-        if (donorData.rows.length === 0) {
-            await client.query('ROLLBACK');
-            return res.status(404).json({ message: 'Donor not found' });
-        }
-        const bloodGroup = donorData.rows[0].blood_group;
-
-        await client.query(
-            `INSERT INTO blood_inventory (hospital_id, blood_group, units, last_updated) 
-             VALUES ($1, $2, $3, CURRENT_TIMESTAMP) 
-             ON CONFLICT (hospital_id, blood_group) 
-             DO UPDATE SET units = blood_inventory.units + $3, last_updated = CURRENT_TIMESTAMP`,
-            [hospitalId, bloodGroup, units]
-        );
-
-        // 3. Update Donor Stats (XP and Last Donation Date)
-        const earnedXP = xp_earned || (units * 10);
-        await client.query(
-            `UPDATE donors 
-             SET xp_points = xp_points + $1, 
-                 last_donation_date = CURRENT_DATE,
-                 current_level = floor((xp_points + $1) / 100) + 1
-             WHERE user_id = $2`,
-            [earnedXP, donor_id]
-        );
-        // The donor network rests them too, so it does not ask them for blood too soon
-        const phone = toE164(donorData.rows[0].phone);
-        if (phone) {
-            await client.query(
-                `UPDATE network_donors SET last_donation_date = GREATEST(coalesce(last_donation_date, '1900-01-01'::date), CURRENT_DATE), updated_at = now()
-                 WHERE phone = $1`, [phone]);
-        }
-
-        await client.query('COMMIT');
-
-        res.status(201).json({
-            message: 'Donation verified successfully',
-            donation: donationResult.rows[0],
-            xp_earned: earnedXP
-        });
-    } catch (err: any) {
-        await client.query('ROLLBACK').catch(() => { });
-        console.error('verifyDonation error:', err);
-        res.status(500).json({ message: 'Failed to verify donation.' });
-    } finally {
-        client.release();
-    }
-};
-
-export const getPotentialDonors = async (req: AuthRequest, res: Response) => {
-    const { requestId } = req.params;
-    const hospitalId = req.user?.id;
-
-    try {
-        // 1. Get the request details
-        const requestResult = await query('SELECT * FROM blood_requests WHERE id = $1', [requestId]);
-        if (requestResult.rows.length === 0) return res.status(404).json({ message: 'Request not found' });
-
-        const request = requestResult.rows[0];
-
-        // Ensure the hospital owns the request (IDOR Prevention)
-        if (request.hospital_id !== hospitalId) {
-            return res.status(403).json({ message: 'Forbidden: You do not have access to this request' });
-        }
-
-        // 2. Compatibility engine: ABO/Rh-compatible donors who are eligible and past
-        //    their deferral window, within 80 km (or in the hospital's city)
-        const queryParams: any[] = [compatibleDonorGroups(request.blood_group), request.blood_group];
-        let distanceSql = 'NULL';
-        let locationFilter: string;
-
-        if (request.latitude != null && request.longitude != null) {
-            distanceSql = 'calculate_distance(d.latitude, d.longitude, $3, $4)';
-            locationFilter = `d.latitude IS NOT NULL AND ${distanceSql} < 80`;
-            queryParams.push(request.latitude, request.longitude);
-        } else {
-            // Fallback to hospital city
-            locationFilter = 'd.city = (SELECT city FROM hospitals WHERE user_id = $3)';
-            queryParams.push(request.hospital_id);
-        }
-
-        // Ranked by proximity, then ABO-identical donors first (keeps universal O- for
-        // the patients who can only take O-), then XP
-        const matchesQuery = `
-             SELECT u.name, d.blood_group, d.city, d.phone, d.is_eligible, d.xp_points,
-                    ${distanceSql} AS distance_km
-             FROM donors d
-             JOIN users u ON d.user_id = u.id
-             WHERE d.blood_group = ANY($1)
-             AND d.is_eligible = TRUE
-             AND ${ELIGIBILITY_WINDOW_SQL}
-             AND ${locationFilter}
-             ORDER BY distance_km ASC NULLS LAST, (d.blood_group = $2) DESC, d.xp_points DESC NULLS LAST`;
-
-        const donors = await query(matchesQuery, queryParams);
-
-        res.json(donors.rows);
     } catch (err: any) {
         console.error(err);
         res.status(500).json({ message: 'Internal server error.' });

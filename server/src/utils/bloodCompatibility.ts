@@ -32,8 +32,3 @@ export const recipientGroupsFor = (donor: unknown): BloodGroup[] =>
  * gender uses the longer window.
  */
 export const DEFERRAL_DAYS = { male: 90, female: 120 } as const;
-
-/** SQL predicate on the `donors d` alias: the donor's deferral window has passed. */
-export const ELIGIBILITY_WINDOW_SQL =
-    `(d.last_donation_date IS NULL OR d.last_donation_date <= CURRENT_DATE - ` +
-    `(CASE WHEN d.gender = 'male' THEN ${DEFERRAL_DAYS.male} ELSE ${DEFERRAL_DAYS.female} END))`;

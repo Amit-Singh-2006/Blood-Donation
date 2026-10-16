@@ -190,16 +190,19 @@ export const injectionGuard = (req: Request, res: Response, next: NextFunction):
 // 🕸️  CSRF ORIGIN CHECK
 // ─────────────────────────────────────────────
 
-const DEFAULT_ORIGINS = [
+// Local development servers. Only trusted off Vercel: on the live API a page
+// served on a visitor's own machine must not get signed-in access to LifeLink.
+const LOCAL_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:3000',
     'http://127.0.0.1:5173',
     'http://127.0.0.1:3000',
     'http://localhost:5000',
     'http://127.0.0.1:5000',
-    // Production frontend, so the deployed site works without FRONTEND_URL
-    'https://blood-donation-frontend-delta.vercel.app',
 ];
+// Production frontend, so the deployed site works without FRONTEND_URL
+const SITE_ORIGINS = ['https://blood-donation-frontend-delta.vercel.app'];
+const isLocalOrigin = (origin: string) => /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
 
 /**
  * Parses FRONTEND_URL, which may list several origins separated by commas.
@@ -216,7 +219,16 @@ export const parseOrigins = (value: string | undefined): string[] =>
     });
 
 // Shared by the cors() options in app.ts and the guards below
-export const ALLOWED_ORIGINS = new Set([...DEFAULT_ORIGINS, ...parseOrigins(process.env.FRONTEND_URL)]);
+/** The origins allowed to call the API with credentials (on Vercel, never localhost). */
+export const allowedOrigins = (env: Record<string, string | undefined> = process.env) => {
+    const deployed = !!env.VERCEL;
+    return new Set([
+        ...SITE_ORIGINS,
+        ...(deployed ? [] : LOCAL_ORIGINS),
+        ...parseOrigins(env.FRONTEND_URL).filter((origin) => !deployed || !isLocalOrigin(origin)),
+    ]);
+};
+export const ALLOWED_ORIGINS = allowedOrigins();
 
 /**
  * Middleware: Verify Origin / Referer header for state-mutating requests.
@@ -329,7 +341,7 @@ const BOT_UA_BLACKLIST = [
 /**
  * Middleware: Detect automated tools / scrapers by User-Agent.
  * Blocks known scanning/exploitation tools.
- * Sensitive endpoints (leaderboard, potential-donors) should apply this.
+ * Sign-in and account endpoints apply this.
  */
 export const botDetection = (req: Request, res: Response, next: NextFunction): void => {
     const ua = (req.headers['user-agent'] || '').toLowerCase();
@@ -399,11 +411,8 @@ export const bruteForceDelay = async (req: Request, res: Response, next: NextFun
  */
 const PROTECTED_PREFIXES = ['/admin', '/donor', '/hospital', '/user'];
 
-/**
- * Intentionally public paths that are under a protected prefix
- * but do NOT require authentication (e.g. the leaderboard).
- */
-const PUBLIC_PATHS = ['/donor/leaderboard'];
+/** Intentionally public paths under a protected prefix (none at the moment). */
+const PUBLIC_PATHS: string[] = [];
 
 /**
  * Middleware: Block unauthenticated access to protected path prefixes.
@@ -451,6 +460,12 @@ export const strictCorsGuard = (req: Request, res: Response, next: NextFunction)
 // ─────────────────────────────────────────────
 
 type SecurityEvent = 'TOKEN_REPLAY' | 'PATH_TRAVERSAL' | 'INJECTION' | 'CSRF' | 'BOT' | 'VERB_TAMPER' | 'BRUTE_FORCE' | 'FORCED_BROWSE' | 'MASS_ASSIGN' | 'CORS_VIOLATION';
+
+/** "a***@gmail.com": enough to spot attacks on one account without keeping the address in the logs. */
+export const maskEmail = (email: unknown): string => {
+    const [user = '', domain = ''] = String(email ?? '').split('@');
+    return domain ? `${user.slice(0, 1)}***@${domain}` : '***';
+};
 
 export const logSecurityEvent = (event: SecurityEvent, req: Request, detail?: string): void => {
     // In production, pipe to a SIEM / structured log (e.g., Winston, Datadog)

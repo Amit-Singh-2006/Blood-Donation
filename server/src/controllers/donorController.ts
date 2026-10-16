@@ -1,7 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware';
 import { query } from '../config/db';
-import { recipientGroupsFor } from '../utils/bloodCompatibility';
 import { NetworkError, PreferenceChange, donorPortal, registerDonor, toE164 } from '../services/donorNetwork';
 
 export const getDonorDonations = async (req: AuthRequest, res: Response) => {
@@ -17,109 +16,6 @@ export const getDonorDonations = async (req: AuthRequest, res: Response) => {
             [donorId]
         );
         res.json(result.rows);
-    } catch (err: any) {
-        console.error(err);
-        res.status(500).json({ message: 'Internal server error.' });
-    }
-};
-
-export const getMatchedRequests = async (req: AuthRequest, res: Response) => {
-    const donorId = req.user?.id;
-
-    try {
-        // 1. Get donor profile (blood group and city/location)
-        const donorResult = await query('SELECT blood_group, city, latitude, longitude FROM donors WHERE user_id = $1', [donorId]);
-        if (donorResult.rows.length === 0) return res.status(404).json({ message: 'Donor profile not found' });
-
-        const donor = donorResult.rows[0];
-
-        // 2. Advanced Matching: Use calculate_distance if coordinates are available, else fallback to city
-        let matchesQuery = `
-            SELECT br.*, h.hospital_name, h.city as hospital_city
-            FROM blood_requests br
-            JOIN hospitals h ON br.hospital_id = h.user_id
-            WHERE br.blood_group = ANY($1)
-            AND br.status = 'Open'
-        `;
-        // Every open request whose patient can receive this donor's blood (ABO/Rh)
-        let queryParams: any[] = [recipientGroupsFor(donor.blood_group)];
-
-        if (donor.latitude != null && donor.longitude != null) {
-            // Match within 80 km, the same radius the donor network uses
-            matchesQuery += ` AND calculate_distance(h.latitude, h.longitude, $2, $3) < 80 `;
-            queryParams.push(donor.latitude, donor.longitude);
-        } else {
-            // Fallback to city
-            matchesQuery += ` AND h.city = $2 `;
-            queryParams.push(donor.city);
-        }
-
-        // Sort by severity, not alphabetically (alphabetical DESC puts 'Emergency' last)
-        matchesQuery += ` ORDER BY CASE br.urgency WHEN 'Emergency' THEN 3 WHEN 'Urgent' THEN 2 ELSE 1 END DESC, br.created_at DESC`;
-
-        const matches = await query(matchesQuery, queryParams);
-
-        res.json(matches.rows);
-    } catch (err: any) {
-        console.error(err);
-        res.status(500).json({ message: 'Internal server error.' });
-    }
-};
-
-export const getLeaderboard = async (req: AuthRequest, res: Response) => {
-    try {
-        const result = await query(
-            `SELECT u.name, d.xp_points, d.current_level, d.blood_group, d.city
-             FROM donors d
-             JOIN users u ON d.user_id = u.id
-             ORDER BY d.xp_points DESC
-             LIMIT 10`
-        );
-        res.json(result.rows);
-    } catch (err: any) {
-        console.error(err);
-        res.status(500).json({ message: 'Internal server error.' });
-    }
-};
-
-export const getImpactPrediction = async (req: AuthRequest, res: Response) => {
-    const { requestId } = req.params;
-
-    try {
-        const result = await query(
-            `SELECT br.*, h.hospital_name, bi.units as current_stock
-             FROM blood_requests br
-             JOIN hospitals h ON br.hospital_id = h.user_id
-             LEFT JOIN blood_inventory bi ON br.hospital_id = bi.hospital_id AND br.blood_group = bi.blood_group
-             WHERE br.id = $1`,
-            [requestId]
-        );
-
-        if (result.rows.length === 0) return res.status(404).json({ message: 'Request not found' });
-
-        const data = result.rows[0];
-        const stock = data.current_stock || 0;
-
-        let impactLevel = 'Normal';
-        let insight = 'Your donation will help maintain a healthy blood supply.';
-
-        // Check the most severe condition first, otherwise 'Critical' is unreachable
-        if (data.urgency === 'Emergency' || stock < 5) {
-            impactLevel = 'Critical';
-            insight = `Immediate Action Required! This hospital is in an emergency state for ${data.blood_group}. Your contribution is vital for upcoming surgeries.`;
-        } else if (data.urgency === 'Urgent' || stock < 10) {
-            impactLevel = 'High';
-            insight = `Critical Need! the current inventory for ${data.blood_group} is low (${stock} units). Your donation could save a life today.`;
-        }
-
-        res.json({
-            requestId: data.id,
-            blood_group: data.blood_group,
-            impactLevel,
-            insight,
-            current_stock: stock,
-            urgency: data.urgency
-        });
     } catch (err: any) {
         console.error(err);
         res.status(500).json({ message: 'Internal server error.' });
@@ -147,16 +43,19 @@ const respondWithNetworkView = async (req: AuthRequest, res: Response, change?: 
             return res.status(400).json({ message: 'Add a valid mobile number to your profile to receive blood requests.' });
         }
 
-        let view = await donorPortal(phone, change);
+        const userId = req.user!.id;
+        let view = await donorPortal(phone, change, userId);
         if (view.status === 404) {
-            await registerDonor({ ...profile, phone }, change);
-            view = await donorPortal(phone);
+            await registerDonor({ ...profile, phone }, change, userId);
+            view = await donorPortal(phone, undefined, userId);
         }
+        // The phone is another account's: never show or change that donor's alerts
+        if (view.status === 409) return res.status(409).json({ message: view.data?.message });
         if (view.status !== 200) throw new NetworkError(`Donor portal answered ${view.status}`, view.status);
-        res.json(await withHospitalDetails(req.user!.id, view.data));
+        res.json(await withHospitalDetails(userId, view.data));
     } catch (err: any) {
-        if (err instanceof NetworkError && err.status === 503) {
-            return res.status(503).json({ message: err.message });
+        if (err instanceof NetworkError && (err.status === 503 || err.status === 409)) {
+            return res.status(err.status).json({ message: err.message });
         }
         console.error('Donor network error:', err);
         res.status(502).json({ message: 'The donor network is unavailable right now.' });
@@ -228,7 +127,7 @@ export const shareLocation = async (req: AuthRequest, res: Response) => {
         // First report for this request: the network must confirm this donor said YES to it
         const profile = await query('SELECT phone FROM donors WHERE user_id = $1', [donorUserId]);
         const phone = toE164(profile.rows[0]?.phone);
-        const view = phone ? await donorPortal(phone) : null;
+        const view = phone ? await donorPortal(phone, undefined, donorUserId) : null;
         const alert = view?.status === 200
             ? (view.data?.alerts ?? []).find((a: any) => a.match_id === match_id && a.status === 'accepted')
             : null;

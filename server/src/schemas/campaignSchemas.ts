@@ -11,7 +11,8 @@ export const campaignSchema = z.object({
     state: optionalText(100),
     venue: z.string().trim().min(3, 'Enter the venue').max(200),
     address: optionalText(500),
-    map_url: z.union([z.string().trim().url('Enter a valid map link').max(500), z.literal('')]).optional(),
+    // Only web links: javascript: or data: links would run in the visitor's browser
+    map_url: z.union([z.string().trim().url('Enter a valid map link').max(500).regex(/^https?:\/\//i, 'Use a map link starting with https://'), z.literal('')]).optional(),
     start_date: date,
     days: z.number().int().min(1, 'A campaign runs at least 1 day').max(30, 'A campaign can run at most 30 days'),
     start_time: time,

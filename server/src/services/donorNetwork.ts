@@ -42,8 +42,12 @@ export const toE164 = (phone: string | null | undefined): string | null => {
     return null;
 };
 
-/** Creates or updates the donor in the network registry (keyed by phone). */
-export const registerDonor = async (profile: NetworkProfile, change: PreferenceChange = {}) => {
+/**
+ * Creates or updates the donor in the network registry (keyed by phone) for
+ * website account `ownerId`. A phone that belongs to another account throws a
+ * 409 NetworkError.
+ */
+export const registerDonor = async (profile: NetworkProfile, change: PreferenceChange = {}, ownerId?: number) => {
     const { status, data } = await engine.upsertDonor({
         name: profile.name,
         phone: profile.phone,
@@ -52,16 +56,20 @@ export const registerDonor = async (profile: NetworkProfile, change: PreferenceC
         ...(profile.gender ? { gender: profile.gender } : {}),
         available: change.available ?? true,
         preferred_channel: change.preferred_channel ?? 'sms',
-    });
+    }, ownerId);
+    if (status === 409) throw new NetworkError(engine.PHONE_TAKEN, 409);
     if (status !== 200 && status !== 201) {
         throw new NetworkError(`Registry rejected the donor profile (${status})`, status);
     }
     return data;
 };
 
-/** Reads the donor's view, applying `change` first when given. 404 = not enrolled. */
-export const donorPortal = (phone: string, change?: PreferenceChange): Promise<{ status: number; data: any }> =>
-    engine.donorPortal(change ? { phone, action: 'update', ...change } : { phone, action: 'status' });
+/**
+ * Reads the donor's view for website account `ownerId`, applying `change`
+ * first when given. 404 = not enrolled; 409 = the phone belongs to another account.
+ */
+export const donorPortal = (phone: string, change?: PreferenceChange, ownerId?: number): Promise<{ status: number; data: any }> =>
+    engine.donorPortal(change ? { phone, action: 'update', ...change } : { phone, action: 'status' }, ownerId);
 
 export interface DispatchPayload {
     hospital_name: string;
@@ -144,11 +152,11 @@ export const hospitalPortal = async (requests: { request_id: number; hospital_to
  * Enrols a newly registered donor. Sign-up must not fail because of the
  * network, so errors are logged and swallowed.
  */
-export const enrolDonor = async (profile: Omit<NetworkProfile, 'phone'> & { phone?: string | null }, change: PreferenceChange = {}) => {
+export const enrolDonor = async (profile: Omit<NetworkProfile, 'phone'> & { phone?: string | null }, change: PreferenceChange = {}, ownerId?: number) => {
     const phone = toE164(profile.phone);
     if (!phone) return;
     try {
-        await registerDonor({ ...profile, phone }, change);
+        await registerDonor({ ...profile, phone }, change, ownerId);
     } catch (err: any) {
         console.error('Donor network enrolment failed:', err?.message ?? err);
     }

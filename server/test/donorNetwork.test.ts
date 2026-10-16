@@ -32,7 +32,35 @@ test('GET /donor/network returns the donor view for the signed-in donor\'s own p
 
     assert.equal(res.statusCode, 200);
     assert.deepEqual(res.body, view);
-    assert.deepEqual(portal.mock.calls[0]!.arguments, ['+919876543210', undefined]);
+    assert.deepEqual(portal.mock.calls[0]!.arguments, ['+919876543210', undefined, 7], 'looked up for this account');
+});
+
+test('a phone linked to another account never shows that donor\'s alerts', async () => {
+    mock.method(db, 'query', async () => ({ rows: [donorRow] }));
+    mock.method(network, 'donorPortal', async () => ({ status: 409, data: { registered: false, message: engine.PHONE_TAKEN } }));
+    const res = fakeRes();
+    await getNetworkStatus(req(), res);
+    assert.equal(res.statusCode, 409);
+    assert.deepEqual(res.body, { message: engine.PHONE_TAKEN });
+
+    // Enrolling with it fails the same way, and changes nothing
+    mock.restoreAll();
+    mock.method(db, 'query', async () => ({ rows: [donorRow] }));
+    mock.method(network, 'donorPortal', async () => ({ status: 404, data: { registered: false } }));
+    mock.method(engine, 'upsertDonor', async () => ({ status: 409, data: { status: 'rejected' } }));
+    const enrol = fakeRes();
+    await updateNetworkPreferences(req({ available: false }), enrol);
+    assert.equal(enrol.statusCode, 409);
+    assert.equal(enrol.body.message, engine.PHONE_TAKEN);
+});
+
+test('registering passes the account so a phone already linked elsewhere is refused', async () => {
+    const upsert = mock.method(engine, 'upsertDonor', async () => ({ status: 409, data: { status: 'rejected' } }));
+    await assert.rejects(
+        network.registerDonor({ name: 'Riya', phone: '+919876543210', blood_group: 'O-', city: 'Delhi' }, {}, 42),
+        (err: any) => err instanceof network.NetworkError && err.status === 409,
+    );
+    assert.equal(upsert.mock.calls[0]!.arguments[1], 42);
 });
 
 test('a donor missing from the network is enrolled, keeping the change they asked for', async () => {

@@ -66,7 +66,9 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 | Mitigation | Location |
 |---|---|
 | `getHospitalDonations`, `getHospitalInventory`, etc. use `req.user.id` from the JWT — NOT a user-supplied ID | `hospitalController.ts` |
-| `getPotentialDonors` explicitly checks `request.hospital_id !== hospitalId` | `hospitalController.ts` |
+| A donor-network entry belongs to one website account: a phone number linked to another account is refused (409), so nobody can read or answer someone else's alerts by signing up with their number | `network/engine.ts`, `donorController.ts` |
+| One-tap links carry a secret per alert (donors) or per request (hospitals); the hospital token never leaves the server or the hospital's own view | `network/replies.ts`, `hospitalController.ts` |
+| Reviews are accepted only for a donation or campaign the reviewer took part in | `reviewController.ts` |
 | `markNotificationRead` adds `AND user_id = $2` to the UPDATE query | `userController.ts` |
 
 ### 9. Forced Browsing
@@ -115,6 +117,9 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 | `Content-Security-Policy` header via Helmet blocks inline scripts even if one slips through | `app.ts → Helmet config` |
 | `noSniff: true` (X-Content-Type-Options) prevents MIME confusion XSS | `app.ts → Helmet config` |
 | HttpOnly cookies prevent JS from reaching the auth token even in an XSS scenario | `authController.ts` |
+| React escapes everything it renders; the assistant's messages are built as React elements, never as HTML | `AgentChat.tsx` |
+| Campaign map links must be `http(s)` (no `javascript:` or `data:` links) | `campaignSchemas.ts` |
+| The website forbids framing (`X-Frame-Options: DENY`, `frame-ancestors 'none'`), so it cannot be clickjacked | `vercel.json` |
 
 ---
 
@@ -124,7 +129,7 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 | Mitigation | Location |
 |---|---|
 | `csrfOriginCheck` validates `Origin` / `Referer` header on all `POST`, `PUT`, `DELETE` requests against an allowlist | `securityMiddleware.ts` |
-| `SameSite=Lax` cookie attribute prevents the cookie from being sent with cross-site form submissions | `authController.ts` |
+| In production the session cookie is `Secure; SameSite=None; Partitioned`: browsers keep it in LifeLink's own partition, so another site's pages never carry it | `utils/authCookie.ts` |
 | Combined effect: cross-site forms cannot both trigger the request AND carry the cookie | Both |
 
 ### 16. Parameter Tampering
@@ -190,7 +195,8 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 | Mitigation | Location |
 |---|---|
 | All routes have rate limiters | All route files |
-| Bot detection on sensitive endpoints | `authRoutes.ts`, `adminRoutes.ts`, `donorRoutes.ts` |
+| Bot detection on sign-in and admin endpoints | `authRoutes.ts`, `adminRoutes.ts` |
+| The AI assistant is for signed-in accounts only, limited per IP and per account; the server sets its instructions and tools by role, so the Groq key cannot power an arbitrary chatbot | `aiRoutes.ts`, `aiController.ts`, `utils/aiPrompts.ts` |
 | Body size limit 10 KB prevents flooding with huge payloads | `app.ts` |
 
 ---
@@ -202,7 +208,7 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 | Mitigation | Location |
 |---|---|
 | All resource fetches use the **authenticated user's ID** from JWT claims | All controllers |
-| Explicit ownership checks where a user-supplied ID is unavoidable | `hospitalController.ts → getPotentialDonors()` |
+| Explicit ownership checks where a user-supplied ID is unavoidable (request cancel, live locations, reviews) | `hospitalController.ts`, `donorController.ts`, `reviewController.ts` |
 | `markNotificationRead` scopes UPDATE to `AND user_id = $2` | `userController.ts` |
 
 ### 26. Sensitive Data Exposure
@@ -212,13 +218,14 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 | `getAllUsers` returns only `id, name, email, role` (not password or tokens) | `adminController.ts` |
 | Global error handler returns generic `"An internal error occurred."` | `app.ts` |
 | Stack traces are only logged server-side, never sent to the client | `authController.ts`, `app.ts` |
+| Request bodies are never logged (an unreadable body is logged by type only); security logs mask emails (`a***@gmail.com`) | `app.ts`, `securityMiddleware.ts` |
 | `X-Powered-By` header hidden | `app.ts → Helmet` |
 
 ### 27. Mass Assignment
 | Mitigation | Location |
 |---|---|
 | `massAssignmentGuard(allowedFields)` strips all unexpected fields from `req.body` | `securityMiddleware.ts` |
-| Applied on: `/hospital/requests`, `/hospital/inventory`, `/hospital/verify-donation`, `/user/profile` | Route files |
+| Applied on: `/hospital/requests`, `/hospital/inventory`, `/hospital/requests/:id/cancel` | Route files |
 | Zod schemas provide a second enforcement layer | Schema files |
 
 ---
@@ -231,6 +238,7 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 | `strictCorsGuard` blocks the request at the server level if Origin is not in the allowlist | `securityMiddleware.ts`, `app.ts` |
 | `cors()` middleware adds correct CORS response headers | `app.ts` |
 | Wildcard (`*`) origin is **never** used | `app.ts` |
+| `localhost` origins are trusted only off Vercel (local development), never by the live API | `securityMiddleware.ts` |
 
 ### 29. Security Misconfiguration
 | Mitigation | Location |

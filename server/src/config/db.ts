@@ -20,6 +20,11 @@ export const pool = new Pool({
     keepAlive: true,
 });
 
+// An idle connection can drop (the Supabase pooler closes it, the network
+// blips). Without a listener that error crashes the whole process, and every
+// request it was serving with it; the pool simply opens a new connection.
+pool.on('error', (err) => console.error('Database connection dropped:', err.message));
+
 pool.connect()
     .then(client => { client.release(); }) // silently confirm connection
     .catch((err) => { if (process.env.NODE_ENV !== 'production') console.error('DB connection error:', err.message); });

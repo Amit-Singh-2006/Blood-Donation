@@ -7,14 +7,12 @@ import {
     cancelHospitalRequest,
     getDonorLocations,
     updateHospitalInventory,
-    verifyDonation,
-    getPotentialDonors,
     getHospitalProfile,
 } from '../controllers/hospitalController';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { roleMiddleware } from '../middleware/roleMiddleware';
 import { validateRequest } from '../middleware/validateZod';
-import { createHospitalRequestSchema, updateHospitalInventorySchema, verifyDonationSchema } from '../schemas/hospitalSchemas';
+import { createHospitalRequestSchema, updateHospitalInventorySchema } from '../schemas/hospitalSchemas';
 import { massAssignmentGuard } from '../middleware/securityMiddleware';
 import rateLimit from 'express-rate-limit';
 
@@ -37,7 +35,6 @@ router.get('/donations', hospitalApiLimiter, authMiddleware, roleMiddleware(['ho
 router.get('/inventory', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getHospitalInventory);
 router.get('/requests', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getHospitalRequests);
 router.get('/donor-locations', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getDonorLocations);
-router.get('/potential-donors/:requestId', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), getPotentialDonors);
 
 // ── POST / PUT routes with Mass Assignment Guards ──
 // massAssignmentGuard whitelists only the fields the endpoint actually needs,
@@ -65,15 +62,5 @@ router.put(
 
 // Only for requests that never reached the donor network (see the controller)
 router.put('/requests/:id/cancel', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), massAssignmentGuard([]), cancelHospitalRequest);
-
-router.post(
-    '/verify-donation',
-    hospitalApiLimiter,
-    authMiddleware,
-    roleMiddleware(['hospital']),
-    massAssignmentGuard(['donor_id', 'units', 'xp_earned']),
-    validateRequest(verifyDonationSchema),
-    verifyDonation
-);
 
 export default router;

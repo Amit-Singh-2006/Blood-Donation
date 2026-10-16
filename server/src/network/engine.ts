@@ -330,13 +330,28 @@ export const replyResponse = (d: Decision & { format: 'json' | 'html' }) => d.fo
 
 const loadDonorByPhone = async (phone: string) => first(toDonor, await query(`SELECT ${DONOR_COLUMNS} FROM network_donors WHERE phone = $1`, [phone]));
 
-/** The donor's view (profile, live alerts, history), applying an update first when asked. 404 = not on the network. */
-export const donorPortal = async (body: Record<string, unknown>) => {
+export const PHONE_TAKEN = 'This mobile number is already linked to another LifeLink account.';
+
+/**
+ * The donor's view (profile, live alerts, history), applying an update first
+ * when asked. 404 = not on the network. With `ownerId` (the signed-in website
+ * account) an entry belonging to another account is refused (409) and an
+ * entry without an account becomes this one's.
+ */
+export const donorPortal = async (body: Record<string, unknown>, ownerId?: number | null) => {
     const p = validatePortal(body);
     if (p.errors.length || !p.phone) return { status: 400, data: { status: 'rejected', errors: p.errors } as Record<string, any> };
 
     let donor = await loadDonorByPhone(p.phone);
     if (!donor) return { status: 404, data: { registered: false, message: 'No donor with this phone number is on the LifeLink network yet.' } as Record<string, any> };
+    if (ownerId != null && donor.user_id != null && donor.user_id !== ownerId) {
+        return { status: 409, data: { registered: false, message: PHONE_TAKEN } as Record<string, any> };
+    }
+    if (ownerId != null && donor.user_id == null) {
+        // An account has one entry: an earlier number of this account lets go of it
+        await query('UPDATE network_donors SET user_id = NULL WHERE user_id = $1 AND id <> $2', [ownerId, donor.id]);
+        await query('UPDATE network_donors SET user_id = $1 WHERE id = $2 AND user_id IS NULL', [ownerId, donor.id]);
+    }
     if (p.action === 'update') {
         donor = first(toDonor, await query(
             `UPDATE network_donors SET available = COALESCE($2, available), preferred_channel = COALESCE($3, preferred_channel), updated_at = now()
@@ -346,15 +361,21 @@ export const donorPortal = async (body: Record<string, unknown>) => {
     return { status: 200, data: buildDonorView(donor, matches, Date.now(), networkBase()) as Record<string, any> };
 };
 
-/** Creates or updates a donor (keyed by phone), keeping history and XP the caller did not send. */
-export const upsertDonor = async (body: Record<string, unknown>) => {
+/**
+ * Creates or updates a donor (keyed by phone), keeping history and XP the
+ * caller did not send. An entry that belongs to another website account is
+ * never changed: that answers 409.
+ */
+export const upsertDonor = async (body: Record<string, unknown>, ownerId?: number | null) => {
     const v = validateRegistry(body);
     if (!v.profile) return { status: 400, data: { status: 'rejected', errors: v.errors } as Record<string, any> };
     const p = v.profile;
+    // An account has one entry: an earlier number of this account lets go of it
+    if (ownerId != null) await query('UPDATE network_donors SET user_id = NULL WHERE user_id = $1 AND phone <> $2', [ownerId, p.phone]);
     const { rows } = await query(
         `INSERT INTO network_donors (name, phone, blood_group, gender, city, latitude, longitude, available, last_donation_date,
-                                     total_donations, preferred_channel, fcm_token, source)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, 0), $11, $12, 'web')
+                                     total_donations, preferred_channel, fcm_token, source, user_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, 0), $11, $12, 'web', $13)
          ON CONFLICT (phone) DO UPDATE SET
              name = EXCLUDED.name, blood_group = EXCLUDED.blood_group, gender = EXCLUDED.gender, city = EXCLUDED.city,
              latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, available = EXCLUDED.available,
@@ -362,12 +383,15 @@ export const upsertDonor = async (body: Record<string, unknown>) => {
              total_donations = COALESCE($10, network_donors.total_donations),
              preferred_channel = EXCLUDED.preferred_channel,
              fcm_token = COALESCE(EXCLUDED.fcm_token, network_donors.fcm_token),
+             user_id = COALESCE(network_donors.user_id, EXCLUDED.user_id),
              updated_at = now()
+         WHERE network_donors.user_id IS NULL OR network_donors.user_id = EXCLUDED.user_id
          RETURNING id, to_char(last_donation_date, 'YYYY-MM-DD') AS last_donation_date, (xmax = 0) AS inserted`,
         [p.name, p.phone, p.blood_group, p.gender, p.city, p.latitude, p.longitude, p.available, p.last_donation_date,
-            p.total_donations, p.preferred_channel, p.fcm_token]
+            p.total_donations, p.preferred_channel, p.fcm_token, ownerId ?? null]
     );
     const saved = rows[0];
+    if (!saved) return { status: 409, data: { status: 'rejected', errors: [{ path: 'phone', message: PHONE_TAKEN }] } as Record<string, any> };
     return { status: saved.inserted ? 201 : 200, data: registryReply(p, saved, saved.inserted, v.warnings) as Record<string, any> };
 };
 
