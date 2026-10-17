@@ -35,6 +35,8 @@ export interface NetDonor {
     source: string;
     /** The website account this entry belongs to; USSD donors have none. */
     user_id?: number | null;
+    /** When a hospital lab last confirmed the blood group (ISO time); null while self-reported. */
+    blood_group_verified_at?: string | null;
 }
 
 export interface NetRequest {
@@ -88,6 +90,9 @@ export interface NetMatch {
     units_required: number;
     notified_at: string | null;
     responded_at: string | null;
+    /** The blood group the hospital's lab found for this donation, if recorded. */
+    lab_blood_group?: string | null;
+    lab_recorded_at?: string | null;
     created_at: string;
     updated_at: string;
 }
@@ -318,8 +323,9 @@ type MatchableRequest = Pick<NetRequest,
  * ABO/Rh-compatible, available donors past their rest period and not booked
  * for another request, within 80 km (or in the hospital's city). Ranked by
  * proximity (15 km bands), then ABO-identical donors first and universal O-
- * last (O- is kept for patients who can only take O-), then longest since
- * eligible, then XP. The first wave is alerted now; the rest wait in the queue.
+ * last (O- is kept for patients who can only take O-), then donors whose
+ * group a hospital lab confirmed, then longest since eligible, then XP. The
+ * first wave is alerted now; the rest wait in the queue.
  */
 export const matchDonors = (request: MatchableRequest, donors: NetDonor[], now = Date.now()) => {
     const compatible: string[] = compatibleDonorGroups(request.blood_group);
@@ -349,7 +355,11 @@ export const matchDonors = (request: MatchableRequest, donors: NetDonor[], now =
             daysEligible: from === null ? 3650 : Math.floor((now - from) / DAY),
         });
     }
-    candidates.sort((a, b) => a.band - b.band || a.tier - b.tier || b.daysEligible - a.daysEligible || (b.d.xp_points ?? 0) - (a.d.xp_points ?? 0));
+    // Nearest first, then the closest blood group match; among those, donors whose
+    // group a hospital lab has confirmed go first (a self-reported group can be wrong)
+    const labConfirmed = (d: NetDonor) => (d.blood_group_verified_at ? 1 : 0);
+    candidates.sort((a, b) => a.band - b.band || a.tier - b.tier || labConfirmed(b.d) - labConfirmed(a.d)
+        || b.daysEligible - a.daysEligible || (b.d.xp_points ?? 0) - (a.d.xp_points ?? 0));
 
     const nowIso = new Date(now).toISOString();
     const matches: PlannedMatch[] = candidates.map((c, i) => {

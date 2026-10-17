@@ -3,8 +3,9 @@ import { AuthRequest } from '../middleware/authMiddleware';
 import { query } from '../config/db';
 import {
     DispatchResult, HospitalDonorView, HospitalRequestView, NetworkError,
-    dispatchRequest, hospitalPortal, networkConfigured, toE164,
+    dispatchRequest, hospitalPortal, networkConfigured, recordLabResult, sendAccountEmail, toE164,
 } from '../services/donorNetwork';
+import { background } from '../utils/background';
 
 export const getHospitalDonations = async (req: AuthRequest, res: Response) => {
     const hospitalId = req.user?.id;
@@ -39,7 +40,7 @@ export const getHospitalInventory = async (req: AuthRequest, res: Response) => {
 const loadHospital = async (userId: number | undefined) => {
     const result = await query(
         `SELECT hospital_name, hospital_type, registration_number, address, city, state, pincode,
-                contact_number, latitude, longitude, is_verified
+                contact_number, latitude, longitude, is_verified, verification_status, verification_note
          FROM hospitals WHERE user_id = $1`,
         [userId]
     );
@@ -69,6 +70,8 @@ export const getHospitalProfile = async (req: AuthRequest, res: Response) => {
             latitude: hospital.latitude != null ? Number(hospital.latitude) : null,
             longitude: hospital.longitude != null ? Number(hospital.longitude) : null,
             is_verified: !!hospital.is_verified,
+            verification_status: hospital.verification_status,
+            verification_note: hospital.verification_note ?? null,
             network_configured: networkConfigured(),
         });
     } catch (err: any) {
@@ -208,7 +211,7 @@ export const createHospitalRequest = async (req: AuthRequest, res: Response) => 
         const hospital = await loadHospital(hospitalId);
         if (!hospital) return res.status(404).json({ message: 'Hospital profile not found.' });
         if (!hospital.is_verified) {
-            return res.status(403).json({ message: 'Your hospital must be verified by a LifeLink admin before requests can alert donors.' });
+            return res.status(403).json({ message: 'Your hospital must be verified before requests can alert donors. Send your documents from the Verification tab.' });
         }
 
         const lat = toNumber(latitude) ?? toNumber(hospital.latitude);
@@ -255,6 +258,56 @@ export const createHospitalRequest = async (req: AuthRequest, res: Response) => 
             warning: warning ?? null,
         });
     } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+};
+
+// PUT /hospital/requests/:id/donors/:matchId/lab-blood-group  { blood_group }
+// After a donation, the blood group the hospital's lab found. It becomes the
+// donor's lab-confirmed group: they are matched by it from now on.
+export const recordLabBloodGroup = async (req: AuthRequest, res: Response) => {
+    const requestId = Number(req.params.id);
+    const matchId = Number(req.params.matchId);
+    if (![requestId, matchId].every((n) => Number.isInteger(n) && n > 0)) {
+        return res.status(400).json({ message: 'Invalid request or donor.' });
+    }
+    try {
+        const hospital = await loadHospital(req.user?.id);
+        if (!hospital) return res.status(404).json({ message: 'Hospital profile not found.' });
+        if (!hospital.is_verified) return res.status(403).json({ message: 'Only verified hospitals can record lab results.' });
+        const { rows } = await query(
+            'SELECT network_request_id, hospital_token FROM blood_requests WHERE id = $1 AND hospital_id = $2',
+            [requestId, req.user?.id]
+        );
+        const request = rows[0];
+        if (!request?.network_request_id || !request.hospital_token) return res.status(404).json({ message: 'Request not found.' });
+
+        const saved = await recordLabResult({
+            request_id: request.network_request_id,
+            hospital_token: request.hospital_token,
+            match_id: matchId,
+            blood_group: req.body.blood_group,
+            recorded_by: req.user!.id,
+        });
+        // A donor whose group turned out different hears it from LifeLink too
+        if (saved.changed && saved.donor_user_id != null) {
+            const account = (await query('SELECT name, email FROM users WHERE id = $1', [saved.donor_user_id])).rows[0];
+            if (account?.email) {
+                background(sendAccountEmail({
+                    type: 'blood_group_corrected', to: account.email, name: account.name,
+                    blood_group: saved.lab_blood_group, previous_blood_group: saved.previous_blood_group, hospital_name: hospital.hospital_name,
+                }).catch((err: any) => console.error('Blood group email failed:', err.message)));
+            }
+        }
+        res.json({
+            match_id: saved.match_id,
+            lab_blood_group: saved.lab_blood_group,
+            previous_blood_group: saved.previous_blood_group,
+            changed: saved.changed,
+        });
+    } catch (err: any) {
+        if (err instanceof NetworkError) return res.status(err.status).json({ message: err.message });
         console.error(err);
         res.status(500).json({ message: 'Internal server error.' });
     }

@@ -14,7 +14,7 @@ const FEATURES = [
 
 const STEPS = [
     { icon: 'how_to_reg', title: 'Register your hospital', desc: 'Create a hospital account with your registration or licence number and contact details.' },
-    { icon: 'verified', title: 'Get verified', desc: 'A LifeLink admin checks your registration details. Only verified hospitals can alert donors.' },
+    { icon: 'verified', title: 'Get verified', desc: 'Upload your registration certificate and a signed authorisation letter. A LifeLink admin checks them and phones your hospital. Only verified hospitals can alert donors.' },
     { icon: 'emergency', title: 'Raise requests', desc: 'Request blood from your dashboard or the AI assistant, and share the tracking link with the family.' },
 ];
 

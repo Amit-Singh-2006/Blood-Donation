@@ -4,7 +4,8 @@ import { fakeRes } from './helpers';
 import * as db from '../src/config/db';
 import { generateInviteCode, hashInviteCode, inviteStatus, normalizeInviteCode } from '../src/utils/adminInvites';
 import { cleanCities, describeScope, hospitalScopeSql } from '../src/utils/jurisdiction';
-import { createInvite, getOverview, getRequests, setHospitalVerification } from '../src/controllers/adminController';
+import { createInvite, getOverview, getRequests } from '../src/controllers/adminController';
+import { decideHospitalVerification } from '../src/controllers/verificationController';
 import { checkAdminInvite, register } from '../src/controllers/authController';
 import { requireAdmin } from '../src/middleware/requireAdmin';
 import { adminInviteSchema } from '../src/schemas/adminSchemas';
@@ -74,10 +75,12 @@ test('a city admin cannot verify a hospital outside their jurisdiction', async (
     const { calls, run } = fakeQueries([]);
     mock.method(db, 'query', run);
     const res = fakeRes();
-    await setHospitalVerification({ params: { id: '9' }, body: { verified: true }, adminScope: pune } as any, res);
+    const body = { action: 'approve', checks: { documents_match: true, phone_confirmed: true }, documents_digest: 'a'.repeat(64) };
+    await decideHospitalVerification({ params: { id: '9' }, body, adminScope: pune } as any, res);
     assert.equal(res.statusCode, 404);
-    assert.match(calls[0]!.sql, /h\.user_id = \$2 AND \(lower\(trim\(h\.city\)\) = ANY\(\$3::text\[\]\)/);
-    assert.deepEqual(calls[0]!.params, [true, 9, ['pune', 'pimpri-chinchwad'], 'Maharashtra']);
+    assert.match(calls[0]!.sql, /h\.user_id = \$1 AND \(lower\(trim\(h\.city\)\) = ANY\(\$2::text\[\]\)/);
+    assert.deepEqual(calls[0]!.params, [9, ['pune', 'pimpri-chinchwad'], 'Maharashtra']);
+    assert.equal(calls.length, 1, 'nothing is changed');
 });
 
 test('overview counts are limited to the admin\'s jurisdiction', async () => {

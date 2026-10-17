@@ -7,6 +7,7 @@ import { timerStatus } from '../network/engine';
 import { AdminRequest } from '../middleware/requireAdmin';
 import { AdminScope, cleanCities, describeScope, donorScopeSql, hospitalScopeSql } from '../utils/jurisdiction';
 import { generateInviteCode, hashInviteCode, inviteStatus } from '../utils/adminInvites';
+import { reviewColumns, toReview } from './verificationController';
 
 // requireAdmin always sets the scope before these handlers run
 const scopeOf = (req: AdminRequest): AdminScope => req.adminScope!;
@@ -57,7 +58,8 @@ export const getMe = async (req: AdminRequest, res: Response) => {
     }
 };
 
-// GET /admin/hospitals: unverified hospitals first, for review
+// GET /admin/hospitals: hospitals waiting for review first, with their documents
+// (names and sizes only; each file is opened through /admin/hospitals/:id/documents/:kind)
 export const getHospitals = async (req: AdminRequest, res: Response) => {
     try {
         const params: unknown[] = [];
@@ -65,36 +67,15 @@ export const getHospitals = async (req: AdminRequest, res: Response) => {
             `SELECT h.user_id AS id, h.hospital_name, h.hospital_type, h.address, h.city, h.state, h.pincode,
                     h.contact_number, h.registration_number, h.latitude, h.longitude,
                     COALESCE(h.is_verified, FALSE) AS is_verified, u.email, u.created_at,
-                    EXISTS (SELECT 1 FROM user_mfa m WHERE m.user_id = h.user_id AND m.enabled) AS mfa_enabled
+                    EXISTS (SELECT 1 FROM user_mfa m WHERE m.user_id = h.user_id AND m.enabled) AS mfa_enabled,
+                    ${reviewColumns}
              FROM hospitals h JOIN users u ON u.id = h.user_id
              WHERE ${hospitalScopeSql(scopeOf(req), params)}
-             ORDER BY COALESCE(h.is_verified, FALSE), u.created_at DESC`,
+             ORDER BY CASE h.verification_status WHEN 'pending' THEN 0 WHEN 'changes_requested' THEN 1 WHEN 'not_submitted' THEN 2 ELSE 3 END,
+                      h.verification_submitted_at NULLS LAST, u.created_at DESC`,
             params
         );
-        res.json(result.rows);
-    } catch (err) {
-        serverError(res, err);
-    }
-};
-
-// PUT /admin/hospitals/:id/verification  { verified: boolean }
-// Only verified hospitals can dispatch requests that alert donors. City admins
-// can only verify hospitals in their own jurisdiction.
-export const setHospitalVerification = async (req: AdminRequest, res: Response) => {
-    const hospitalId = Number(req.params.id);
-    if (!Number.isInteger(hospitalId) || hospitalId <= 0) {
-        return res.status(400).json({ message: 'Invalid hospital id.' });
-    }
-    try {
-        const params: unknown[] = [req.body.verified, hospitalId];
-        const result = await query(
-            `UPDATE hospitals h SET is_verified = $1
-             WHERE h.user_id = $2 AND ${hospitalScopeSql(scopeOf(req), params)}
-             RETURNING h.user_id AS id, h.hospital_name, h.is_verified`,
-            params
-        );
-        if (!result.rows[0]) return res.status(404).json({ message: 'Hospital not found in your jurisdiction.' });
-        res.json(result.rows[0]);
+        res.json(result.rows.map(toReview));
     } catch (err) {
         serverError(res, err);
     }
@@ -109,12 +90,13 @@ export const getOverview = async (req: AdminRequest, res: Response) => {
         const donorCond = donorScopeSql(scope, params);
         const inScope = 'hospital_id IN (SELECT user_id FROM scoped_hospitals)';
         const result = await query(`
-            WITH scoped_hospitals AS (SELECT h.user_id, h.is_verified FROM hospitals h WHERE ${hospitalCond}),
+            WITH scoped_hospitals AS (SELECT h.user_id, h.is_verified, h.verification_status FROM hospitals h WHERE ${hospitalCond}),
                  scoped_donors AS (SELECT d.user_id FROM donors d WHERE ${donorCond})
             SELECT
                 (SELECT count(*) FROM scoped_donors)::int AS donors,
                 (SELECT count(*) FROM scoped_hospitals)::int AS hospitals,
                 (SELECT count(*) FROM scoped_hospitals WHERE is_verified)::int AS hospitals_verified,
+                (SELECT count(*) FROM scoped_hospitals WHERE verification_status = 'pending')::int AS hospitals_pending_review,
                 (SELECT count(*) FROM blood_requests WHERE ${inScope})::int AS requests,
                 (SELECT count(*) FROM blood_requests WHERE ${inScope} AND status IN ('Open', 'Fulfilled'))::int AS requests_active,
                 (SELECT count(*) FROM blood_requests WHERE ${inScope} AND status = 'Completed')::int AS requests_completed,
@@ -170,8 +152,11 @@ export const getDonors = async (req: AdminRequest, res: Response) => {
         const result = await query(`
             SELECT u.id, u.name, u.email, u.created_at, d.blood_group, d.city, d.phone, d.gender,
                    d.last_donation_date, COALESCE(d.xp_points, 0) AS xp_points,
-                   (SELECT count(*) FROM donations dn WHERE dn.donor_id = u.id)::int AS donations
+                   (SELECT count(*) FROM donations dn WHERE dn.donor_id = u.id)::int AS donations,
+                   -- Confirmed by a hospital lab after a donation, or still self-reported
+                   nd.blood_group_verified_at
             FROM users u JOIN donors d ON d.user_id = u.id
+            LEFT JOIN network_donors nd ON nd.user_id = u.id
             WHERE ${donorScopeSql(scopeOf(req), params)}
             ORDER BY u.created_at DESC
             LIMIT 500`,

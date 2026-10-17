@@ -17,7 +17,7 @@ import { CampaignDetails, CampaignRecipient, campaignMessages } from './messages
 import { analyticsPage, replyPage, trackingNotFoundPage, trackingPage } from './pages';
 import { Decision, NotificationRow, Writes, decideOutcome, parseLink } from './replies';
 import {
-    AlertedMatch, NetDonor, NetRequest, composeAlert, matchDonors, minutesUntilNextRound, planEscalation, trackingLink, validateDispatch,
+    AlertedMatch, NetDonor, NetRequest, composeAlert, matchDonors, minutesUntilNextRound, planEscalation, sameToken, trackingLink, validateDispatch,
 } from './rules';
 import { DONOR_COLUMNS, MATCH_COLUMNS, Queryable, REQUEST_COLUMNS, first, toDonor, toMatch, toRequest } from './store';
 import { parseUssd, ussdMenu, ussdOutcomeReply } from './ussd';
@@ -31,7 +31,7 @@ const DEFAULT_FRONTEND = 'https://blood-donation-frontend-delta.vercel.app';
 /** Public address of the network API, used in every link LifeLink sends. */
 export const networkBase = () => `${(process.env.API_PUBLIC_URL || DEFAULT_API).trim().replace(/\/$/, '')}/network`;
 /** The website, for links in replies: the first https origin in FRONTEND_URL (a list of allowed origins). */
-const frontendUrl = () => {
+export const frontendUrl = () => {
     const origins = (process.env.FRONTEND_URL || '').split(',').map((o) => o.trim().replace(/\/$/, '')).filter(Boolean);
     return origins.find((o) => o.startsWith('https://')) ?? origins[0] ?? DEFAULT_FRONTEND;
 };
@@ -377,7 +377,9 @@ export const upsertDonor = async (body: Record<string, unknown>, ownerId?: numbe
                                      total_donations, preferred_channel, fcm_token, source, user_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10, 0), $11, $12, 'web', $13)
          ON CONFLICT (phone) DO UPDATE SET
-             name = EXCLUDED.name, blood_group = EXCLUDED.blood_group, gender = EXCLUDED.gender, city = EXCLUDED.city,
+             name = EXCLUDED.name, gender = EXCLUDED.gender, city = EXCLUDED.city,
+             -- A group a hospital lab confirmed is never overwritten by the donor's own profile
+             blood_group = CASE WHEN network_donors.blood_group_verified_at IS NULL THEN EXCLUDED.blood_group ELSE network_donors.blood_group END,
              latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, available = EXCLUDED.available,
              last_donation_date = COALESCE(EXCLUDED.last_donation_date, network_donors.last_donation_date),
              total_donations = COALESCE($10, network_donors.total_donations),
@@ -386,7 +388,7 @@ export const upsertDonor = async (body: Record<string, unknown>, ownerId?: numbe
              user_id = COALESCE(network_donors.user_id, EXCLUDED.user_id),
              updated_at = now()
          WHERE network_donors.user_id IS NULL OR network_donors.user_id = EXCLUDED.user_id
-         RETURNING id, to_char(last_donation_date, 'YYYY-MM-DD') AS last_donation_date, (xmax = 0) AS inserted`,
+         RETURNING id, blood_group, to_char(last_donation_date, 'YYYY-MM-DD') AS last_donation_date, (xmax = 0) AS inserted`,
         [p.name, p.phone, p.blood_group, p.gender, p.city, p.latitude, p.longitude, p.available, p.last_donation_date,
             p.total_donations, p.preferred_channel, p.fcm_token, ownerId ?? null]
     );
@@ -394,6 +396,51 @@ export const upsertDonor = async (body: Record<string, unknown>, ownerId?: numbe
     if (!saved) return { status: 409, data: { status: 'rejected', errors: [{ path: 'phone', message: PHONE_TAKEN }] } as Record<string, any> };
     return { status: saved.inserted ? 201 : 200, data: registryReply(p, saved, saved.inserted, v.warnings) as Record<string, any> };
 };
+
+// ── Lab-confirmed blood groups ───────────────────────────────────────────
+
+/**
+ * Records the blood group the hospital's lab found for a donation. It becomes
+ * the donor's blood group (their website profile too) and marks it
+ * lab-confirmed: they are matched by it, and their profile cannot change it.
+ * The latest lab result wins, so a mistake is fixed by recording it again.
+ * Like the other hospital actions, it needs the request's hospital token.
+ */
+export const recordLabBloodGroup = async (p: {
+    request_id: number; hospital_token: string; match_id: number; blood_group: string; recorded_by: number;
+}) => inNetworkTransaction(async (db) => {
+    const { rows } = await db.query(
+        `SELECT m.status, m.donor_id, m.hospital_name, r.hospital_token, d.blood_group AS donor_group, d.user_id, d.name
+         FROM network_matches m
+         JOIN network_requests r ON r.id = m.request_id
+         LEFT JOIN network_donors d ON d.id = m.donor_id
+         WHERE m.id = $1 AND m.request_id = $2`,
+        [p.match_id, p.request_id]);
+    const row = rows[0];
+    if (!row || !sameToken(row.hospital_token, p.hospital_token)) return { status: 404, message: 'This donor is not on this request.' };
+    if (row.status !== 'donated') return { status: 409, message: 'Mark the donation as done first, then record the lab result.' };
+    if (row.donor_id == null) return { status: 409, message: 'This donor has left the LifeLink network.' };
+
+    await db.query(
+        `UPDATE network_matches SET lab_blood_group = $2, lab_recorded_at = now(), lab_recorded_by = $3, updated_at = now() WHERE id = $1`,
+        [p.match_id, p.blood_group, p.recorded_by]);
+    await db.query(
+        `UPDATE network_donors SET blood_group = $2, blood_group_verified_at = now(), updated_at = now() WHERE id = $1`,
+        [row.donor_id, p.blood_group]);
+    if (row.user_id != null) await db.query('UPDATE donors SET blood_group = $2 WHERE user_id = $1', [row.user_id, p.blood_group]);
+    return {
+        status: 200,
+        data: {
+            match_id: p.match_id,
+            lab_blood_group: p.blood_group,
+            previous_blood_group: row.donor_group as string,
+            changed: row.donor_group !== p.blood_group,
+            donor_user_id: (row.user_id ?? null) as number | null,
+            donor_name: row.name as string,
+            hospital_name: row.hospital_name as string,
+        },
+    };
+});
 
 // ── Hospital portal ───────────────────────────────────────────────────────
 

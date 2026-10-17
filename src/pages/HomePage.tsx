@@ -291,7 +291,7 @@ export default function HomePage() {
                         className="grid grid-cols-1 md:grid-cols-3 gap-8"
                     >
                         {[
-                            { step: '01', icon: 'how_to_reg', title: 'Register & Verify', desc: 'Donors sign up, verify their blood type, and set their availability status. AI checks eligibility automatically.' },
+                            { step: '01', icon: 'how_to_reg', title: 'Register & Verify', desc: 'Donors sign up with their blood group and set their availability. Eligibility is checked automatically, and the hospital lab confirms the blood group after the first donation.' },
                             { step: '02', icon: 'hub', title: 'AI Matches in Real-Time', desc: 'When a hospital raises an urgent request, our engine scans the network and finds the nearest compatible donor in seconds.' },
                             { step: '03', icon: 'emergency', title: 'Save a Life', desc: 'The matched donor receives an alert, confirms, and heads to the hospital. Every match is tracked and rewarded with XP tokens.' },
                         ].map(({ step, icon, title, desc }) => (

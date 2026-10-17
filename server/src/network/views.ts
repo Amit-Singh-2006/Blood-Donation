@@ -84,14 +84,25 @@ export const buildDonorView = (donor: NetDonor, matches: NetMatch[], now: number
             hospital_city: m.hospital_city,
             blood_group_needed: m.request_blood_group,
             donated_on: String(m.responded_at || m.updated_at || '').slice(0, 10),
+            lab_blood_group: m.lab_blood_group ?? null,
         }));
 
+    // The latest lab result decided the donor's blood group
+    const lab = matches
+        .filter((m) => m.lab_blood_group && m.lab_recorded_at)
+        .sort((a, b) => time(b.lab_recorded_at) - time(a.lab_recorded_at))[0];
     const committed = donor.committed_until && Date.parse(donor.committed_until) > now ? donor.committed_until : null;
     return {
         registered: true,
         donor: {
             name: donor.name,
             blood_group: donor.blood_group,
+            // Self-reported until a hospital's lab tests it after a donation
+            blood_group_verified: !!donor.blood_group_verified_at,
+            blood_group_verified_at: donor.blood_group_verified_at ?? null,
+            blood_group_verified_by: donor.blood_group_verified_at ? lab?.hospital_name ?? null : null,
+            // What the donor had said, when the lab found a different group
+            blood_group_corrected_from: lab && lab.donor_blood_group !== lab.lab_blood_group ? lab.donor_blood_group : null,
             city: donor.city,
             available: donor.available,
             preferred_channel: donor.preferred_channel,
@@ -157,6 +168,10 @@ export const buildHospitalView = (
                 pass_code: passCode(m.response_token),
                 status: m.status as 'accepted' | 'donated' | 'no_show',
                 responded_at: m.responded_at ?? null,
+                // The group this hospital's lab found for this donation, and whether
+                // the donor's group was already lab-confirmed (by any hospital)
+                lab_blood_group: m.lab_blood_group ?? null,
+                blood_group_verified: !!d?.blood_group_verified_at,
                 donated_url: m.status === 'accepted' ? hospitalLink(base, m.id, req.hospital_token, 'donated') : null,
                 no_show_url: m.status === 'accepted' ? hospitalLink(base, m.id, req.hospital_token, 'no_show') : null,
             };
@@ -409,12 +424,17 @@ export const validateRegistry = (body: Record<string, unknown>, now = Date.now()
 };
 
 /** The registry's reply: when the donor is next eligible and whom their blood can help. */
-export const registryReply = (profile: RegistryProfile, saved: Pick<NetDonor, 'id' | 'last_donation_date'>, isNew: boolean, warnings: string[], now = Date.now()) => {
+export const registryReply = (
+    profile: RegistryProfile, saved: Pick<NetDonor, 'id' | 'last_donation_date'> & { blood_group?: string },
+    isNew: boolean, warnings: string[], now = Date.now(),
+) => {
     const eligibleFrom = eligibleFromDate({ last_donation_date: saved.last_donation_date, gender: profile.gender });
+    // A lab-confirmed group is kept, whatever the profile says
+    const bloodGroup = saved.blood_group ?? profile.blood_group;
     return {
         donor_id: saved.id,
         status: isNew ? 'registered' : 'updated',
-        blood_group: profile.blood_group,
+        blood_group: bloodGroup,
         available: profile.available,
         alerts_via: profile.preferred_channel,
         eligibility: {
@@ -423,7 +443,8 @@ export const registryReply = (profile: RegistryProfile, saved: Pick<NetDonor, 'i
             eligible_from: eligibleFrom,
             eligible_now: !eligibleFrom || Date.parse(eligibleFrom + 'T00:00:00Z') <= now,
         },
-        your_blood_can_help: recipientGroupsFor(profile.blood_group),
-        warnings,
+        your_blood_can_help: recipientGroupsFor(bloodGroup),
+        warnings: bloodGroup === profile.blood_group ? warnings
+            : [...warnings, `A hospital lab confirmed your blood group as ${bloodGroup}, so it stays ${bloodGroup}.`],
     };
 };

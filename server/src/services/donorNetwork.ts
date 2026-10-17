@@ -127,6 +127,10 @@ export interface HospitalDonorView {
     pass_code?: string;
     status: 'accepted' | 'donated' | 'no_show';
     responded_at: string | null;
+    /** What this hospital's lab found for the donation, once recorded. */
+    lab_blood_group?: string | null;
+    /** The donor's group has been confirmed by a hospital lab (this one or another). */
+    blood_group_verified?: boolean;
     donated_url: string | null;
     no_show_url: string | null;
 }
@@ -146,6 +150,18 @@ export const hospitalPortal = async (requests: { request_id: number; hospital_to
     const { status, data } = await engine.hospitalPortal(requests);
     if (status !== 200 || !Array.isArray(data?.requests)) throw new NetworkError(`Hospital portal answered ${status}`, status);
     return data.requests;
+};
+
+/**
+ * Saves the blood group the hospital's lab found for a donation: it becomes the
+ * donor's lab-confirmed group. Throws a NetworkError (404/409) the hospital can show.
+ */
+export const recordLabResult = async (payload: {
+    request_id: number; hospital_token: string; match_id: number; blood_group: string; recorded_by: number;
+}) => {
+    const result = await engine.recordLabBloodGroup(payload);
+    if (result.status !== 200 || !('data' in result) || !result.data) throw new NetworkError(('message' in result && result.message) || 'Could not save the lab result.', result.status);
+    return result.data;
 };
 
 /**

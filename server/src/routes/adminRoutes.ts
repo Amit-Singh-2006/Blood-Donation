@@ -1,12 +1,14 @@
 import { Router } from 'express';
 import {
-    getAllDonations, getAllUsers, getHospitals, setHospitalVerification, getOverview, getDonors, getRequests,
+    getAllDonations, getAllUsers, getHospitals, getOverview, getDonors, getRequests,
     getMe, listAdmins, setAdminActive, listInvites, createInvite, revokeInvite, resetSecondStep,
 } from '../controllers/adminController';
+import { decideHospitalVerification, downloadHospitalDocument } from '../controllers/verificationController';
 import { validateRequest } from '../middleware/validateZod';
 import { createCampaign, listCampaigns, listRegistrations, markAttendance, cancelCampaign } from '../controllers/campaignController';
 import { campaignSchema, attendanceSchema } from '../schemas/campaignSchemas';
-import { hospitalVerificationSchema, adminActiveSchema, adminInviteSchema } from '../schemas/adminSchemas';
+import { adminActiveSchema, adminInviteSchema } from '../schemas/adminSchemas';
+import { hospitalVerificationSchema } from '../schemas/verificationSchemas';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { requireAdmin, requireNationalAdmin } from '../middleware/requireAdmin';
 import { botDetection, logSecurityEvent } from '../middleware/securityMiddleware';
@@ -45,7 +47,9 @@ router.get('/users', adminLimiter, botDetection, auditAdminAccess, authMiddlewar
 router.get('/hospitals', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getHospitals);
 router.get('/overview', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getOverview);
 router.get('/donors', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getDonors);
-router.put('/hospitals/:id/verification', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, validateRequest(hospitalVerificationSchema), setHospitalVerification);
+// Approve a hospital, ask it for changes, or revoke its verification, after reviewing its documents
+router.put('/hospitals/:id/verification', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, validateRequest(hospitalVerificationSchema), decideHospitalVerification);
+router.get('/hospitals/:id/documents/:kind', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, downloadHospitalDocument);
 router.get('/me', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getMe);
 router.get('/requests', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getRequests);
 

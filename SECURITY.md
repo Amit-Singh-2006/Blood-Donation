@@ -156,8 +156,13 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 ### 19. Arbitrary File Upload
 | Mitigation | Location |
 |---|---|
-| No file upload endpoints exist in this API | N/A |
-| Body size is capped at **10 KB** (`express.json({ limit: '10kb' })`) | `app.ts` |
+| The only uploads are hospital verification documents, accepted only from a signed-in hospital, before it is verified, and rate-limited per account | `hospitalRoutes.ts`, `verificationController.ts` |
+| A file's type comes from its first bytes (PDF, JPEG, PNG or WebP only) and must match the type sent; anything else, including HTML or SVG renamed as a PDF, is refused. PDFs with scripts, launch actions or attached files are refused | `utils/documents.ts` |
+| Each file is capped at 3 MB (the parser stops reading beyond it); other request bodies stay capped at 10 KB | `hospitalRoutes.ts`, `app.ts` |
+| Files are stored in the database (no file paths or user-supplied names are ever used) and only reach the hospital itself and the admins of its city | `verificationController.ts` |
+| Files are sent back as downloads with our own type and name, `nosniff`, a sandboxing CSP and `no-store`; the website shows them from a local copy whose type it sets itself | `utils/documents.ts`, `src/lib/documents.ts` |
+| Every time an admin opens a document is logged, and approval needs the approving admin to have opened each current document since its last upload. The approval also carries a fingerprint of the documents it was given, so a file swapped during review is caught. Every upload and decision is logged with who made it | `verificationController.ts` |
+| General request bodies are capped at **10 KB** (`express.json({ limit: '10kb' })`) | `app.ts` |
 
 ### 20. Remote / Local File Inclusion
 | Mitigation | Location |

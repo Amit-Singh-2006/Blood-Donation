@@ -11,7 +11,7 @@ const num = (v: unknown): number | null => (v == null ? null : Number(v));
 // DATE columns are read as text: pg would turn them into local-midnight Date objects
 export const DONOR_COLUMNS = `id, name, phone, blood_group, gender, city, latitude, longitude, available,
     to_char(last_donation_date, 'YYYY-MM-DD') AS last_donation_date, total_donations, preferred_channel,
-    fcm_token, xp_points, committed_until, source, user_id`;
+    fcm_token, xp_points, committed_until, source, user_id, blood_group_verified_at`;
 
 export const REQUEST_COLUMNS = `id, hospital_name, hospital_city, hospital_contact, patient_ref, blood_group,
     units_required, urgency, latitude, longitude, required_by, status, units_confirmed, units_donated,
@@ -20,7 +20,7 @@ export const REQUEST_COLUMNS = `id, hospital_name, hospital_city, hospital_conta
 
 export const MATCH_COLUMNS = `id, request_id, donor_id, donor_blood_group, request_blood_group, rank, distance_km,
     exact_match, status, response_token, channel, contact, hospital_name, hospital_city, urgency, units_required,
-    notified_at, responded_at, created_at, updated_at`;
+    notified_at, responded_at, lab_blood_group, lab_recorded_at, created_at, updated_at`;
 
 export const toDonor = (r: any): NetDonor => ({
     id: r.id,
@@ -40,6 +40,7 @@ export const toDonor = (r: any): NetDonor => ({
     committed_until: iso(r.committed_until),
     source: r.source,
     user_id: r.user_id ?? null,
+    blood_group_verified_at: iso(r.blood_group_verified_at),
 });
 
 export const toRequest = (r: any): NetRequest => ({
@@ -92,6 +93,8 @@ export const toMatch = (r: any): NetMatch => ({
     units_required: Number(r.units_required),
     notified_at: iso(r.notified_at),
     responded_at: iso(r.responded_at),
+    lab_blood_group: r.lab_blood_group ?? null,
+    lab_recorded_at: iso(r.lab_recorded_at),
     created_at: iso(r.created_at)!,
     updated_at: iso(r.updated_at)!,
 });

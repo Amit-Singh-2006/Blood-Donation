@@ -49,18 +49,27 @@ export const campaignMessages = (c: CampaignDetails, registerUrl: string, recipi
 };
 
 export interface AccountEmail {
-    type: 'reset_code' | 'password_changed';
+    type: 'reset_code' | 'password_changed' | 'hospital_verification' | 'blood_group_corrected';
     to: string;
     name: string;
     code?: string;
     minutes?: number;
     needs_authenticator?: boolean;
     when?: string;
+    /** hospital_verification: the admin's decision, their note, and the dashboard link */
+    decision?: 'approved' | 'changes_requested' | 'revoked';
+    note?: string | null;
+    url?: string;
+    /** blood_group_corrected: what the lab found, what the donor had said, and where */
+    blood_group?: string;
+    previous_blood_group?: string;
+    hospital_name?: string;
 }
 
 /**
- * A password reset code, or the notice that the password was changed (sent
- * after every reset, so a stranger's reset is noticed).
+ * A password reset code, the notice that the password was changed (sent after
+ * every reset, so a stranger's reset is noticed), a hospital's verification
+ * decision, or a donor's blood group corrected by a hospital lab.
  */
 export const accountEmail = (body: AccountEmail) => {
     const to = String(body.to || '').trim();
@@ -90,6 +99,42 @@ export const accountEmail = (body: AccountEmail) => {
             html: frame('<p>Hi ' + first + ',</p><p>Your LifeLink password was changed' + (body.when ? ' on ' + esc(body.when) + ' (IST)' : '') + ', and you were signed out on every device.</p>'
                 + '<p>If this was you, there is nothing else to do.</p>'
                 + '<p style="color:#b91c1c;font-weight:700">If it was not you, reset your password again straight away from the sign-in page, and tell your LifeLink admin.</p>'),
+        };
+    }
+    if (body.type === 'hospital_verification') {
+        const link = body.url ? '<p><a href="' + esc(body.url) + '" style="color:#ee2b2b;font-weight:700">Open your LifeLink dashboard</a></p>' : '';
+        const note = body.note ? '<p style="background:#fef2f2;border:1px solid #fee2e2;border-radius:12px;padding:12px">' + esc(body.note) + '</p>' : '';
+        if (body.decision === 'approved') {
+            return {
+                to,
+                subject: 'Your hospital is verified on LifeLink',
+                html: frame('<p>Hi ' + first + ',</p><p>A LifeLink admin checked your documents and verified your hospital. Your blood requests now alert matching donors nearby.</p>' + link),
+            };
+        }
+        if (body.decision === 'changes_requested' || body.decision === 'revoked') {
+            return {
+                to,
+                subject: body.decision === 'revoked' ? 'Your LifeLink verification was paused' : 'LifeLink needs more from your hospital',
+                html: frame('<p>Hi ' + first + ',</p><p>'
+                    + (body.decision === 'revoked'
+                        ? "A LifeLink admin paused your hospital's verification, so your requests no longer alert donors for now."
+                        : "A LifeLink admin reviewed your hospital's documents and needs a change before verifying it.")
+                    + ' Their note:</p>' + note + '<p>Update your details or documents from the Verification tab, then send them for review again.</p>' + link),
+            };
+        }
+        throw new Error('A verification decision is required');
+    }
+    if (body.type === 'blood_group_corrected') {
+        const group = String(body.blood_group || '');
+        const previous = String(body.previous_blood_group || '');
+        if (!group || !previous) throw new Error('Both blood groups are required');
+        return {
+            to,
+            subject: 'Your blood group on LifeLink is now ' + group,
+            html: frame('<p>Hi ' + first + ',</p><p>Thank you for donating blood' + (body.hospital_name ? ' at ' + esc(body.hospital_name) : '') + '.</p>'
+                + "<p>The hospital's lab tested your blood group as <b style=\"color:#ee2b2b\">" + esc(group) + '</b>. You had registered as ' + esc(previous) + ', so your LifeLink profile now shows '
+                + esc(group) + ' and you will be alerted for the right patients.</p>'
+                + '<p style="color:#64748b">If you think this is a mistake, please ask the hospital. Only a hospital lab can change it.</p>'),
         };
     }
     throw new Error('Unknown email type: ' + String(body.type));

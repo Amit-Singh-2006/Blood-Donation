@@ -50,7 +50,8 @@ test('the donor sees live alerts with their links, a pass once they said YES, an
     assert.match(String(view.alerts[0]!.pass_code), /^LP-/);
     assert.equal(view.alerts[1]!.pass_code, null);
     assert.equal(view.alerts[0]!.decline_url, `${BASE}/donor-response?m=2&t=${uuid(2)}&a=decline`);
-    assert.deepEqual(view.history, [{ request_id: 900, hospital_name: 'Civil Hospital', hospital_city: 'Jalandhar', blood_group_needed: 'O+', donated_on: '2026-09-01' }]);
+    assert.deepEqual(view.history, [{ request_id: 900, hospital_name: 'Civil Hospital', hospital_city: 'Jalandhar', blood_group_needed: 'O+', donated_on: '2026-09-01', lab_blood_group: null }]);
+    assert.equal(view.donor.blood_group_verified, false, 'self-reported until a lab confirms it');
     assert.deepEqual(view.stats, { alerts_received: 4, accepted: 2, donations_via_lifelink: 1 });
     // Women rest 120 days
     assert.equal(view.donor.eligible_from, '2026-12-30');
@@ -92,6 +93,45 @@ test('a hospital sees its own request only with its token, with confirmed donors
 
     const done = buildHospitalView({ request_id: 1001, hospital_token: HOSPITAL_TOKEN }, request({ status: 'Completed' }), matches, donors, BASE);
     assert.ok(done.found && done.cancel_url === null && done.next_check_at === null);
+});
+
+test('a donor sees whether a hospital lab confirmed their blood group, and any correction', () => {
+    const lab = match({ id: 5, status: 'donated', request_id: 950, donor_blood_group: 'B+', lab_blood_group: 'A+', lab_recorded_at: at(60), responded_at: at(120) });
+    const view = buildDonorView(donor({ blood_group: 'A+', blood_group_verified_at: at(60) }), [lab], NOW, BASE);
+    assert.equal(view.donor.blood_group_verified, true);
+    assert.equal(view.donor.blood_group_verified_by, 'Civil Hospital');
+    assert.equal(view.donor.blood_group_corrected_from, 'B+', 'they had registered as B+');
+    assert.equal(view.history[0]!.lab_blood_group, 'A+');
+
+    // A later lab result that agrees replaces the correction notice
+    const again = match({ id: 6, status: 'donated', request_id: 960, hospital_name: 'DMC Hospital', donor_blood_group: 'A+', lab_blood_group: 'A+', lab_recorded_at: at(10) });
+    const later = buildDonorView(donor({ blood_group: 'A+', blood_group_verified_at: at(10) }), [lab, again], NOW, BASE);
+    assert.equal(later.donor.blood_group_verified_by, 'DMC Hospital');
+    assert.equal(later.donor.blood_group_corrected_from, null);
+});
+
+test('a hospital sees the lab result of each donation and which donors have a lab-confirmed group', () => {
+    const donors = new Map([
+        [1, donor()],
+        [2, donor({ id: 2, name: 'Rohan Mehta', phone: '+915550000002', blood_group_verified_at: at(20) })],
+    ]);
+    const matches = [
+        match({ id: 1, donor_id: 1, status: 'accepted', responded_at: at(5) }),
+        match({ id: 2, donor_id: 2, status: 'donated', responded_at: at(50), lab_blood_group: 'O+', lab_recorded_at: at(20) }),
+    ];
+    const view = buildHospitalView({ request_id: 1001, hospital_token: HOSPITAL_TOKEN }, request(), matches, donors, BASE);
+    assert.ok(view.found);
+    if (!view.found) return;
+    assert.deepEqual(view.donors.map((d) => [d.match_id, d.blood_group_verified, d.lab_blood_group]), [[2, true, 'O+'], [1, false, null]]);
+});
+
+test('signing up again keeps a lab-confirmed blood group and says so', () => {
+    const { profile } = validateRegistry({ name: 'Asha Patil', phone: '98765 43210', blood_group: 'B+', city: 'Jalandhar', gender: 'Female' }, NOW);
+    const kept = registryReply(profile!, { id: 1, last_donation_date: null, blood_group: 'A+' }, false, [], NOW);
+    assert.equal(kept.blood_group, 'A+');
+    assert.deepEqual(kept.your_blood_can_help, ['A+', 'AB+']);
+    assert.match(kept.warnings.join(' '), /lab confirmed your blood group as A\+/);
+    assert.deepEqual(registryReply(profile!, { id: 1, last_donation_date: null, blood_group: 'B+' }, false, [], NOW).warnings, []);
 });
 
 test('the hospital portal takes at most 25 well-formed requests', () => {
@@ -243,6 +283,24 @@ test('account emails: a 6-digit reset code, or the notice that the password chan
     const changed = accountEmail({ type: 'password_changed', to: 'asha@example.com', name: 'Asha', when: '16 Oct 2026, 11:30 am' });
     assert.equal(changed.subject, 'Your LifeLink password was changed');
     assert.match(changed.html, /changed on 16 Oct 2026, 11:30 am \(IST\)/);
+});
+
+test('account emails: a hospital hears the verification decision, a donor hears a lab correction', () => {
+    const approved = accountEmail({ type: 'hospital_verification', to: 'civil@example.com', name: 'Civil Hospital', decision: 'approved', url: 'https://lifelink.example/hospital' });
+    assert.equal(approved.subject, 'Your hospital is verified on LifeLink');
+    assert.match(approved.html, /href="https:\/\/lifelink.example\/hospital"/);
+    // The admin's note is shown as text
+    const changes = accountEmail({ type: 'hospital_verification', to: 'civil@example.com', name: 'Civil Hospital', decision: 'changes_requested', note: 'Upload the <b>current</b> certificate' });
+    assert.equal(changes.subject, 'LifeLink needs more from your hospital');
+    assert.match(changes.html, /Upload the &lt;b&gt;current&lt;\/b&gt; certificate/);
+    assert.equal(accountEmail({ type: 'hospital_verification', to: 'civil@example.com', name: 'Civil Hospital', decision: 'revoked', note: 'Licence expired' }).subject, 'Your LifeLink verification was paused');
+    assert.throws(() => accountEmail({ type: 'hospital_verification', to: 'civil@example.com', name: 'Civil Hospital' }), /decision/);
+
+    const corrected = accountEmail({ type: 'blood_group_corrected', to: 'rohan@example.com', name: 'Rohan Mehta', blood_group: 'A+', previous_blood_group: 'B+', hospital_name: 'Civil Hospital' });
+    assert.equal(corrected.subject, 'Your blood group on LifeLink is now A+');
+    assert.match(corrected.html, /Hi Rohan,/);
+    assert.match(corrected.html, /You had registered as B\+/);
+    assert.throws(() => accountEmail({ type: 'blood_group_corrected', to: 'rohan@example.com', name: 'Rohan', blood_group: 'A+' }), /Both blood groups/);
 });
 
 test('reply pages escape what they show and link the pass to its QR page', () => {

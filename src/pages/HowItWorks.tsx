@@ -8,7 +8,7 @@ const STEPS = [
   {
     icon: 'local_hospital',
     title: 'A verified hospital raises a request',
-    text: 'The hospital enters the blood group, units needed, urgency and when it is needed by. Only hospitals our team has verified against their registration number can alert donors.',
+    text: 'The hospital enters the blood group, units needed, urgency and when it is needed by. Only hospitals our team has verified, by checking their registration certificate and phoning them, can alert donors.',
   },
   {
     icon: 'join_inner',

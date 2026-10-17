@@ -59,7 +59,7 @@ export default function TermsOfService() {
                     <ul className="list-disc pl-5 space-y-1">
                         <li>You must be at least 18 years old and able to enter into a binding contract under the Indian Contract Act, 1872.</li>
                         <li><strong>Donors</strong> must meet the donor selection criteria of the National Blood Transfusion Council (NBTC), including being 18 to 65 years old and weighing at least 45 kg. The blood centre's medical officer makes the final decision on whether you can donate.</li>
-                        <li><strong>Hospitals</strong> must be registered healthcare establishments or blood centres, and the account must be operated by staff authorised to raise blood requests on their behalf.</li>
+                        <li><strong>Hospitals</strong> must be registered healthcare establishments or blood centres, and the account must be operated by staff authorised to raise blood requests on their behalf. A LifeLink admin checks each hospital's registration certificate and a signed authorisation letter, and phones the hospital, before its requests can alert donors.</li>
                     </ul>
                 </Section>
 
@@ -93,7 +93,9 @@ export default function TermsOfService() {
 
                 <Section title="Hospital Responsibilities">
                     <ul className="list-disc pl-5 space-y-1">
+                        <li>Upload only genuine, current documents for verification. False documents lead to removal and may be reported to the authorities.</li>
                         <li>Raise requests only for a genuine clinical need of a real patient, through authorised staff.</li>
+                        <li>After a donation, record the blood group your lab found only from your blood centre's own grouping test.</li>
                         <li>Do not enter patient names or other identifying details. Use your internal reference (for example, a ward or bed number).</li>
                         <li>Use a donor's name and phone number only to coordinate that donation. Do not share, sell or reuse donor details, or contact donors for any other purpose.</li>
                         <li>Do not charge donors, or ask them for payment, for donating.</li>

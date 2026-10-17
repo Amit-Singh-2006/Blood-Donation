@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import AgentChat from '../components/AgentChat';
+import HospitalVerification from '../components/HospitalVerification';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '../lib/api';
 import { signOut } from '../lib/auth';
@@ -16,7 +17,7 @@ import { Point, agoText, distanceKm, etaMinutes } from '../lib/geo';
 const PassScanner = lazy(() => import('../components/PassScanner'));
 const DonorMap = lazy(() => import('../components/DonorMap'));
 
-type NavItem = 'overview' | 'requests' | 'inventory' | 'reviews' | 'settings';
+type NavItem = 'overview' | 'requests' | 'inventory' | 'reviews' | 'verification' | 'settings';
 
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 // Live data refresh while requests are active (each refresh also runs any escalation that is due)
@@ -47,6 +48,10 @@ interface LiveDonor {
   pass_code?: string;
   status: 'accepted' | 'donated' | 'no_show';
   responded_at: string | null;
+  /** What this hospital's lab found for the donation, once recorded */
+  lab_blood_group?: string | null;
+  /** The donor's group was confirmed by a hospital lab (this one or another) */
+  blood_group_verified?: boolean;
   donated_url: string | null;
   no_show_url: string | null;
 }
@@ -93,6 +98,8 @@ interface HospitalProfile {
   latitude: number | null;
   longitude: number | null;
   is_verified: boolean;
+  verification_status: 'not_submitted' | 'pending' | 'changes_requested' | 'verified';
+  verification_note: string | null;
   network_configured: boolean;
 }
 
@@ -109,6 +116,13 @@ interface DispatchSummary {
   network: { status: string; compatible_donors: number; donors_alerted: number; donors_on_standby: number; escalation_minutes: number | null; tracking_token: string | null; message?: string } | null;
   warning: string | null;
 }
+
+const VERIFICATION_LABEL: Record<string, string> = {
+  not_submitted: 'Not verified',
+  pending: 'Verification in review',
+  changes_requested: 'Changes needed',
+  verified: 'Verified',
+};
 
 const formatWhen = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : '';
@@ -250,6 +264,7 @@ export default function HospitalDashboard() {
     { id: 'requests', label: 'Blood Requests', icon: 'emergency' },
     { id: 'inventory', label: 'Inventory', icon: 'bloodtype' },
     { id: 'reviews', label: 'Reviews', icon: 'reviews' },
+    { id: 'verification', label: 'Verification', icon: 'verified_user' },
     { id: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
@@ -309,7 +324,7 @@ export default function HospitalDashboard() {
               <div className="min-w-0">
                 <p className="text-[11px] font-bold truncate w-32">{hospitalName}</p>
                 <p className={cn('text-[9px] font-black uppercase', profile?.is_verified ? 'text-green-600' : 'text-amber-600')}>
-                  {profile ? (profile.is_verified ? 'Verified' : 'Pending verification') : '…'}
+                  {profile ? VERIFICATION_LABEL[profile.verification_status] ?? (profile.is_verified ? 'Verified' : 'Not verified') : '…'}
                 </p>
               </div>
             </div>
@@ -405,13 +420,26 @@ export default function HospitalDashboard() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar space-y-6">
-          {profile && !profile.is_verified && (
-            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex gap-4">
-              <span className="material-symbols-outlined text-amber-600">pending</span>
-              <div className="text-sm text-amber-900">
-                <p className="font-black">Your hospital is awaiting verification</p>
-                <p className="mt-1">A LifeLink admin checks your registration details before your requests can alert donors. You can explore the dashboard and update inventory meanwhile.</p>
+          {profile && !profile.is_verified && activeTab !== 'verification' && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+              <span className="material-symbols-outlined text-amber-600">{profile.verification_status === 'pending' ? 'hourglass_top' : 'upload_file'}</span>
+              <div className="text-sm text-amber-900 flex-1">
+                <p className="font-black">
+                  {profile.verification_status === 'pending' ? 'Your documents are being reviewed'
+                    : profile.verification_status === 'changes_requested' ? 'A LifeLink admin needs a change to your documents'
+                      : 'Verify your hospital to alert donors'}
+                </p>
+                <p className="mt-1">
+                  {profile.verification_status === 'pending'
+                    ? 'A LifeLink admin is checking your documents and will phone your hospital. Your requests can alert donors once it is verified.'
+                    : 'Upload your registration certificate and an authorisation letter. Until a LifeLink admin verifies them, your requests cannot alert donors. You can explore the dashboard and update inventory meanwhile.'}
+                </p>
               </div>
+              {profile.verification_status !== 'pending' && (
+                <button onClick={() => goTo('verification')} className="px-4 py-2 rounded-xl bg-[#ee2b2b] text-white text-xs font-black hover:bg-red-700 shrink-0">
+                  {profile.verification_status === 'changes_requested' ? 'See what to change' : 'Get verified'}
+                </button>
+              )}
             </div>
           )}
           {loadError && <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-800">{loadError}</div>}
@@ -427,6 +455,8 @@ export default function HospitalDashboard() {
                   {activeTab === 'requests' && <RequestsTab requests={requests} verified={!!profile?.is_verified} onRefresh={loadRequests} locations={locations} hospitalPoint={hospitalPoint} verifiedAt={verifiedAt} onScan={() => setScanning(true)} />}
                   {activeTab === 'inventory' && <InventoryTab inventory={inventory} onRefresh={fetchData} />}
                   {activeTab === 'reviews' && <HospitalReviews />}
+                  {/* Only the profile: a full reload would swap this tab for "Loading…" and lose its message */}
+                  {activeTab === 'verification' && <HospitalVerification onChange={() => apiFetch('/hospital/profile').then(setProfile).catch(() => { })} />}
                   {activeTab === 'settings' && <SettingsTab user={user} profile={profile} />}
                 </>
               )}
@@ -1063,6 +1093,14 @@ function RequestCard({ req, open, onToggle, onRefresh, locations, hospitalPoint,
                             {d.status === 'donated' ? 'Donated' : d.status === 'no_show' ? 'Did not come' : 'On the way'}
                             {d.responded_at ? ` · accepted ${formatWhen(d.responded_at)}` : ''}
                           </p>
+                          {d.status === 'accepted' && (
+                            <p className="text-[11px] mt-1">
+                              {d.blood_group_verified
+                                ? <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 font-black uppercase text-[10px]">Group lab-confirmed</span>
+                                : <span className="px-2 py-0.5 rounded bg-slate-200 text-slate-600 font-black uppercase text-[10px]">Group self-reported</span>}
+                            </p>
+                          )}
+                          {d.status === 'donated' && <LabBloodGroup requestId={req.id} donor={d} onSaved={onRefresh} />}
                           {d.pass_code && (
                             <p className="text-[11px] text-slate-500 mt-1 flex flex-wrap items-center gap-2">
                               <span className="font-mono">Pass {d.pass_code}</span>
@@ -1113,6 +1151,58 @@ function RequestCard({ req, open, onToggle, onRefresh, locations, hospitalPoint,
           {req.tracking_token && <FamilyLink token={req.tracking_token} />}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * After a donation, the blood group the hospital's lab found. Saving it makes
+ * it the donor's lab-confirmed group on LifeLink (a different group corrects
+ * their profile, and they are told).
+ */
+function LabBloodGroup({ requestId, donor, onSaved }: { requestId: number; donor: LiveDonor; onSaved: () => Promise<void> }) {
+  const [group, setGroup] = useState(donor.lab_blood_group ?? donor.blood_group);
+  const [editing, setEditing] = useState(!donor.lab_blood_group);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  if (donor.lab_blood_group && !editing) {
+    return (
+      <p className="text-[11px] mt-1 flex flex-wrap items-center gap-2">
+        <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 font-black uppercase text-[10px]">Lab result: {donor.lab_blood_group}</span>
+        {donor.lab_blood_group !== donor.blood_group && <span className="text-slate-500">registered as {donor.blood_group}; their profile was corrected</span>}
+        <button type="button" onClick={() => setEditing(true)} className="font-bold text-slate-500 hover:text-[#ee2b2b]">Change</button>
+      </p>
+    );
+  }
+
+  const save = async () => {
+    if (group !== donor.blood_group
+      && !window.confirm(`${donor.name} registered as ${donor.blood_group}. Save ${group} from your lab? Their blood group on LifeLink will change to ${group}.`)) return;
+    setBusy(true);
+    setError('');
+    try {
+      await apiFetch(`/hospital/requests/${requestId}/donors/${donor.match_id}/lab-blood-group`, { method: 'PUT', body: JSON.stringify({ blood_group: group }) });
+      setEditing(false);
+      await onSaved();
+    } catch (err: any) {
+      setError(err.message || 'Could not save the lab result.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      <label htmlFor={`lab-${donor.match_id}`} className="font-bold text-slate-600">Blood group from your lab</label>
+      <select id={`lab-${donor.match_id}`} value={group} onChange={(e) => setGroup(e.target.value)} className="px-2 py-1 rounded-lg border border-slate-200 bg-white font-black text-slate-900">
+        {BLOOD_TYPES.map((g) => <option key={g} value={g}>{g}</option>)}
+      </select>
+      <button type="button" disabled={busy} onClick={save} className="px-3 py-1 rounded-lg bg-[#ee2b2b] text-white font-black hover:bg-red-700 disabled:opacity-50">
+        {busy ? 'Saving…' : 'Save'}
+      </button>
+      {error && <span className="text-red-700 font-bold">{error}</span>}
+      <span className="w-full text-[11px] text-slate-400">The result of your blood bank's grouping test. It confirms the donor's group on LifeLink.</span>
     </div>
   );
 }
@@ -1222,7 +1312,7 @@ function SettingsTab({ user, profile }: { user: any; profile: HospitalProfile | 
             ['Exact location', profile ? (profile.has_location ? 'Shared (donors ranked by distance)' : 'Not shared (donors matched by city)') : ''],
             ['Contact number', profile?.contact_number],
             ['Signed in as', user?.email],
-            ['Verification', profile ? (profile.is_verified ? 'Verified by LifeLink' : 'Awaiting admin verification') : ''],
+            ['Verification', profile ? (profile.is_verified ? 'Verified by LifeLink' : VERIFICATION_LABEL[profile.verification_status] ?? 'Not verified') : ''],
           ].map(([label, value]) => (
             <div key={label} className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 py-3 border-b border-slate-50 last:border-0">
               <span className="text-sm font-bold text-slate-500">{label}</span>

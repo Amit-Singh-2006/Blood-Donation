@@ -6,7 +6,7 @@
     "build": "tsc",
     "start": "node dist/src/server.js",
     "dev": "node --watch-path=src -r ts-node/register src/server.ts",
-    "test": "node -r ts-node/register/transpile-only --test --test-force-exit \"test/**/*.test.ts\""
+    "test": "node -r ts-node/register/transpile-only --test \"test/**/*.test.ts\""
   },
   "keywords": [],
   "author": "",

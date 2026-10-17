@@ -17,9 +17,11 @@ before(async () => {
     await new Promise((resolve) => server.once('listening', resolve));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
-after(() => {
+// Close the server so the test process exits by itself (a forced exit with
+// sockets still closing can crash Node on Windows: "UV_HANDLE_CLOSING")
+after(async () => {
     server.closeAllConnections();
-    server.close();
+    await new Promise((resolve) => server.close(resolve));
 });
 afterEach(() => mock.restoreAll());
 

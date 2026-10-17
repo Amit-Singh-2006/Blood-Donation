@@ -36,7 +36,8 @@ export const refreshSession = (role?: Role): Promise<any[] | null | undefined> =
     return pending;
 };
 
-export const apiFetch = async (endpoint: string, options: RequestInit = {}, retried = false): Promise<any> => {
+/** A successful response from the API, or an Error carrying its message. */
+const apiRequest = async (endpoint: string, options: RequestInit = {}, retried = false): Promise<Response> => {
     // Tell the server which of this browser's accounts the page acts as, so a
     // hospital tab keeps using the hospital session while a donor is signed in too
     const role = roleForPath();
@@ -60,7 +61,7 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}, retr
                 // The 30-minute session ran out: renew it from "keep me signed in", then try again
                 if (!retried) {
                     const users = await refreshSession(actingAs);
-                    if (users?.length) return apiFetch(endpoint, options, true);
+                    if (users?.length) return apiRequest(endpoint, options, true);
                     if (users === undefined) throw new Error('Could not reach LifeLink. Check your connection and try again.');
                 }
                 // That sign-in has ended: send the user back to sign in instead of
@@ -73,10 +74,15 @@ export const apiFetch = async (endpoint: string, options: RequestInit = {}, retr
             const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.message || `API error: ${response.status}`);
         }
-
-        return response.json();
+        return response;
     } catch (err: any) {
         console.error(`Fetch error at ${API_BASE_URL}${endpoint}:`, err);
         throw err;
     }
 };
+
+export const apiFetch = async (endpoint: string, options: RequestInit = {}): Promise<any> =>
+    (await apiRequest(endpoint, options)).json();
+
+/** A file from the API (a verification document), read with the page's session. */
+export const apiBlob = async (endpoint: string): Promise<Blob> => (await apiRequest(endpoint)).blob();

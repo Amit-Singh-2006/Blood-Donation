@@ -40,7 +40,7 @@ export const blacklistToken = (token: string, expiresInMs: number): void => {
     blacklistExpiry.set(token, Date.now() + expiresInMs);
 };
 
-/** Purge expired tokens periodically (every 10 minutes). */
+/** Purge expired tokens periodically (every 10 minutes); the timer never keeps the process alive. */
 setInterval(() => {
     const now = Date.now();
     blacklistExpiry.forEach((exp, tok) => {
@@ -49,7 +49,7 @@ setInterval(() => {
             blacklistExpiry.delete(tok);
         }
     });
-}, 10 * 60 * 1000);
+}, 10 * 60 * 1000).unref();
 
 /**
  * Middleware: Reject tokens that have been explicitly revoked (logged out).

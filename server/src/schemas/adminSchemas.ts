@@ -1,10 +1,6 @@
 import { z } from 'zod';
 import { INDIAN_STATES } from '../utils/indianStates';
 
-export const hospitalVerificationSchema = z.object({
-    verified: z.boolean(),
-});
-
 export const adminActiveSchema = z.object({
     active: z.boolean(),
 });

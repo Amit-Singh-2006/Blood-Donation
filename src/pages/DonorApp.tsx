@@ -95,6 +95,11 @@ interface DonorNetworkView {
   donor?: {
     name: string;
     blood_group: string;
+    /** Self-reported until a hospital's lab tests it after a donation */
+    blood_group_verified?: boolean;
+    blood_group_verified_by?: string | null;
+    /** What the donor had said, when the lab found a different group */
+    blood_group_corrected_from?: string | null;
     city: string;
     available: boolean;
     preferred_channel: string;
@@ -702,6 +707,31 @@ function DashboardView({
 
       {/* Right Column: Stats & Performance */}
       <div className="space-y-8">
+        {/* Blood group: what the donor said, until a hospital lab tests it */}
+        {donor && (
+          <div className="bg-white rounded-xl border border-slate-200 p-6">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 shrink-0 rounded-2xl bg-[#ee2b2b]/10 flex items-center justify-center text-2xl font-black text-[#ee2b2b]">{donor.blood_group}</div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900">Your blood group</h3>
+                {donor.blood_group_verified ? (
+                  <p className="text-xs font-bold text-green-700 flex items-center gap-1 mt-0.5">
+                    <span className="material-symbols-outlined text-sm">verified</span>
+                    Confirmed by {donor.blood_group_verified_by ? `${donor.blood_group_verified_by}'s lab` : 'a hospital lab'}
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-500 mt-0.5">As you told us. The hospital's lab confirms it after your first donation through LifeLink.</p>
+                )}
+              </div>
+            </div>
+            {donor.blood_group_corrected_from && (
+              <p className="mt-4 text-xs text-amber-900 bg-amber-50 border border-amber-100 rounded-lg p-3">
+                You registered as {donor.blood_group_corrected_from}, but the lab found {donor.blood_group}. LifeLink now alerts you for patients your {donor.blood_group} blood can help.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Performance Stats */}
         <div className="bg-[#ee2b2b] text-white rounded-xl p-6 shadow-xl shadow-[#ee2b2b]/20 relative overflow-hidden">
           <div className="relative z-10">

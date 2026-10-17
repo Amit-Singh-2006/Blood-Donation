@@ -16,4 +16,4 @@ export const CONTACT_EMAIL: string = import.meta.env.VITE_CONTACT_EMAIL || '';
 export const GRIEVANCE_OFFICER_NAME: string = import.meta.env.VITE_GRIEVANCE_OFFICER_NAME || '';
 
 /** Date the Terms and Privacy Policy were last revised. */
-export const LEGAL_UPDATED = '16 October 2026';
+export const LEGAL_UPDATED = '17 October 2026';

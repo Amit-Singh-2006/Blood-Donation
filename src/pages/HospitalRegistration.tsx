@@ -190,7 +190,7 @@ export default function HospitalRegistration() {
           </span>
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-slate-900">Register your hospital</h1>
           <p className="text-slate-500 max-w-xl mx-auto">
-            Takes about 3 minutes. The LifeLink admin for your city checks your registration before your blood requests can alert donors.
+            Takes about 3 minutes. Then, from your dashboard, upload your registration certificate and an authorisation letter: the LifeLink admin for your city checks them before your blood requests can alert donors.
           </p>
         </div>
 

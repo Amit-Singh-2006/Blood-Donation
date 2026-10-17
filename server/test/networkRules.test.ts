@@ -109,6 +109,24 @@ test('only compatible, available, rested donors nearby are ranked: closest, then
     assert.equal(new Set(matches.map((m) => m.response_token)).size, matches.length, 'every alert has its own token');
 });
 
+test('a lab-confirmed blood group goes first among equally close donors, never ahead of a closer one', () => {
+    const confirmed = { blood_group_verified_at: at(60 * 24 * 30) };
+    // Same city, same group: the confirmed donor beats one with more XP
+    const sameCity = matchDonors(request({ wave_size: 1 }), [
+        donor({ id: 1, xp_points: 90 }),
+        donor({ id: 2, phone: '+915550000002', ...confirmed }),
+    ], NOW);
+    assert.deepEqual(sameCity.matches.map((m) => [m.donor_id, m.status]), [[2, 'notified'], [1, 'queued']]);
+
+    // Distance still comes first: 2 km self-reported before 40 km confirmed
+    const north = (km: number) => 31.326 + km / 111.2;
+    const byDistance = matchDonors(request({ latitude: 31.326, longitude: 75.576 }), [
+        donor({ id: 3, latitude: north(40), longitude: 75.576, ...confirmed }),
+        donor({ id: 4, latitude: north(2), longitude: 75.576 }),
+    ], NOW);
+    assert.deepEqual(byDistance.matches.map((m) => m.donor_id), [4, 3]);
+});
+
 test('without hospital coordinates, donors in the same city are matched', () => {
     const { matches, match_rule } = matchDonors(request({ blood_group: 'O-' }), [
         donor({ id: 1, blood_group: 'O-' }), donor({ id: 2, blood_group: 'O+' }), donor({ id: 3, blood_group: 'O-', city: 'Delhi' }),

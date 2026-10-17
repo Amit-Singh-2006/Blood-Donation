@@ -57,7 +57,9 @@ export default function PrivacyPolicy() {
                     <ul className="list-disc pl-5 space-y-1">
                         <li><strong>Account:</strong> name, email address and password (stored only as a hash)</li>
                         <li><strong>Donor profile:</strong> phone number, blood group, gender, date of birth, city and, if you share it, location; availability, preferred alert channel, last donation date and donation history</li>
-                        <li><strong>Hospital accounts:</strong> facility name, city and contact number, and the staff member's account details</li>
+                        <li><strong>Lab-confirmed blood group:</strong> after you donate through LifeLink, the blood group the hospital's lab found, which hospital recorded it and when</li>
+                        <li><strong>Hospital accounts:</strong> facility name, address and contact number, and the staff member's account details</li>
+                        <li><strong>Hospital verification:</strong> the registration certificate, an authorisation letter and, if any, the blood centre licence; the registration and licence numbers; and the name and designation of the staff member the letter names</li>
                         <li><strong>Blood requests:</strong> blood group, units, urgency, hospital and an internal patient reference. Hospitals must not enter patient names.</li>
                         <li><strong>Your replies:</strong> whether and when you accepted or declined a request</li>
                         <li><strong>AI assistant:</strong> the messages you type into the chat assistant</li>
@@ -70,6 +72,8 @@ export default function PrivacyPolicy() {
                         <li>To find compatible, eligible donors near a hospital and alert them by SMS, WhatsApp or in the app</li>
                         <li>To coordinate a donation once you accept, and to track the request for the hospital and the patient's family</li>
                         <li>To apply donor safety rules, such as the rest period between donations (90 days for men, 120 days for women)</li>
+                        <li>To alert donors by their tested blood group: a group the hospital's lab confirmed replaces the one entered at sign-up</li>
+                        <li>To check that a hospital is real and registered before its requests can alert donors</li>
                         <li>To keep the Service secure and prevent misuse, such as fake requests</li>
                         <li>To produce statistics that do not identify anyone</li>
                     </ul>
@@ -85,6 +89,7 @@ export default function PrivacyPolicy() {
                     <ul className="list-disc pl-5 space-y-1">
                         <li><strong>Hospitals:</strong> when you are alerted for a request, the hospital sees your blood group and distance. If you accept, it also sees your first name and phone number so it can coordinate your donation.</li>
                         <li><strong>Patients' families:</strong> they see request progress only (counts, blood groups and distances), never donor names or phone numbers.</li>
+                        <li><strong>LifeLink admins:</strong> the admin for a hospital's city sees its verification documents, only to check them. Documents are never shown to donors or the public.</li>
                         <li><strong>Service providers</strong> who process data for us under contract (Data Processors): website hosting (Vercel), database (Supabase, hosted in India), SMS (Twilio), WhatsApp messaging (Meta), email (Google Gmail) and the AI assistant (Groq). Please do not share health details in the AI chat.</li>
                         <li><strong>Authorities:</strong> when disclosure is required by Indian law, for example under a lawful order.</li>
                     </ul>

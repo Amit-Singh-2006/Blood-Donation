@@ -5,7 +5,6 @@ import * as db from '../src/config/db';
 import * as network from '../src/services/donorNetwork';
 import { NetworkError } from '../src/services/donorNetwork';
 import { createHospitalRequest, getHospitalRequests } from '../src/controllers/hospitalController';
-import { setHospitalVerification } from '../src/controllers/adminController';
 
 afterEach(() => mock.restoreAll());
 
@@ -122,14 +121,3 @@ test('the request list still loads when the network is down', async () => {
     assert.match(res.body.network_error, /unavailable/);
 });
 
-test('admins verify hospitals by id', async () => {
-    fakeDb([['UPDATE hospitals h SET is_verified', [{ id: 7, hospital_name: 'AIIMS', is_verified: true }]]]);
-    let res = fakeRes();
-    await setHospitalVerification({ params: { id: '7' }, body: { verified: true }, adminScope: { userId: 1, isNational: true, state: null, cities: [] } } as any, res);
-    assert.equal(res.statusCode, 200);
-    assert.equal(res.body.is_verified, true);
-
-    res = fakeRes();
-    await setHospitalVerification({ params: { id: 'abc' }, body: { verified: true }, adminScope: { userId: 1, isNational: true, state: null, cities: [] } } as any, res);
-    assert.equal(res.statusCode, 400);
-});

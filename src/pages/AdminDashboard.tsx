@@ -1,4 +1,5 @@
 import AdminCampaigns from '../components/AdminCampaigns';
+import HospitalReview, { ReviewHospital } from '../components/HospitalReview';
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -18,6 +19,8 @@ interface Overview {
   donors: number;
   hospitals: number;
   hospitals_verified: number;
+  /** Hospitals that sent their documents and wait for an admin */
+  hospitals_pending_review?: number;
   requests: number;
   requests_active: number;
   requests_completed: number;
@@ -101,9 +104,9 @@ export default function AdminDashboard() {
 
   // Things an admin should act on, from real data
   const shortages = network ? BLOOD_TYPES.filter((g) => (network.donor_pool.by_blood_group[g]?.eligible_now ?? 0) === 0) : [];
-  const pendingHospitals = overview ? overview.hospitals - overview.hospitals_verified : 0;
+  const pendingHospitals = overview?.hospitals_pending_review ?? 0;
   const notifications = [
-    pendingHospitals > 0 && { id: 'pending', title: `${pendingHospitals} hospital(s) awaiting verification`, msg: 'They cannot alert donors until you verify them.', tab: 'hospitals' },
+    pendingHospitals > 0 && { id: 'pending', title: `${pendingHospitals} hospital(s) sent documents for review`, msg: 'They cannot alert donors until you check and approve them.', tab: 'hospitals' },
     overview && overview.requests_not_dispatched > 0 && { id: 'dispatch', title: `${overview.requests_not_dispatched} request(s) never reached the network`, msg: 'The donor network was unreachable or rejected them when they were raised.', tab: 'requests' },
     overview?.messaging && !overview.messaging.sms && !overview.messaging.whatsapp && { id: 'channels', title: 'Donors are alerted in the app only', msg: 'Add the Twilio or WhatsApp settings on the backend so alerts also reach donors by SMS or WhatsApp.', tab: 'settings' },
     overview?.messages && overview.messages.failed_24h > 0 && { id: 'failed', title: `${overview.messages.failed_24h} message(s) could not be sent today`, msg: 'Check the SMS, WhatsApp and email settings.', tab: 'settings' },
@@ -431,17 +434,17 @@ function OverviewView({ overview, network, networkError, isNational, onGo }: {
 
   useEffect(() => {
     apiFetch('/admin/requests?limit=6').then(setRecent).catch(() => setRecent([]));
-    apiFetch('/admin/hospitals').then((rows: any[]) => setPending(rows.filter((h) => !h.is_verified))).catch(() => setPending([]));
+    apiFetch('/admin/hospitals').then((rows: any[]) => setPending(rows.filter((h) => h.verification_status === 'pending'))).catch(() => setPending([]));
   }, []);
 
   const shortages = network ? BLOOD_TYPES.filter((g) => (network.donor_pool.by_blood_group[g]?.eligible_now ?? 0) === 0) : [];
   const tasks = [
     ...(pending ?? []).slice(0, 3).map((h) => ({
-      key: `h${h.id}`, icon: 'local_hospital', title: `Verify ${h.hospital_name}`,
+      key: `h${h.id}`, icon: 'local_hospital', title: `Review ${h.hospital_name}'s documents`,
       text: `${[h.city, h.state].filter(Boolean).join(', ')} · registration no. ${h.registration_number || 'not given'}`,
       action: 'Review', tab: 'hospitals',
     })),
-    (pending?.length ?? 0) > 3 && { key: 'more', icon: 'more_horiz', title: `${pending!.length - 3} more hospitals awaiting verification`, text: 'Only verified hospitals can alert donors.', action: 'Open', tab: 'hospitals' },
+    (pending?.length ?? 0) > 3 && { key: 'more', icon: 'more_horiz', title: `${pending!.length - 3} more hospitals waiting for review`, text: 'Only verified hospitals can alert donors.', action: 'Open', tab: 'hospitals' },
     overview && overview.requests_not_dispatched > 0 && { key: 'dispatch', icon: 'error', title: `${overview.requests_not_dispatched} request(s) never reached donors`, text: 'The donor network was unreachable when they were raised. Contact the hospital.', action: 'See requests', tab: 'requests' },
     overview?.messaging && !overview.messaging.sms && !overview.messaging.whatsapp && { key: 'net', icon: 'sms_failed', title: 'Donors are alerted in the app only', text: 'Add the Twilio or WhatsApp settings on the backend so alerts also reach donors by SMS or WhatsApp.', action: 'Settings', tab: 'settings' },
     isNational && shortages.length > 0 && { key: 'short', icon: 'bloodtype', title: `No eligible donors right now for ${shortages.join(', ')}`, text: 'Requests for these groups rely on compatible groups. A recruitment drive would help.', action: 'Analytics', tab: 'analytics' },
@@ -451,7 +454,7 @@ function OverviewView({ overview, network, networkError, isNational, onGo }: {
     isNational
       ? { label: 'Donors on the network', value: network?.donor_pool.registered ?? overview?.donors, icon: 'group', tone: 'bg-blue-50 text-blue-600', note: overview ? `${overview.donors} signed up on the website${network ? ` · ${network.donor_pool.eligible_now} eligible now` : ''}` : '' }
       : { label: 'Donors in your cities', value: overview?.donors, icon: 'group', tone: 'bg-blue-50 text-blue-600', note: 'Signed up on the website' },
-    { label: 'Verified hospitals', value: overview ? `${overview.hospitals_verified} / ${overview.hospitals}` : undefined, icon: 'local_hospital', tone: 'bg-green-50 text-green-600', note: overview && overview.hospitals > overview.hospitals_verified ? `${overview.hospitals - overview.hospitals_verified} awaiting verification` : 'None pending' },
+    { label: 'Verified hospitals', value: overview ? `${overview.hospitals_verified} / ${overview.hospitals}` : undefined, icon: 'local_hospital', tone: 'bg-green-50 text-green-600', note: overview?.hospitals_pending_review ? `${overview.hospitals_pending_review} waiting for review` : overview && overview.hospitals > overview.hospitals_verified ? `${overview.hospitals - overview.hospitals_verified} not verified yet` : 'None pending' },
     { label: 'Active requests', value: overview?.requests_active, icon: 'emergency', tone: 'bg-red-50 text-[#ee2b2b]', note: overview ? `${overview.requests} raised in total` : '' },
     { label: 'Donations (30 days)', value: overview?.donations_30d, icon: 'volunteer_activism', tone: 'bg-amber-50 text-amber-600', note: overview ? `${overview.donations} recorded in total` : '' },
   ];
@@ -683,7 +686,7 @@ function RequestsView({ initialSearch = '' }: { initialSearch?: string }) {
 }
 
 function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: string; onChange?: () => void }) {
-  const [hospitals, setHospitals] = useState<any[]>([]);
+  const [hospitals, setHospitals] = useState<ReviewHospital[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -694,7 +697,6 @@ function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: strin
   }, [initialSearch]);
 
   const load = async () => {
-    setLoading(true);
     try {
       setHospitals(await apiFetch('/admin/hospitals'));
       setError('');
@@ -707,26 +709,13 @@ function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: strin
 
   useEffect(() => { load(); }, []);
 
-  // Only verified hospitals can raise requests that alert donors
-  const setVerified = async (h: any, verified: boolean) => {
-    const question = verified
-      ? `Verify ${h.hospital_name}? Its requests will start alerting real donors. Confirm you have checked registration number "${h.registration_number || 'not provided'}".`
-      : `Revoke verification for ${h.hospital_name}? It will no longer be able to alert donors.`;
-    if (!window.confirm(question)) return;
-    setBusyId(h.id);
-    try {
-      await apiFetch(`/admin/hospitals/${h.id}/verification`, { method: 'PUT', body: JSON.stringify({ verified }) });
-      await load();
-      onChange?.();
-    } catch (err: any) {
-      setError(err.message || 'Could not update verification.');
-    } finally {
-      setBusyId(null);
-    }
+  const changed = async () => {
+    await load();
+    onChange?.();
   };
 
   // Lost phone: the hospital sets up its authenticator app again at its next sign-in
-  const resetTwoStep = async (h: any) => {
+  const resetTwoStep = async (h: ReviewHospital) => {
     if (!window.confirm(`Reset two-step verification for ${h.hospital_name}? Only do this after confirming it is really them, for example by phoning ${h.contact_number || 'the hospital'}. It is signed out on every device, and at its next sign-in it sets up an authenticator app again.`)) return;
     setBusyId(h.id);
     try {
@@ -743,14 +732,14 @@ function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: strin
   const filtered = hospitals.filter(h =>
     [h.hospital_name, h.city, h.state, h.pincode, h.registration_number, h.email].some(v => String(v ?? '').toLowerCase().includes(q))
   );
-  const pending = hospitals.filter(h => !h.is_verified).length;
+  const waiting = hospitals.filter(h => h.verification_status === 'pending').length;
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
           <h3 className="text-xl font-bold text-slate-800">Hospital Verification</h3>
-          <p className="text-xs text-slate-500 mt-1">{hospitals.length} registered · {pending} awaiting verification</p>
+          <p className="text-xs text-slate-500 mt-1">{hospitals.length} registered · {waiting} waiting for your review</p>
         </div>
         <div className="relative">
           <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
@@ -764,8 +753,9 @@ function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: strin
         </div>
       </div>
 
-      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900">
-        Before verifying, check the registration number against the state's Clinical Establishments register or the hospital's blood centre licence, and confirm the contact details with the hospital. Only verified hospitals can alert donors.
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 space-y-1">
+        <p className="font-black">How to check a hospital</p>
+        <p>Open each document. Check the registration number on your state's clinical establishments register, or find the hospital on the ABDM Health Facility Registry. Then phone the hospital on a number you found yourself (its website, Google Maps or the registry), never the one in the application, and ask for the person named in the authorisation letter. Only verified hospitals can alert donors.</p>
       </div>
 
       {error && <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-800">{error}</div>}
@@ -779,40 +769,7 @@ function HospitalsView({ initialSearch = '', onChange }: { initialSearch?: strin
       ) : (
         <div className="space-y-3">
           {filtered.map((h) => (
-            <div key={h.id} className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h4 className="font-extrabold text-slate-900">{h.hospital_name}</h4>
-                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${h.is_verified ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                    {h.is_verified ? 'Verified' : 'Pending'}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">
-                  {[h.hospital_type, h.address, h.city, h.state, h.pincode].filter(Boolean).join(', ') || '—'}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  {h.contact_number || 'no phone'} · {h.email}
-                  {h.latitude != null && h.longitude != null && (
-                    <> · <a className="font-bold text-[#ee2b2b] hover:underline" href={`https://www.google.com/maps?q=${h.latitude},${h.longitude}`} target="_blank" rel="noreferrer">map</a></>
-                  )}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Registration no.: <span className="font-bold text-slate-700">{h.registration_number || 'not provided'}</span>
-                  {h.created_at ? ` · registered ${new Date(h.created_at).toLocaleDateString('en-IN')}` : ''}
-                </p>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Two-step verification: <span className={h.mfa_enabled ? 'font-bold text-green-700' : 'font-bold text-amber-700'}>{h.mfa_enabled ? 'on' : 'set up at next sign-in'}</span>
-                  {h.mfa_enabled && <> · <button type="button" disabled={busyId === h.id} onClick={() => resetTwoStep(h)} className="font-bold text-[#ee2b2b] hover:underline disabled:opacity-50">reset (lost phone)</button></>}
-                </p>
-              </div>
-              <button
-                disabled={busyId === h.id}
-                onClick={() => setVerified(h, !h.is_verified)}
-                className={`px-4 py-2 rounded-lg text-xs font-bold shrink-0 disabled:opacity-50 ${h.is_verified ? 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50' : 'bg-emerald-600 text-white hover:bg-emerald-700'}`}
-              >
-                {busyId === h.id ? 'Saving…' : h.is_verified ? 'Revoke' : 'Verify'}
-              </button>
-            </div>
+            <HospitalReview key={h.id} h={h} busy={busyId === h.id} onChanged={changed} onResetTwoStep={resetTwoStep} />
           ))}
         </div>
       )}
@@ -1159,7 +1116,10 @@ function DonorsView({ initialSearch = '' }: { initialSearch?: string }) {
                   <p className="font-bold text-slate-900">{d.name}</p>
                   <p className="text-xs text-slate-500">{d.email}</p>
                 </td>
-                <td className="px-4 py-3 font-black text-[#ee2b2b]">{d.blood_group || '–'}</td>
+                <td className="px-4 py-3 font-black text-[#ee2b2b]">
+                  {d.blood_group || '–'}
+                  {d.blood_group_verified_at && <span title="Confirmed by a hospital lab after a donation" className="ml-1 px-1.5 py-0.5 rounded bg-green-100 text-green-800 text-[9px] uppercase align-middle">lab</span>}
+                </td>
                 <td className="px-4 py-3 text-slate-600">{d.city || '–'}</td>
                 <td className="px-4 py-3 text-slate-600">{d.phone || '–'}</td>
                 <td className="px-4 py-3 text-slate-600">{d.last_donation_date ? new Date(d.last_donation_date).toLocaleDateString('en-IN') : '–'}</td>

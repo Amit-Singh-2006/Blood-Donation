@@ -164,6 +164,60 @@ const initDb = async (): Promise<boolean> => {
     ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS pincode VARCHAR(6);
     ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS hospital_type VARCHAR(30);
 
+    -- Verification with documents: the hospital uploads its registration
+    -- certificate and a signed authorisation letter, then an admin checks them
+    -- and phones the hospital before approving. Hospitals verified before
+    -- documents were asked for keep their status (their verified_at is empty).
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS verification_status VARCHAR(20) NOT NULL DEFAULT 'not_submitted'
+      CHECK (verification_status IN ('not_submitted', 'pending', 'changes_requested', 'verified'));
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS registration_authority VARCHAR(120);
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS hfr_id VARCHAR(20);
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS blood_centre_licence VARCHAR(60);
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS authorised_person VARCHAR(100);
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS authorised_designation VARCHAR(80);
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS verification_submitted_at TIMESTAMPTZ;
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS verification_note VARCHAR(500);
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS verified_at TIMESTAMPTZ;
+    ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS verified_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+    UPDATE hospitals SET verification_status = 'verified' WHERE is_verified AND verification_status = 'not_submitted';
+
+    -- One file per kind, replaced on re-upload. Kept in the database (small,
+    -- checked files) so they are private to this API like every other table.
+    CREATE TABLE IF NOT EXISTS hospital_documents (
+      hospital_id INTEGER NOT NULL REFERENCES hospitals(user_id) ON DELETE CASCADE,
+      kind VARCHAR(30) NOT NULL CHECK (kind IN ('registration_certificate', 'authorisation_letter', 'blood_centre_licence')),
+      content_type VARCHAR(20) NOT NULL CHECK (content_type IN ('application/pdf', 'image/jpeg', 'image/png', 'image/webp')),
+      size_bytes INTEGER NOT NULL CHECK (size_bytes BETWEEN 1 AND 3145728),
+      sha256 CHAR(64) NOT NULL,
+      data BYTEA NOT NULL,
+      uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      PRIMARY KEY (hospital_id, kind)
+    );
+    ALTER TABLE hospital_documents ENABLE ROW LEVEL SECURITY;
+
+    -- Who did what to a hospital's verification, and when
+    CREATE TABLE IF NOT EXISTS hospital_verification_log (
+      id SERIAL PRIMARY KEY,
+      hospital_id INTEGER NOT NULL REFERENCES hospitals(user_id) ON DELETE CASCADE,
+      actor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      action VARCHAR(20) NOT NULL CHECK (action IN ('uploaded', 'removed', 'submitted', 'viewed', 'approved', 'changes_requested', 'revoked')),
+      detail VARCHAR(500),
+      checks JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS hospital_verification_log_hospital ON hospital_verification_log (hospital_id, created_at DESC);
+    ALTER TABLE hospital_verification_log ENABLE ROW LEVEL SECURITY;
+    -- Admins opening a document is logged too: approval needs it
+    DO $$
+    BEGIN
+      IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'hospital_verification_log_action_check'
+                 AND pg_get_constraintdef(oid) NOT LIKE '%viewed%') THEN
+        ALTER TABLE hospital_verification_log DROP CONSTRAINT hospital_verification_log_action_check;
+        ALTER TABLE hospital_verification_log ADD CONSTRAINT hospital_verification_log_action_check
+          CHECK (action IN ('uploaded', 'removed', 'submitted', 'viewed', 'approved', 'changes_requested', 'revoked'));
+      END IF;
+    END $$;
+
     -- Admins and their jurisdiction: a national admin sees everything; a city
     -- admin only sees hospitals and donors in their cities
     CREATE TABLE IF NOT EXISTS admin_profiles (
@@ -441,6 +495,15 @@ const initDb = async (): Promise<boolean> => {
     CREATE INDEX IF NOT EXISTS network_matches_request ON network_matches (request_id);
     CREATE INDEX IF NOT EXISTS network_matches_donor ON network_matches (donor_id);
     ALTER TABLE network_matches ENABLE ROW LEVEL SECURITY;
+
+    -- The blood group a hospital's lab found after a donation. The latest lab
+    -- result becomes the donor's group and marks it lab-confirmed; from then on
+    -- the donor's own profile can no longer change it.
+    ALTER TABLE network_donors ADD COLUMN IF NOT EXISTS blood_group_verified_at TIMESTAMPTZ;
+    ALTER TABLE network_matches ADD COLUMN IF NOT EXISTS lab_blood_group VARCHAR(3)
+      CHECK (lab_blood_group IN ('A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'));
+    ALTER TABLE network_matches ADD COLUMN IF NOT EXISTS lab_recorded_at TIMESTAMPTZ;
+    ALTER TABLE network_matches ADD COLUMN IF NOT EXISTS lab_recorded_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
 
     -- Request and match ids carry on above the n8n ones, which blood_requests,
     -- donations and donor_locations still hold for older requests
