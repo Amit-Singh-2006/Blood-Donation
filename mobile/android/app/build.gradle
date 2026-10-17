@@ -1,20 +1,27 @@
 apply plugin: 'com.android.application'
 
+// LifeLink's private release key, so only LifeLink can publish updates to the app.
+// Neither the key nor its password is ever in git. The GitHub build passes them as
+// environment variables from the ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD
+// secrets; a developer PC uses mobile/android/keystore.properties (gitignored).
+// Without them a release build stops instead of signing with a debug key.
+def signingProps = new Properties()
+def signingPropsFile = rootProject.file('keystore.properties')
+if (signingPropsFile.exists()) signingPropsFile.withInputStream { signingProps.load(it) }
+def signingValue = { String envName, String propName -> System.getenv(envName) ?: signingProps.getProperty(propName) }
+
 android {
     namespace = "com.lifelink.blooddonation"
     compileSdk = rootProject.ext.compileSdkVersion
-    // LifeLink's own debug key, so each new APK updates the installed app. The key file
-    // is kept out of git: it lives on the developer's PC, and the GitHub build restores
-    // it from the ANDROID_KEYSTORE_BASE64 secret. Without it, Gradle's default debug key
-    // is used. Use a private release key for the Play Store.
     signingConfigs {
-        debug {
-            def lifelinkKey = file('lifelink-debug.keystore')
-            if (lifelinkKey.exists()) {
-                storeFile lifelinkKey
-                storePassword 'android'
-                keyAlias 'androiddebugkey'
-                keyPassword 'android'
+        release {
+            def store = signingValue('ANDROID_KEYSTORE_FILE', 'storeFile')
+            if (store) {
+                def password = signingValue('ANDROID_KEYSTORE_PASSWORD', 'storePassword')
+                storeFile file(store)
+                storePassword password
+                keyAlias signingValue('ANDROID_KEY_ALIAS', 'keyAlias') ?: 'lifelink'
+                keyPassword signingValue('ANDROID_KEY_PASSWORD', 'keyPassword') ?: password
             }
         }
     }
@@ -22,8 +29,9 @@ android {
         applicationId "com.lifelink.blooddonation"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // 2: the first build signed with the release key (phones with build 1 reinstall once)
+        versionCode 2
+        versionName "2.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -33,6 +41,7 @@ android {
     }
     buildTypes {
         release {
+            signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

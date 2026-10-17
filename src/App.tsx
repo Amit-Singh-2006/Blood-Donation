@@ -17,6 +17,7 @@ import TermsOfService from './pages/TermsOfService';
 import HospitalPartnership from './pages/HospitalPartnership';
 import Support from './pages/Support';
 import ProtectedRoute from './components/ProtectedRoute';
+import ReinstallNotice from './components/ReinstallNotice';
 import { isNativeApp } from './lib/app';
 import { refreshSession } from './lib/api';
 import { DASHBOARD, Role, lastRole, signedInUsers } from './lib/session';
@@ -61,6 +62,7 @@ export default function App() {
   useOpenAppOnDashboard();
   return (
     <Suspense fallback={<Loading />}>
+    <ReinstallNotice />
     <Routes>
       {/* Public routes - wrapped in Layout (has public navbar/sidebar) */}
       <Route path="/" element={<Layout />}>

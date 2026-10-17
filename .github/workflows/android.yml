@@ -44,29 +44,57 @@ jobs:
       - name: Copy the app config into the Android project
         run: npx cap sync android
 
+      # The private release key and its password come only from repository secrets.
+      # The key file lives in the runner's temp folder, outside the checkout.
       - name: Restore the signing key
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::error::Add the ANDROID_KEYSTORE_BASE64 secret (the signing key, base64) under Settings > Secrets and variables > Actions, so new APKs can update the installed app."
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Add the ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets (LifeLink's release key) under Settings > Secrets and variables > Actions."
             exit 1
           fi
-          echo "$KEYSTORE_BASE64" | base64 -d > android/app/lifelink-debug.keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/lifelink-release.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/lifelink-release.jks" >> "$GITHUB_ENV"
 
       - name: Build the APK
         working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --console=plain
+          ./gradlew assembleRelease --no-daemon --console=plain
+
+      # Publish only an APK signed with LifeLink's release key (its public certificate
+      # fingerprint is below), never one signed with a debug or any other key
+      - name: Check the APK's signature
+        env:
+          RELEASE_CERT_SHA256: d846aff186b39fc87659d2e3bd8a6222ecfa712404b9e4a0dc935b1eb546f2d9
+        run: |
+          APKSIGNER="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -n 1)"
+          "$APKSIGNER" verify --print-certs android/app/build/outputs/apk/release/app-release.apk > signers.txt
+          cat signers.txt
+          if [ "$(grep -c 'certificate SHA-256 digest' signers.txt)" != "1" ] || ! grep -q "certificate SHA-256 digest: $RELEASE_CERT_SHA256" signers.txt; then
+            echo "::error::The APK is not signed with LifeLink's release key, so it was not published."
+            exit 1
+          fi
+          rm -f "$ANDROID_KEYSTORE_FILE"
 
       - name: Publish to the android-latest release
         env:
           GH_TOKEN: ${{ github.token }}
+          NOTES: |
+            Install LifeLink.apk on your Android phone (allow installs from your browser when asked). The app opens the live LifeLink website, so it stays up to date on its own.
+
+            Installed LifeLink before 17 October 2026? Uninstall that version first, then install this one. The app is now signed with LifeLink's private release key, so Android treats it as a new app. Then sign in again.
+
+            Signing certificate SHA-256: D8:46:AF:F1:86:B3:9F:C8:76:59:D2:E3:BD:8A:62:22:EC:FA:71:24:04:B9:E4:A0:DC:93:5B:1E:B5:46:F2:D9
         run: |
-          cp android/app/build/outputs/apk/debug/app-debug.apk LifeLink.apk
-          if ! gh release view android-latest >/dev/null 2>&1; then
-            gh release create android-latest --title "LifeLink Android app" \
-              --notes "Install LifeLink.apk on your Android phone (allow installs from your browser when asked). The app opens the live LifeLink website, so it stays up to date on its own."
+          cp android/app/build/outputs/apk/release/app-release.apk LifeLink.apk
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release edit android-latest --notes "$NOTES"
+          else
+            gh release create android-latest --title "LifeLink Android app" --notes "$NOTES"
           fi
           gh release upload android-latest LifeLink.apk --clobber

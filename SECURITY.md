@@ -279,6 +279,18 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 
 ---
 
+## 📱 Android App
+
+### 34. App Signing and Fake Updates
+| Mitigation | Location |
+|---|---|
+| The app is a release build (not debuggable) signed with LifeLink's private release key. The key and its password live only on the maintainer's PC and in GitHub secrets, never in git | `mobile/android/app/build.gradle`, `.github/workflows/android.yml` |
+| Without the key a release build stops instead of falling back to a debug key, and CI publishes an APK only if its signing certificate matches the pinned SHA-256 fingerprint | `.github/workflows/android.yml` |
+| Builds before 2 were signed with a debug key that is public in git history. New builds add `LifeLinkApp/2` to the user agent, and the website asks older installs to reinstall once the new build is published | `mobile/capacitor.config.json`, `src/components/ReinstallNotice.tsx` |
+| No cloud backup of app data, so the "keep me signed in" cookie cannot be restored onto another phone without the account's authenticator | `AndroidManifest.xml` |
+
+---
+
 ## 📊 Security Layer Summary
 
 ```
