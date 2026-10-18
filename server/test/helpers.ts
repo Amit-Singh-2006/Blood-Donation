@@ -2,6 +2,8 @@
 // override variables that are already set, so the pool never reaches a real DB.
 process.env.DATABASE_URL = 'postgres://test:test@127.0.0.1:1/test';
 process.env.NODE_ENV = 'production'; // silences db.ts connection-error logging
+// Tests sign their own tokens, with or without a server/.env (CI has none)
+process.env.JWT_SECRET = 'test-jwt-secret';
 
 export const fakeRes = () => {
     const res: any = {
