@@ -12,6 +12,7 @@ import { getUser } from '../lib/session';
 import { outcomeText, useNetworkAnalytics } from '../lib/network';
 import { EMERGENCY } from '../lib/contact';
 import { Point, agoText, distanceKm, etaMinutes } from '../lib/geo';
+import { HOSPITAL_TYPES, INDIAN_STATES } from '../lib/india';
 
 // The camera scanner and the map load only when used
 const PassScanner = lazy(() => import('../components/PassScanner'));
@@ -457,7 +458,7 @@ export default function HospitalDashboard() {
                   {activeTab === 'reviews' && <HospitalReviews />}
                   {/* Only the profile: a full reload would swap this tab for "Loading…" and lose its message */}
                   {activeTab === 'verification' && <HospitalVerification onChange={() => apiFetch('/hospital/profile').then(setProfile).catch(() => { })} />}
-                  {activeTab === 'settings' && <SettingsTab user={user} profile={profile} />}
+                  {activeTab === 'settings' && <SettingsTab user={user} profile={profile} onProfile={setProfile} />}
                 </>
               )}
             </motion.div>
@@ -1298,11 +1299,143 @@ function InventoryTab({ inventory, onRefresh }: { inventory: any[]; onRefresh: (
 }
 
 // ─────────────────── SETTINGS TAB ───────────────────
-function SettingsTab({ user, profile }: { user: any; profile: HospitalProfile | null }) {
+const settingsInput = 'w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-[#ee2b2b]/20 focus:border-[#ee2b2b] outline-none text-sm text-slate-900 disabled:text-slate-500';
+
+/**
+ * The contact number and exact location can change any time. The name, type
+ * and address are what LifeLink checks against the documents, so they lock
+ * once the hospital is sent for review (the API enforces the same).
+ */
+function HospitalDetailsForm({ profile, onSaved, onClose }: { profile: HospitalProfile; onSaved: (p: HospitalProfile) => void; onClose: () => void }) {
+  const locked = profile.verification_status === 'pending' || profile.verification_status === 'verified';
+  const initial = {
+    contact_number: profile.contact_number ?? '',
+    hospital_name: profile.hospital_name ?? '',
+    hospital_type: profile.hospital_type ?? '',
+    address: profile.address ?? '',
+    city: profile.city ?? '',
+    state: profile.state ?? '',
+    pincode: profile.pincode ?? '',
+  };
+  const [form, setForm] = useState(initial);
+  const [coords, setCoords] = useState<Point | null>(null);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const set = (field: keyof typeof initial) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const locate = () => {
+    if (!navigator.geolocation) return setNote({ ok: false, text: 'Location is not available in this browser.' });
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const round = (v: number) => Math.round(v * 1e6) / 1e6;
+        setCoords({ latitude: round(pos.coords.latitude), longitude: round(pos.coords.longitude) });
+        setNote({ ok: true, text: 'Location found. Save to use it for new requests.' });
+        setLocating(false);
+      },
+      () => {
+        setNote({ ok: false, text: 'Could not get this device\'s location.' });
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const fields = (locked ? ['contact_number'] : Object.keys(initial)) as (keyof typeof initial)[];
+    const changed: Record<string, unknown> = Object.fromEntries(
+      fields.map((k) => [k, form[k].trim()] as const).filter(([k, v]) => v !== initial[k])
+    );
+    if (changed.contact_number !== undefined) changed.contact_number = String(changed.contact_number).replace(/[\s()-]/g, '');
+    if (coords) Object.assign(changed, coords);
+    if (!Object.keys(changed).length) return setNote({ ok: true, text: 'Nothing has changed.' });
+    setSaving(true);
+    setNote(null);
+    try {
+      onSaved(await apiFetch('/hospital/profile', { method: 'PUT', body: JSON.stringify(changed) }));
+      onClose();
+    } catch (err: any) {
+      setNote({ ok: false, text: err.message || 'Could not save the details.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const field = (label: string, input: React.ReactNode, wide = false) => (
+    <label className={`space-y-1.5 ${wide ? 'sm:col-span-2' : ''}`}>
+      <span className="text-sm font-bold text-slate-700">{label}</span>
+      {input}
+    </label>
+  );
+
+  return (
+    <form onSubmit={save} className="space-y-5">
+      <div className="grid sm:grid-cols-2 gap-4">
+        {field('Contact number', <input value={form.contact_number} onChange={set('contact_number')} type="tel" required className={settingsInput} placeholder="020 1234 5678" />)}
+        <div className="space-y-1.5">
+          <span className="text-sm font-bold text-slate-700">Exact location</span>
+          <button type="button" onClick={locate} disabled={locating} className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center justify-center gap-2 disabled:opacity-50">
+            <span className="material-symbols-outlined text-lg">my_location</span>
+            {locating ? 'Finding…' : coords ? 'Location found' : 'Use this device\'s location'}
+          </button>
+          <span className="block text-xs text-slate-500">Only while you are at the hospital. Donors are then ranked by distance.</span>
+        </div>
+        {field('Hospital name', <input value={form.hospital_name} onChange={set('hospital_name')} disabled={locked} required className={settingsInput} />, true)}
+        {field('Type', (
+          <select value={form.hospital_type} onChange={set('hospital_type')} disabled={locked} className={settingsInput}>
+            <option value="" disabled>Choose</option>
+            {HOSPITAL_TYPES.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        ))}
+        {field('City', <input value={form.city} onChange={set('city')} disabled={locked} required className={settingsInput} />)}
+        {field('Address', <input value={form.address} onChange={set('address')} disabled={locked} required className={settingsInput} />, true)}
+        {field('State', (
+          <select value={form.state} onChange={set('state')} disabled={locked} className={settingsInput}>
+            <option value="" disabled>Choose</option>
+            {INDIAN_STATES.map((s) => <option key={s}>{s}</option>)}
+          </select>
+        ))}
+        {field('PIN code', <input value={form.pincode} onChange={set('pincode')} disabled={locked} inputMode="numeric" maxLength={6} className={settingsInput} />)}
+      </div>
+      {locked && (
+        <p className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-xl p-3">
+          {profile.verification_status === 'verified'
+            ? 'Your hospital is verified, so its name, type and address are locked. Ask your LifeLink admin to change them.'
+            : 'Your details are being reviewed, so the name, type and address are locked until the result.'}
+        </p>
+      )}
+      {note && <p role="status" className={`text-sm font-bold ${note.ok ? 'text-green-700' : 'text-amber-800'}`}>{note.text}</p>}
+      <div className="flex flex-wrap gap-3">
+        <button type="submit" disabled={saving} className="px-5 py-2.5 rounded-xl bg-[#ee2b2b] text-white text-sm font-black hover:bg-red-700 disabled:opacity-50">
+          {saving ? 'Saving…' : 'Save details'}
+        </button>
+        <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50">Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+function SettingsTab({ user, profile, onProfile }: { user: any; profile: HospitalProfile | null; onProfile: (p: HospitalProfile) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [saved, setSaved] = useState(false);
   return (
     <div className="max-w-2xl space-y-6">
       <div className="bg-white rounded-3xl p-5 sm:p-8 border border-slate-100 shadow-sm">
-        <h3 className="text-lg font-black text-slate-900 mb-6">Hospital Account</h3>
+        <div className="flex items-center justify-between gap-3 mb-6">
+          <h3 className="text-lg font-black text-slate-900">Hospital Account</h3>
+          {profile && !editing && (
+            <button onClick={() => { setEditing(true); setSaved(false); }} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50 flex items-center gap-1">
+              <span className="material-symbols-outlined text-lg">edit</span> Edit details
+            </button>
+          )}
+        </div>
+        {saved && !editing && <p role="status" className="mb-4 text-sm font-bold text-green-700">Saved. New requests use these details.</p>}
+        {editing && profile ? (
+          <HospitalDetailsForm profile={profile} onSaved={(p) => { onProfile(p); setSaved(true); }} onClose={() => setEditing(false)} />
+        ) : (
         <div className="space-y-1">
           {[
             ['Hospital', profile?.hospital_name],
@@ -1320,6 +1453,7 @@ function SettingsTab({ user, profile }: { user: any; profile: HospitalProfile | 
             </div>
           ))}
         </div>
+        )}
       </div>
 
       <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm text-sm text-slate-600 space-y-3">

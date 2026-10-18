@@ -29,9 +29,11 @@ android {
         applicationId "com.lifelink.blooddonation"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        // 2: the first build signed with the release key (phones with build 1 reinstall once)
-        versionCode 2
-        versionName "2.0"
+        // 2: the first build signed with the release key (phones with build 1 reinstall once).
+        // Every GitHub build after it counts up, so Android installs it over the last one.
+        def ciBuild = (System.getenv('GITHUB_RUN_NUMBER') ?: '0') as int
+        versionCode 2 + ciBuild
+        versionName ciBuild ? "2.${ciBuild}" : "2.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.

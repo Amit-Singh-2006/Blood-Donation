@@ -40,7 +40,8 @@ test('the donor sees live alerts with their links, a pass once they said YES, an
     const matches = [
         match({ id: 1, status: 'notified', notified_at: at(20) }),
         match({ id: 2, status: 'accepted', request_id: 1002, response_token: uuid(2), notified_at: at(60), responded_at: at(5) }),
-        match({ id: 3, status: 'donated', request_id: 900, responded_at: '2026-09-01T09:30:00Z' }),
+        // 02:00 on 1 September in India
+        match({ id: 3, status: 'donated', request_id: 900, responded_at: '2026-08-31T20:30:00Z' }),
         match({ id: 4, status: 'declined', request_id: 901, responded_at: at(600) }),
     ];
     const view = buildDonorView(donor({ last_donation_date: '2026-09-01', total_donations: 1, xp_points: 10 }), matches, NOW, BASE);
@@ -50,7 +51,7 @@ test('the donor sees live alerts with their links, a pass once they said YES, an
     assert.match(String(view.alerts[0]!.pass_code), /^LP-/);
     assert.equal(view.alerts[1]!.pass_code, null);
     assert.equal(view.alerts[0]!.decline_url, `${BASE}/donor-response?m=2&t=${uuid(2)}&a=decline`);
-    assert.deepEqual(view.history, [{ request_id: 900, hospital_name: 'Civil Hospital', hospital_city: 'Jalandhar', blood_group_needed: 'O+', donated_on: '2026-09-01', lab_blood_group: null }]);
+    assert.deepEqual(view.history, [{ match_id: 3, request_id: 900, hospital_name: 'Civil Hospital', hospital_city: 'Jalandhar', blood_group_needed: 'O+', donated_on: '2026-09-01', lab_blood_group: null }]);
     assert.equal(view.donor.blood_group_verified, false, 'self-reported until a lab confirms it');
     assert.deepEqual(view.stats, { alerts_received: 4, accepted: 2, donations_via_lifelink: 1 });
     // Women rest 120 days

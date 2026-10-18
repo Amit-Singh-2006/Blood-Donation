@@ -83,8 +83,8 @@ export const prepareDocument = async (file: File): Promise<Blob> => {
  * The type comes from our own list, never from the response, so the browser
  * only ever shows it as a PDF or an image.
  */
-export const openDocument = async (endpoint: string, contentType: string): Promise<string> => {
+export const openDocument = async (endpoint: string, contentType: string): Promise<{ url: string; blob: Blob }> => {
   if (!TYPES.includes(contentType)) throw new Error('This document cannot be shown.');
-  const blob = await apiBlob(endpoint);
-  return URL.createObjectURL(new Blob([blob], { type: contentType }));
+  const blob = new Blob([await apiBlob(endpoint)], { type: contentType });
+  return { url: URL.createObjectURL(blob), blob };
 };

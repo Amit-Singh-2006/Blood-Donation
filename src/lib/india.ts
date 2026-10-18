@@ -9,3 +9,6 @@ export const INDIAN_STATES = [
 ];
 
 export const PIN_CODE = /^[1-9][0-9]{5}$/;
+
+// The server validates against the same list
+export const HOSPITAL_TYPES = ['Government', 'Private', 'Trust / NGO', 'Public-Private'];

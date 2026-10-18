@@ -6,7 +6,9 @@
     "build": "tsc",
     "start": "node dist/src/server.js",
     "dev": "node --watch-path=src -r ts-node/register src/server.ts",
-    "test": "node -r ts-node/register/transpile-only --test \"test/**/*.test.ts\""
+    "test": "node -r ts-node/register/transpile-only --test \"test/**/*.test.ts\"",
+    "backup": "node -r ts-node/register/transpile-only scripts/backup.ts",
+    "restore-backup": "node -r ts-node/register/transpile-only scripts/restore-backup.ts"
   },
   "keywords": [],
   "author": "",

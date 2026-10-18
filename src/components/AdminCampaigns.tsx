@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ChangeEvent, FormEvent, InputHTMLAttributes } from 'react';
 import { apiFetch } from '../lib/api';
+import { saveFile } from '../lib/files';
 import { Campaign, CampaignInfo, campaignDates, campaignHours, fmtDate, todayIST } from '../lib/campaign';
 
 const field = 'w-full px-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:border-[#ee2b2b] focus:ring-2 focus:ring-red-100';
@@ -225,12 +226,7 @@ function Registrations({ id, onBack }: { id: number; onBack: () => void }) {
     const lines = regs.map((r) => [r.name, r.phone, r.email, r.blood_group, r.gender, age(r.dob), r.weight_kg, r.city, r.preferred_date, r.preferred_slot, r.last_donation_date,
       new Date(r.created_at).toLocaleString('en-IN'), yesNo(r.attended), yesNo(r.donated), r.volume_ml, r.remarks].map(csvCell).join(','));
     const blob = new Blob(['﻿' + [header.map(csvCell).join(','), ...lines].join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${c.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-registrations.csv`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    saveFile(blob, `${c.name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}-registrations.csv`).catch((err) => alert(err.message));
   };
 
   return (

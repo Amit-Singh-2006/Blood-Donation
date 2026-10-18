@@ -8,6 +8,7 @@ import {
     getDonorLocations,
     updateHospitalInventory,
     getHospitalProfile,
+    updateHospitalProfile,
     recordLabBloodGroup,
 } from '../controllers/hospitalController';
 import {
@@ -18,7 +19,8 @@ import { MAX_DOCUMENT_BYTES } from '../utils/documents';
 import { AuthRequest, authMiddleware } from '../middleware/authMiddleware';
 import { roleMiddleware } from '../middleware/roleMiddleware';
 import { validateRequest } from '../middleware/validateZod';
-import { createHospitalRequestSchema, updateHospitalInventorySchema } from '../schemas/hospitalSchemas';
+import { createHospitalRequestSchema, hospitalProfileSchema, updateHospitalInventorySchema } from '../schemas/hospitalSchemas';
+import { sharedLimitStore } from '../middleware/rateLimitStore';
 import { massAssignmentGuard } from '../middleware/securityMiddleware';
 import rateLimit from 'express-rate-limit';
 
@@ -66,6 +68,17 @@ router.put(
     updateHospitalInventory
 );
 
+// Contact number and location any time; name, type and address before review (see the controller)
+router.put(
+    '/profile',
+    hospitalApiLimiter,
+    authMiddleware,
+    roleMiddleware(['hospital']),
+    massAssignmentGuard(['contact_number', 'latitude', 'longitude', 'hospital_name', 'hospital_type', 'address', 'city', 'state', 'pincode']),
+    validateRequest(hospitalProfileSchema),
+    updateHospitalProfile
+);
+
 // Only for requests that never reached the donor network (see the controller)
 router.put('/requests/:id/cancel', hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital']), massAssignmentGuard([]), cancelHospitalRequest);
 
@@ -90,6 +103,7 @@ const uploadLimiter = rateLimit({
     legacyHeaders: false,
     keyGenerator: (req) => `hospital:${(req as AuthRequest).user?.id}`,
     message: { message: 'Too many uploads this hour. Please try again later.' },
+    ...sharedLimitStore('uploads'),
 });
 const fileBody = express.raw({ type: () => true, limit: MAX_DOCUMENT_BYTES });
 const hospitalOnly = [hospitalApiLimiter, authMiddleware, roleMiddleware(['hospital'])];

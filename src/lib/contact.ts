@@ -15,5 +15,5 @@ export const CONTACT_EMAIL: string = import.meta.env.VITE_CONTACT_EMAIL || '';
 /** Grievance Officer required by the IT Rules, 2021 and the DPDP Act, 2023. */
 export const GRIEVANCE_OFFICER_NAME: string = import.meta.env.VITE_GRIEVANCE_OFFICER_NAME || '';
 
-/** Date the Terms and Privacy Policy were last revised. */
-export const LEGAL_UPDATED = '17 October 2026';
+/** Date the Terms and Privacy Policy were last revised; sign-ups record it as LEGAL_VERSION (server/src/utils/legal.ts), which must match. */
+export const LEGAL_UPDATED = '18 October 2026';

@@ -7,6 +7,9 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Saving files the website makes (see FilesPlugin); registered before the
+        // page loads, so the website can see it from the start
+        registerPlugin(FilesPlugin.class);
         super.onCreate(savedInstanceState);
         // The website signs in with cookies set by the API, which lives on another
         // domain. Chrome allows those; an app's WebView blocks them unless told to.

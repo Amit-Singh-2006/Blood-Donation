@@ -28,7 +28,7 @@ const req = (opts: { role?: string; cookies?: Record<string, string>; body?: any
 /** A fake database: the user_sessions table plus the account rows the controllers read. */
 const fakeDb = (opts: { passwordHash?: string } = {}) => {
     const sessions = new Map<string, any>();
-    const state = { adminActive: true };
+    const state = { adminActive: true, disabled: false };
     mock.method(db, 'query', async (sql: string, params: any[] = []) => {
         if (sql.includes('INSERT INTO user_sessions')) {
             const [id, user_id, role, token_hash, persistent, expires_at] = params;
@@ -48,6 +48,7 @@ const fakeDb = (opts: { passwordHash?: string } = {}) => {
             if (row && row.token_hash === params[1]) row.revoked_at = new Date();
             return { rows: [] };
         }
+        if (sql.includes('SELECT disabled_at FROM users')) return { rows: [{ disabled_at: state.disabled ? new Date() : null }] };
         if (sql.includes('SELECT active FROM admin_profiles')) return { rows: [{ active: state.adminActive }] };
         if (sql.includes('FROM admin_profiles')) return { rows: [{ is_national: true, state: null, cities: [] }] };
         if (sql.includes('FROM donors WHERE user_id')) return { rows: [{ blood_group: 'O+', city: 'Pune' }] };
@@ -126,6 +127,18 @@ test('a removed admin cannot renew their session, and the kept sign-in is ended'
     await refreshSession(req({ role: 'admin', cookies: { ll_admin_keep: kept.value } }), res);
     assert.equal(res.statusCode, 401);
     assert.deepEqual(Object.keys(res.cookies), []);
+    assert.ok(sessions.get(idOf(kept.value)).revoked_at);
+});
+
+test('a deactivated account cannot renew its session either', async () => {
+    const { sessions, state } = fakeDb();
+    const kept = await startKeptSession(5, 'donor', true);
+    state.disabled = true;
+    const res = fakeRes();
+    await refreshSession(req({ role: 'donor', cookies: { ll_donor_keep: kept.value } }), res);
+    assert.equal(res.statusCode, 401);
+    assert.deepEqual(Object.keys(res.cookies), []);
+    assert.ok(res.cleared.includes('ll_donor_keep'));
     assert.ok(sessions.get(idOf(kept.value)).revoked_at);
 });
 

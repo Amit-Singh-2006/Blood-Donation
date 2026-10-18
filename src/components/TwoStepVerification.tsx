@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { apiFetch } from '../lib/api';
+import { saveFile } from '../lib/files';
 
 /** What the server returns after a correct password for an admin or hospital account. */
 export interface SecondStepChallenge {
@@ -66,12 +67,8 @@ export default function TwoStepVerification({ challenge, onDone, onCancel }: {
 
   const download = (codes: string[]) => {
     const text = `LifeLink backup codes for ${challenge.email ?? challenge.name}\nEach code signs you in once if you cannot use your authenticator app.\n\n${codes.join('\n')}\n`;
-    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'lifelink-backup-codes.txt';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    // Copy still works where saving cannot (an old app build)
+    saveFile(new Blob([text], { type: 'text/plain' }), 'lifelink-backup-codes.txt').catch((err) => alert(err.message));
   };
 
   return (

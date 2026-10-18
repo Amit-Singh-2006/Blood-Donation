@@ -5,11 +5,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import AgentChat from '../components/AgentChat';
 import { apiFetch } from '../lib/api';
-import { getUser } from '../lib/session';
+import { forgetUser, getUser, saveUser } from '../lib/session';
 import DonationPass from '../components/DonationPass';
 import { agoText, directionsUrl, distanceKm, Point } from '../lib/geo';
 import { EMERGENCY } from '../lib/contact';
 import { outcomeText } from '../lib/network';
+import { requestCertificate } from '../lib/certificate';
+import { donorAgeProblem, donorBirthDateRange } from '../lib/legal';
 
 /** A blood request the donor was alerted to, from GET /donor/network. */
 interface NetworkAlert {
@@ -110,7 +112,7 @@ interface DonorNetworkView {
     eligible_now: boolean;
   };
   alerts?: NetworkAlert[];
-  history?: { request_id: number; hospital_name: string; hospital_city: string; blood_group_needed: string; donated_on: string }[];
+  history?: { match_id: number; request_id: number; hospital_name: string; hospital_city: string; blood_group_needed: string; donated_on: string }[];
   stats?: { alerts_received: number; accepted: number; donations_via_lifelink: number };
 }
 
@@ -131,13 +133,209 @@ const earnedBadges = (donor: DonorNetworkView['donor'], stats: DonorNetworkView[
 
 type PreferenceChange = { available?: boolean; preferred_channel?: string };
 
+/** Opens the certificate for a website donation record or a donor network donation. */
+type ClaimCertificate = (donation: { donation_id: number } | { match_id: number }, key: string) => void;
+
 const formatDay = (day?: string | null) =>
   day ? new Date(day.length === 10 ? day + 'T00:00:00' : day).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
 
 const openDirections = (place: string) =>
   window.open(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(place)}`, '_blank', 'noopener');
 
-function DonorSettingsView({ channel, onSave }: { channel?: string; onSave: (change: PreferenceChange) => Promise<void> }) {
+/** The donor's own details, from GET /donor/profile. */
+interface DonorProfile {
+  name: string;
+  email: string;
+  phone: string | null;
+  city: string | null;
+  gender: string | null;
+  dob: string | null;
+  blood_group: string;
+  /** A hospital lab confirmed it: only a new lab result can change it */
+  blood_group_verified: boolean;
+}
+
+const PROFILE_FIELDS = ['name', 'phone', 'city', 'gender', 'dob', 'blood_group'] as const;
+type ProfileForm = Record<(typeof PROFILE_FIELDS)[number], string>;
+const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
+const fieldClass = 'w-full px-4 py-2.5 rounded-lg border border-slate-200 bg-white text-sm focus:border-[#ee2b2b] focus:ring-2 focus:ring-red-100 outline-none disabled:bg-slate-50 disabled:text-slate-500';
+
+const formOf = (p: DonorProfile): ProfileForm => ({
+  name: p.name ?? '', phone: p.phone ?? '', city: p.city ?? '', gender: p.gender ?? '', dob: p.dob ?? '', blood_group: p.blood_group ?? '',
+});
+
+function DonorDetails({ onSaved }: { onSaved: () => void }) {
+  const [profile, setProfile] = useState<DonorProfile | null>(null);
+  const [form, setForm] = useState<ProfileForm | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const range = donorBirthDateRange();
+
+  const fill = (p: DonorProfile) => {
+    setProfile(p);
+    setForm(formOf(p));
+  };
+  useEffect(() => {
+    apiFetch('/donor/profile').then(fill).catch((err) => setLoadError(err.message || 'Could not load your details.'));
+  }, []);
+
+  const change = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    setForm((f) => (f ? { ...f, [e.target.name]: e.target.value } : f));
+
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!profile || !form) return;
+    const before = formOf(profile);
+    const changed = Object.fromEntries(PROFILE_FIELDS.map((k) => [k, form[k].trim()] as const).filter(([k, v]) => v !== before[k]));
+    if (!Object.keys(changed).length) return setStatus({ ok: true, text: 'Nothing has changed.' });
+    const ageProblem = changed.dob !== undefined ? donorAgeProblem(changed.dob) : null;
+    if (ageProblem) return setStatus({ ok: false, text: ageProblem });
+    setSaving(true);
+    setStatus(null);
+    try {
+      const updated: DonorProfile = await apiFetch('/donor/profile', { method: 'PUT', body: JSON.stringify(changed) });
+      fill(updated);
+      const user = getUser('donor');
+      if (user) saveUser({ ...user, name: updated.name, blood_group: updated.blood_group, city: updated.city });
+      setStatus({ ok: true, text: 'Saved.' });
+      onSaved();
+    } catch (err: any) {
+      setStatus({ ok: false, text: err.message || 'Could not save your details.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={save} className="bg-white rounded-xl p-6 sm:p-8 border border-slate-200 shadow-sm space-y-6">
+      <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+        <span className="material-symbols-outlined text-[#ee2b2b]">badge</span>
+        Your details
+      </h2>
+      {loadError ? (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-4">{loadError}</p>
+      ) : !profile || !form ? (
+        <p className="text-sm text-slate-400">Loading…</p>
+      ) : (
+        <>
+          <div className="grid sm:grid-cols-2 gap-4">
+            <label className="space-y-1.5">
+              <span className="text-sm font-bold text-slate-700">Full name</span>
+              <input name="name" value={form.name} onChange={change} required className={fieldClass} autoComplete="name" />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-sm font-bold text-slate-700">Email</span>
+              <input value={profile.email} disabled className={fieldClass} />
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-sm font-bold text-slate-700">Mobile number</span>
+              <input name="phone" type="tel" value={form.phone} onChange={change} required className={fieldClass} autoComplete="tel" placeholder="+91 98765 43210" />
+              <span className="block text-xs text-slate-500">Blood request alerts go to this number.</span>
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-sm font-bold text-slate-700">City</span>
+              <input name="city" value={form.city} onChange={change} required className={fieldClass} autoComplete="address-level2" />
+              <span className="block text-xs text-slate-500">LifeLink alerts you about requests near this city.</span>
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-sm font-bold text-slate-700">Gender</span>
+              <select name="gender" value={form.gender} onChange={change} className={fieldClass}>
+                <option value="" disabled>Choose</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+                <option value="other">Other</option>
+              </select>
+            </label>
+            <label className="space-y-1.5">
+              <span className="text-sm font-bold text-slate-700">Date of birth</span>
+              <input name="dob" type="date" value={form.dob} onChange={change} min={range.min} max={range.max} className={fieldClass} />
+            </label>
+            <label className="space-y-1.5 sm:col-span-2">
+              <span className="text-sm font-bold text-slate-700">Blood group</span>
+              <select name="blood_group" value={form.blood_group} onChange={change} disabled={profile.blood_group_verified} className={fieldClass}>
+                {BLOOD_GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+              <span className="block text-xs text-slate-500">
+                {profile.blood_group_verified
+                  ? 'A hospital lab confirmed your blood group, so only a new lab result can change it.'
+                  : 'Until a hospital lab tests it after a donation, LifeLink uses the group you give here.'}
+              </span>
+            </label>
+          </div>
+          <div className="flex flex-wrap items-center gap-4">
+            <button type="submit" disabled={saving} className="px-6 py-3 w-full sm:w-auto bg-[#ee2b2b] text-white rounded-lg font-bold hover:bg-[#ee2b2b]/90 transition-all shadow-md disabled:opacity-50">
+              {saving ? 'Saving…' : 'Save details'}
+            </button>
+            {status && <span role="status" className={`text-sm font-medium ${status.ok ? 'text-green-700' : 'text-amber-800'}`}>{status.text}</span>}
+          </div>
+        </>
+      )}
+    </form>
+  );
+}
+
+function DeleteAccount() {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const remove = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!window.confirm('Delete your LifeLink account and your data? This cannot be undone.')) return;
+    setBusy(true);
+    setError('');
+    try {
+      await apiFetch('/user/account', { method: 'DELETE', body: JSON.stringify({ password }) });
+      try { localStorage.removeItem(SHARING_KEY); } catch { /* storage unavailable */ }
+      forgetUser('donor');
+      navigate('/login?deleted=1', { replace: true });
+    } catch (err: any) {
+      setError(err.message || 'Could not delete your account. Please try again.');
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl p-6 sm:p-8 border border-red-100 shadow-sm space-y-4">
+      <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+        <span className="material-symbols-outlined text-[#ee2b2b]">person_remove</span>
+        Delete my account
+      </h2>
+      <p className="text-sm text-slate-600">
+        This deletes your LifeLink account and the personal data LifeLink holds about you: your profile, phone number, donation records, certificates (their codes stop working) and reviews.
+        Requests you said YES to are handed to other donors first. A hospital's request history on LifeLink keeps only that a donor replied, without your name or number.
+      </p>
+      {!open ? (
+        <button onClick={() => setOpen(true)} className="px-5 py-2.5 rounded-lg border border-[#ee2b2b] text-[#ee2b2b] text-sm font-bold hover:bg-red-50">
+          Delete my account…
+        </button>
+      ) : (
+        <form onSubmit={remove} className="space-y-3">
+          <label className="block space-y-1.5">
+            <span className="text-sm font-bold text-slate-700">Your password, to confirm</span>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required autoComplete="current-password" className={fieldClass} />
+          </label>
+          {error && <p role="alert" className="text-sm font-bold text-amber-800">{error}</p>}
+          <div className="flex flex-wrap gap-3">
+            <button type="submit" disabled={busy || !password} className="px-5 py-2.5 rounded-lg bg-[#ee2b2b] text-white text-sm font-bold hover:bg-red-700 disabled:opacity-50">
+              {busy ? 'Deleting…' : 'Delete my account'}
+            </button>
+            <button type="button" onClick={() => { setOpen(false); setPassword(''); setError(''); }} className="px-5 py-2.5 rounded-lg border border-slate-200 text-sm font-bold text-slate-700 hover:bg-slate-50">
+              Keep my account
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function DonorSettingsView({ channel, onSave, onProfileSaved }: {
+  channel?: string; onSave: (change: PreferenceChange) => Promise<void>; onProfileSaved: () => void;
+}) {
   const [selected, setSelected] = useState(channel ?? 'sms');
   const [status, setStatus] = useState('');
   useEffect(() => { if (channel) setSelected(channel); }, [channel]);
@@ -154,44 +352,35 @@ function DonorSettingsView({ channel, onSave }: { channel?: string; onSave: (cha
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      <div className="bg-white rounded-xl p-8 border border-slate-200 shadow-sm">
+      <DonorDetails onSaved={onProfileSaved} />
+      <div className="bg-white rounded-xl p-6 sm:p-8 border border-slate-200 shadow-sm">
         <h2 className="text-2xl font-bold text-slate-900 mb-6 flex items-center gap-2">
-          <span className="material-symbols-outlined text-[#ee2b2b]">settings</span>
-          Account Settings
+          <span className="material-symbols-outlined text-[#ee2b2b]">notifications</span>
+          Alerts
         </h2>
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border rounded-lg border-slate-100 bg-slate-50">
-            <div>
-              <h4 className="font-bold text-slate-900">Blood request alerts</h4>
-              <p className="text-sm text-slate-500">How LifeLink reaches you when a nearby patient needs your blood group</p>
-            </div>
-            <select
-              value={selected}
-              onChange={(e) => setSelected(e.target.value)}
-              className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium"
-            >
-              <option value="sms">SMS</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="in_app">Only in the app</option>
-            </select>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 border rounded-lg border-slate-100 bg-slate-50">
+          <div>
+            <h4 className="font-bold text-slate-900">Blood request alerts</h4>
+            <p className="text-sm text-slate-500">How LifeLink reaches you when a nearby patient needs your blood group</p>
           </div>
-          <div className="flex items-center justify-between p-4 border rounded-lg border-slate-100 bg-slate-50">
-            <div>
-              <h4 className="font-bold text-slate-900">Location Services</h4>
-              <p className="text-sm text-slate-500">Allow AI to find nearest hospitals for matching</p>
-            </div>
-            <div className="w-12 h-6 bg-green-500 rounded-full relative cursor-pointer">
-              <div className="w-5 h-5 bg-white rounded-full absolute right-0.5 top-0.5 shadow-sm"></div>
-            </div>
-          </div>
+          <select
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+            className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-sm font-medium"
+          >
+            <option value="sms">SMS</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="in_app">Only in the app</option>
+          </select>
         </div>
-        <div className="mt-8 flex items-center gap-4">
+        <div className="mt-6 flex items-center gap-4">
           <button onClick={save} className="px-6 py-3 w-full sm:w-auto bg-[#ee2b2b] text-white rounded-lg font-bold hover:bg-[#ee2b2b]/90 transition-all shadow-md">
-            Save Changes
+            Save alerts
           </button>
           {status && <span className="text-sm text-slate-500">{status}</span>}
         </div>
       </div>
+      <DeleteAccount />
     </div>
   );
 }
@@ -206,11 +395,9 @@ export default function DonorApp() {
   const [replyNotice, setReplyNotice] = useState<{ ok: boolean; text: string } | null>(null);
   const [respondingId, setRespondingId] = useState<number | null>(null);
 
-  const [user, setUser] = useState<any>(null);
   const [donations, setDonations] = useState<any[]>([]);
 
   useEffect(() => {
-    setUser(getUser('donor'));
     fetchDonations();
     fetchNetwork();
   }, []);
@@ -329,39 +516,15 @@ export default function DonorApp() {
 
   const [claimingId, setClaimingId] = useState<string | null>(null);
 
-  const handleClaimCertificate = async (donation: any) => {
-    // Prompt the user for the email they want the certificate sent to
-    const defaultEmail = user?.email || "";
-    const userEmail = window.prompt("Where should we email your Certificate of Appreciation?", defaultEmail);
-
-    // If user clicks Cancel on the prompt, abort.
-    if (!userEmail) {
-      return;
-    }
-
-    setClaimingId(donation.id);
+  // LifeLink issues the certificate, with a code anyone can check; the
+  // certificate page shows it and saves it as a PDF
+  const handleClaimCertificate: ClaimCertificate = async (donation, key) => {
+    setClaimingId(key);
     try {
-      const scriptUrl = import.meta.env.VITE_GOOGLE_SCRIPT_CERTIFICATE_URL;
-      if (scriptUrl) {
-        await fetch(scriptUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: {
-            'Content-Type': 'text/plain;charset=utf-8',
-          },
-          body: JSON.stringify({
-            name: network?.donor?.name || user?.name || "LifeLink Donor",
-            email: userEmail,
-            bloodGroup: network?.donor?.blood_group || user?.blood_group || "",
-          }),
-        });
-        alert('Certificate generation request sent! Please check your email inbox in a few moments. (It will also be logged in the spreadsheet)');
-      } else {
-        alert("Certificate URL not configured.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Error generating certificate.');
+      const certificate = await requestCertificate(donation);
+      navigate(`/certificate/${certificate.code}`, { state: { certificate } });
+    } catch (err: any) {
+      alert(err.message || 'Could not get your certificate. Please try again.');
     } finally {
       setClaimingId(null);
     }
@@ -450,7 +613,7 @@ export default function DonorApp() {
       {activeTab === 'campaigns' && <DonorCampaigns />}
       {activeTab === 'reviews' && <DonorReviews />}
       {activeTab === 'impact' && <ImpactView network={network} networkError={networkError} donations={donations} onClaimCertificate={handleClaimCertificate} claimingId={claimingId} />}
-      {activeTab === 'settings' && <DonorSettingsView channel={network?.donor?.preferred_channel} onSave={updatePreferences} />}
+      {activeTab === 'settings' && <DonorSettingsView channel={network?.donor?.preferred_channel} onSave={updatePreferences} onProfileSaved={fetchNetwork} />}
 
       {/* Floating AI Chat Button */}
       <button
@@ -481,7 +644,7 @@ function DashboardView({
   donations: any[]; network: DonorNetworkView | null; networkError: string; isAvailable: boolean;
   replyNotice: { ok: boolean; text: string } | null; respondingId: number | null;
   onRespond: (alertInfo: NetworkAlert, url: string) => void;
-  onClaimCertificate: (donation: any) => void; claimingId: string | null;
+  onClaimCertificate: ClaimCertificate; claimingId: string | null;
   sharing: LocationSharing;
 }) {
   const donor = network?.donor;
@@ -688,12 +851,12 @@ function DashboardView({
                       </td>
                       <td className="py-4 text-right flex flex-col items-end gap-2">
                         <button
-                          onClick={() => onClaimCertificate(donation)}
-                          disabled={claimingId === donation.id}
+                          onClick={() => onClaimCertificate({ donation_id: donation.id }, `d-${donation.id}`)}
+                          disabled={claimingId === `d-${donation.id}`}
                           className="text-xs font-bold bg-[#ee2b2b] text-white px-3 py-1.5 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-1 disabled:opacity-50"
                         >
                           <span className="material-symbols-outlined text-[14px]">workspace_premium</span>
-                          {claimingId === donation.id ? "Sending..." : "Get Certificate"}
+                          {claimingId === `d-${donation.id}` ? 'Opening…' : 'Certificate'}
                         </button>
                       </td>
                     </tr>
@@ -880,7 +1043,7 @@ function WhereToDonateView({ city }: { city?: string }) {
 
 function ImpactView({ network, networkError, donations, onClaimCertificate, claimingId }: {
   network: DonorNetworkView | null; networkError: string; donations: any[];
-  onClaimCertificate: (donation: any) => void; claimingId: string | null;
+  onClaimCertificate: ClaimCertificate; claimingId: string | null;
 }) {
   const donor = network?.donor;
   const stats = network?.stats;
@@ -955,18 +1118,18 @@ function ImpactView({ network, networkError, donations, onClaimCertificate, clai
         ) : (
           <ul className="space-y-3">
             {history.map((h) => (
-              <li key={h.request_id} className="flex items-center justify-between gap-3 p-4 rounded-xl bg-slate-50">
+              <li key={h.match_id} className="flex items-center justify-between gap-3 p-4 rounded-xl bg-slate-50">
                 <div>
                   <p className="font-bold text-slate-900">{h.hospital_name}</p>
                   <p className="text-xs text-slate-500">{h.hospital_city} · {h.blood_group_needed} patient · {formatDay(h.donated_on)}</p>
                 </div>
                 <button
-                  onClick={() => onClaimCertificate({ id: `net-${h.request_id}` })}
-                  disabled={claimingId === `net-${h.request_id}`}
+                  onClick={() => onClaimCertificate({ match_id: h.match_id }, `m-${h.match_id}`)}
+                  disabled={claimingId === `m-${h.match_id}`}
                   className="text-xs font-bold bg-[#ee2b2b] text-white px-3 py-1.5 rounded-lg hover:bg-red-700 transition-colors flex items-center gap-1 disabled:opacity-50 shrink-0"
                 >
                   <span className="material-symbols-outlined text-[14px]">workspace_premium</span>
-                  {claimingId === `net-${h.request_id}` ? 'Sending…' : 'Certificate'}
+                  {claimingId === `m-${h.match_id}` ? 'Opening…' : 'Certificate'}
                 </button>
               </li>
             ))}

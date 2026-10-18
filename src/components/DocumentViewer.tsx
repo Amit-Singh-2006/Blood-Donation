@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { documentLabel, openDocument, typeLabel } from '../lib/documents';
+import { isNativeApp } from '../lib/app';
+import { saveFile } from '../lib/files';
 
 export interface ViewedDocument {
   /** The API path of the file, e.g. /admin/hospitals/12/documents/registration_certificate */
@@ -13,19 +15,20 @@ const EXTENSION: Record<string, string> = { 'application/pdf': 'pdf', 'image/jpe
 
 /** Shows a verification document in the page, with a download link. */
 export default function DocumentViewer({ doc, onClose, onOpened }: { doc: ViewedDocument; onClose: () => void; onOpened?: () => void }) {
-  const [url, setUrl] = useState<string | null>(null);
+  const [file, setFile] = useState<{ url: string; blob: Blob } | null>(null);
   const [error, setError] = useState('');
+  const url = file?.url ?? null;
 
   useEffect(() => {
     let live = true;
     let link: string | null = null;
-    setUrl(null);
+    setFile(null);
     setError('');
     openDocument(doc.endpoint, doc.content_type)
-      .then((u) => {
-        link = u;
-        if (!live) return URL.revokeObjectURL(u);
-        setUrl(u);
+      .then((opened) => {
+        link = opened.url;
+        if (!live) return URL.revokeObjectURL(opened.url);
+        setFile(opened);
         onOpened?.();
       })
       .catch((err) => { if (live) setError(err.message || 'Could not open the document.'); });
@@ -44,6 +47,9 @@ export default function DocumentViewer({ doc, onClose, onOpened }: { doc: Viewed
   const title = doc.title ?? documentLabel(doc.kind);
   const isPdf = doc.content_type === 'application/pdf';
   const fileName = `${doc.kind.replace(/_/g, '-')}.${EXTENSION[doc.content_type] ?? 'bin'}`;
+  // The app's WebView cannot show a PDF inside the page: it opens in the phone's PDF viewer instead
+  const pdfOutside = isPdf && isNativeApp();
+  const save = () => { if (file) saveFile(file.blob, fileName).catch((err) => setError(err.message)); };
 
   return (
     <div className="fixed inset-0 z-90 bg-slate-900/50 flex items-center justify-center p-2 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="document-title" onClick={onClose}>
@@ -54,9 +60,9 @@ export default function DocumentViewer({ doc, onClose, onOpened }: { doc: Viewed
           </p>
           <div className="flex items-center gap-2 shrink-0">
             {url && (
-              <a href={url} download={fileName} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-black text-slate-700 hover:bg-slate-50 flex items-center gap-1">
+              <button type="button" onClick={save} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-black text-slate-700 hover:bg-slate-50 flex items-center gap-1">
                 <span className="material-symbols-outlined text-sm">download</span> Download
-              </a>
+              </button>
             )}
             <button type="button" onClick={onClose} aria-label="Close" className="w-9 h-9 rounded-lg flex items-center justify-center text-slate-500 hover:bg-slate-100">
               <span className="material-symbols-outlined">close</span>
@@ -68,6 +74,11 @@ export default function DocumentViewer({ doc, onClose, onOpened }: { doc: Viewed
             <p className="text-sm text-red-700 p-6">{error}</p>
           ) : !url ? (
             <p className="text-sm font-bold text-slate-400">Opening…</p>
+          ) : pdfOutside ? (
+            <div className="text-center space-y-3 p-6">
+              <p className="text-sm text-slate-600">The app opens PDFs in your phone's PDF viewer.</p>
+              <button type="button" onClick={save} className="px-4 py-2.5 rounded-xl bg-[#ee2b2b] text-white text-sm font-black hover:bg-red-700">Open the PDF</button>
+            </div>
           ) : isPdf ? (
             <iframe src={url} title={title} className="w-full h-full border-0 bg-white" />
           ) : (

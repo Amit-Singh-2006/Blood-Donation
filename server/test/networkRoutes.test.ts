@@ -5,6 +5,7 @@ import type { Server } from 'node:http';
 import './helpers';
 import app from '../src/app';
 import * as engine from '../src/network/engine';
+import * as db from '../src/config/db';
 
 let server: Server;
 let base = '';
@@ -72,9 +73,18 @@ test('USSD answers only the gateway that knows the key', async () => {
     assert.deepEqual(ussd.mock.calls[0]!.arguments[0], { sessionId: 's1', serviceCode: '*384*7#', phoneNumber: '+919876543210', text: '1*2' });
 });
 
-test('the timer endpoint runs a tick and needs no sign-in', async () => {
-    mock.method(engine, 'tick', async () => ({ escalated: 2, delivered: { sent: 3, failed: 0, skipped: 1, retrying: 0 } }));
-    const res = await fetch(base + '/network/tick', { method: 'POST' });
+test('only the database timer, with its secret, can run a tick', async () => {
+    const SECRET = 'a'.repeat(64);
+    mock.method(db, 'query', async (sql: string) => ({ rows: sql.includes('app_secrets') ? [{ value: SECRET }] : [], rowCount: 0 }));
+    const tick = mock.method(engine, 'tick', async () => ({ escalated: 2, delivered: { sent: 3, failed: 0, skipped: 1, retrying: 0 } }));
+    const post = (secret?: string) => fetch(base + '/network/tick', { method: 'POST', headers: secret ? { 'X-LifeLink-Tick': secret } : {} });
+
+    assert.equal((await post()).status, 401, 'no secret');
+    assert.equal((await post('b'.repeat(64))).status, 401, 'wrong secret');
+    assert.equal((await post('a'.repeat(63))).status, 401, 'too short');
+    assert.equal(tick.mock.callCount(), 0);
+
+    const res = await post(SECRET);
     assert.equal(res.status, 200);
     assert.deepEqual(await res.json(), { escalated: 2, delivered: { sent: 3, failed: 0, skipped: 1, retrying: 0 } });
 });

@@ -139,7 +139,7 @@ export default function HomePage() {
                         initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}
                         className="text-lg md:text-xl text-slate-500 max-w-2xl mx-auto leading-relaxed mb-10"
                     >
-                        LifeLink AI connects blood donors with hospitals in real time using intelligent matching, predictive demand forecasting, and emergency alerts — saving lives across the network.
+                        LifeLink AI connects blood donors with hospitals in real time: when a hospital needs blood, nearby compatible donors are alerted at once, and every reply is tracked until the blood arrives.
                     </motion.p>
 
                     {/* CTAs */}
@@ -292,7 +292,7 @@ export default function HomePage() {
                     >
                         {[
                             { step: '01', icon: 'how_to_reg', title: 'Register & Verify', desc: 'Donors sign up with their blood group and set their availability. Eligibility is checked automatically, and the hospital lab confirms the blood group after the first donation.' },
-                            { step: '02', icon: 'hub', title: 'AI Matches in Real-Time', desc: 'When a hospital raises an urgent request, our engine scans the network and finds the nearest compatible donor in seconds.' },
+                            { step: '02', icon: 'hub', title: 'Matched in Real Time', desc: 'When a hospital raises an urgent request, LifeLink finds compatible donors who are past their rest period, nearest first, and alerts them in waves until enough say YES.' },
                             { step: '03', icon: 'emergency', title: 'Save a Life', desc: 'The matched donor receives an alert, confirms, and heads to the hospital. Every match is tracked and rewarded with XP tokens.' },
                         ].map(({ step, icon, title, desc }) => (
                             <motion.div key={step} variants={fadeUp}
@@ -362,21 +362,21 @@ export default function HomePage() {
                                 title: 'Donors',
                                 color: 'from-rose-500 to-[#ee2b2b]',
                                 route: '/register-donor',
-                                points: ['Set availability status', 'Receive AI-matched alerts', 'Track donation history', 'Earn XP rewards', 'Build your donor rank'],
+                                points: ['Set availability status', 'Get alerts for nearby requests', 'Track donation history', 'Verifiable donation certificates', 'Earn XP and badges'],
                             },
                             {
                                 icon: 'local_hospital',
                                 title: 'Hospitals',
                                 color: 'from-blue-500 to-indigo-600',
                                 route: '/register-hospital',
-                                points: ['Real-time blood requests', 'AI donor matching', 'Blood inventory dashboard', 'Demand forecast reports', 'Cross-region rare blood search'],
+                                points: ['Real-time blood requests', 'Compatible donors, nearest first', 'Blood inventory dashboard', 'Donor pass check-in', 'Lab-confirmed blood groups'],
                             },
                             {
                                 icon: 'admin_panel_settings',
                                 title: 'Admins',
                                 color: 'from-rose-500 to-red-700',
                                 route: '/register-admin',
-                                points: ['Full network oversight', 'Hospital & donor management', 'Regional analytics', 'AI engine configuration', 'Export PDF reports'],
+                                points: ['Oversight of your region', 'Hospital verification', 'Hospital & donor management', 'Regional analytics', 'Export PDF reports'],
                             },
                         ].map(({ icon, title, color, route, points }) => (
                             <motion.div key={title} variants={fadeUp}

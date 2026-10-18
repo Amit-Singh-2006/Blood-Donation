@@ -97,6 +97,11 @@ export default function Login() {
           )}
 
           <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 space-y-5 shadow-[0_10px_25px_-5px_rgba(242,13,13,0.05)]">
+            {params.get('deleted') && !error && (
+              <div role="status" className="bg-green-50 text-green-800 p-3 rounded-lg text-sm font-bold border border-green-100">
+                Your LifeLink account and its data have been deleted. Thank you for being a donor.
+              </div>
+            )}
             {error && (
               <div role="alert" className="bg-red-50 text-red-700 p-3 rounded-lg text-sm font-bold border border-red-100">
                 {error}

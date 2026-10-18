@@ -25,7 +25,7 @@ interface Message {
     actionSuccess?: boolean;
 }
 
-// ─── Tool Definitions (Gemini Function Declarations) ─────────────────────────
+// ─── Tool Definitions (function calling) ─────────────────────────────────────
 
 const HOSPITAL_TOOLS = [
     {

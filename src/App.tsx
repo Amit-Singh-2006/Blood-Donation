@@ -28,6 +28,7 @@ const HospitalDashboard = lazy(() => import('./pages/HospitalDashboard'));
 const DonorApp = lazy(() => import('./pages/DonorApp'));
 const PassPage = lazy(() => import('./pages/PassPage'));
 const CampaignPage = lazy(() => import('./pages/CampaignPage'));
+const CertificatePage = lazy(() => import('./pages/CertificatePage'));
 
 const Loading = () => (
   <div className="min-h-screen flex items-center justify-center text-sm font-bold text-slate-400">Loading…</div>
@@ -85,6 +86,8 @@ export default function App() {
         <Route path="tracking" element={<Navigate to="/track" replace />} />
         <Route path="pass/:code" element={<PassPage />} />
         <Route path="campaign/:id" element={<CampaignPage />} />
+        <Route path="certificate" element={<CertificatePage />} />
+        <Route path="certificate/:code" element={<CertificatePage />} />
 
         {/* Donor Routes - inside Layout so the topbar renders */}
         <Route element={<ProtectedRoute allowedRoles={['donor']} />}>

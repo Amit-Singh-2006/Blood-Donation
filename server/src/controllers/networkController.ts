@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { isbot } from 'isbot';
 import { analytics, replyResponse, respond, tick, tracking, ussd } from '../network/engine';
 import { sameToken } from '../network/rules';
+import { query } from '../config/db';
 
 const send = (res: Response, r: { status: number; contentType: string; body: string }) =>
     res.status(r.status).set({ 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' }).type(r.contentType).send(r.body);
@@ -55,10 +56,26 @@ export const ussdCallback = async (req: Request, res: Response) => {
     }
 };
 
+// The timer sends a secret that initDb keeps in app_secrets; cached here for a while
+const TICK_SECRET_TTL_MS = 5 * 60 * 1000;
+let tickSecret: { value: string | null; at: number } | null = null;
+const loadTickSecret = async (fresh: boolean) => {
+    if (!fresh && tickSecret && Date.now() - tickSecret.at < TICK_SECRET_TTL_MS) return tickSecret.value;
+    const value = (await query(`SELECT value FROM app_secrets WHERE name = 'network_tick'`)).rows[0]?.value ?? null;
+    tickSecret = { value, at: Date.now() };
+    return value;
+};
+
 // POST /network/tick: due escalation rounds and queued messages. Called every
-// minute by the database timer; calling it more often changes nothing.
+// minute by the database timer, which sends the X-LifeLink-Tick secret; anyone
+// else is refused (rounds already run on their own schedule).
 export const networkTick = async (req: Request, res: Response) => {
     try {
+        const given = req.get('x-lifelink-tick');
+        // A miss re-reads the secret once, in case it changed since it was cached
+        if (!sameToken(given, await loadTickSecret(false)) && !sameToken(given, await loadTickSecret(true))) {
+            return res.status(401).json({ message: 'Not allowed.' });
+        }
         res.json(await tick());
     } catch (err: any) {
         console.error('Network tick failed:', err?.message ?? err);

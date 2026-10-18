@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
+import { sharedLimitStore } from '../middleware/rateLimitStore';
 import { chatCompletion } from '../controllers/aiController';
 import { AuthRequest, authMiddleware } from '../middleware/authMiddleware';
 import { validateRequest } from '../middleware/validateZod';
@@ -18,6 +19,7 @@ const aiLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Too many AI requests. Please slow down.' },
+    ...sharedLimitStore('ai'),
 });
 const accountLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour
@@ -26,6 +28,7 @@ const accountLimiter = rateLimit({
     legacyHeaders: false,
     keyGenerator: (req) => `account:${(req as AuthRequest).user?.id}`,
     message: { message: 'You have used the assistant a lot this hour. Please try again later.' },
+    ...sharedLimitStore('ai-account'),
 });
 
 router.post('/chat', aiLimiter, authMiddleware, accountLimiter, validateRequest(chatCompletionSchema), chatCompletion);

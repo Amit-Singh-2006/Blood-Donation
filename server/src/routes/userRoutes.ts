@@ -1,25 +1,27 @@
 import { Router } from 'express';
-import { getNotifications, markNotificationRead } from '../controllers/userController';
+import { deleteAccount } from '../controllers/userController';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { roleMiddleware } from '../middleware/roleMiddleware';
+import { validateRequest } from '../middleware/validateZod';
+import { massAssignmentGuard } from '../middleware/securityMiddleware';
+import { sharedLimitStore } from '../middleware/rateLimitStore';
+import { deleteAccountSchema } from '../schemas/userSchemas';
 import rateLimit from 'express-rate-limit';
 
 const router = Router();
 
-// ─────────────────────────────────────────────
-// Rate limiter – protect user endpoints from API Abuse
-// ─────────────────────────────────────────────
-const userApiLimiter = rateLimit({
-    windowMs: 5 * 60 * 1000, // 5 minutes
-    max: 60,
+// Deleting asks for the password: no guessing it here either
+const deleteLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
     standardHeaders: true,
     legacyHeaders: false,
-    message: { message: 'Too many requests. Please slow down.' },
+    message: { message: 'Too many attempts. Please wait 15 minutes and try again.' },
+    ...sharedLimitStore('account-delete'),
 });
 
-// ── Routes ──
-// markNotificationRead: IDOR is prevented in the controller by scoping the
-// UPDATE to WHERE id = $1 AND user_id = $2 (user can only mark their own).
-router.get('/notifications', userApiLimiter, authMiddleware, getNotifications);
-router.put('/notifications/:id/read', userApiLimiter, authMiddleware, markNotificationRead);
+// A donor deletes their own account and data (see the controller)
+router.delete('/account', deleteLimiter, authMiddleware, roleMiddleware(['donor']),
+    massAssignmentGuard(['password']), validateRequest(deleteAccountSchema), deleteAccount);
 
 export default router;

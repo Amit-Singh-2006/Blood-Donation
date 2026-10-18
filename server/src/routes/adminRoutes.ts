@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import {
-    getAllDonations, getAllUsers, getHospitals, getOverview, getDonors, getRequests,
+    getHospitals, getOverview, getDonors, getRequests, setUserActive,
     getMe, listAdmins, setAdminActive, listInvites, createInvite, revokeInvite, resetSecondStep,
 } from '../controllers/adminController';
 import { decideHospitalVerification, downloadHospitalDocument } from '../controllers/verificationController';
 import { validateRequest } from '../middleware/validateZod';
 import { createCampaign, listCampaigns, listRegistrations, markAttendance, cancelCampaign } from '../controllers/campaignController';
 import { campaignSchema, attendanceSchema } from '../schemas/campaignSchemas';
-import { adminActiveSchema, adminInviteSchema } from '../schemas/adminSchemas';
+import { adminActiveSchema, adminInviteSchema, userActiveSchema } from '../schemas/adminSchemas';
 import { hospitalVerificationSchema } from '../schemas/verificationSchemas';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { requireAdmin, requireNationalAdmin } from '../middleware/requireAdmin';
@@ -42,8 +42,6 @@ const auditAdminAccess = (req: Request, res: Response, next: NextFunction): void
 // Routes: Triple-gated (JWT auth + DB-verified admin role + bot detection)
 // Covers: Privilege Escalation, JWT Tampering, Vertical Access Control Bypass
 // ─────────────────────────────────────────────
-router.get('/donations', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getAllDonations);
-router.get('/users', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, requireNationalAdmin, getAllUsers);
 router.get('/hospitals', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getHospitals);
 router.get('/overview', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getOverview);
 router.get('/donors', adminLimiter, botDetection, auditAdminAccess, authMiddleware, requireAdmin, getDonors);
@@ -68,6 +66,9 @@ router.post('/campaigns', ...anyAdmin, validateRequest(campaignSchema), createCa
 router.get('/campaigns/:id/registrations', ...anyAdmin, listRegistrations);
 router.put('/campaigns/:id/registrations/:regId', ...anyAdmin, validateRequest(attendanceSchema), markAttendance);
 router.put('/campaigns/:id/cancel', ...anyAdmin, cancelCampaign);
+
+// Deactivate or reactivate a donor or hospital account in the admin's jurisdiction
+router.put('/users/:id/active', ...anyAdmin, validateRequest(userActiveSchema), setUserActive);
 
 // Lost phone: the account sets up two-step verification again at its next sign-in
 router.post('/users/:id/mfa-reset', ...anyAdmin, resetSecondStep);

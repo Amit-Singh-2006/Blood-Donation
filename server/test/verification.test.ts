@@ -26,10 +26,12 @@ const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.from([0x20, 0, 0, 0]), B
 const HTML = Buffer.from('<html><body><script>alert(document.cookie)</script></body></html>');
 const SVG = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"></svg>');
 
-/** Answers queries by the first matching SQL fragment and records every call. */
+/** Answers queries by the first matching SQL fragment and records every call (except the sign-in check). */
 const fakeDb = (answers: [string, any[]][]) => {
     const calls: { sql: string; params: any[] }[] = [];
     mock.method(db, 'query', async (sql: string, params: any[] = []) => {
+        // middleware/authMiddleware: every account in these tests is active
+        if (sql.startsWith('SELECT disabled_at FROM users WHERE id')) return { rows: [{ disabled_at: null }], rowCount: 1 };
         calls.push({ sql, params });
         const hit = answers.find(([fragment]) => sql.includes(fragment));
         return { rows: hit ? hit[1] : [], rowCount: hit ? hit[1].length : 0 };
@@ -288,7 +290,7 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
 const SITE = 'https://blood-donation-frontend-delta.vercel.app';
 const cookie = (role: string, id: number) => `ll_${role}=${jwt.sign({ id, email: `${role}@example.com`, role }, process.env.JWT_SECRET as string, { expiresIn: '5m' })}`;
 
-test('an upload passes sign-in, the size cap and the type check before any database work', async () => {
+test('an upload passes sign-in, the size cap and the type check before anything is stored', async () => {
     const calls = fakeDb([['INSERT INTO hospital_documents', [{ kind: 'registration_certificate', content_type: 'application/pdf', size_bytes: PDF.length, uploaded_at: '2026-10-17T06:00:00Z' }]]]);
     const put = (body: Buffer, type: string, init: { cookie?: string; origin?: string } = {}) => fetch(`${base}/hospital/verification/documents/registration_certificate`, {
         method: 'PUT',

@@ -38,12 +38,12 @@ export default function PrivacyPolicy() {
             </header>
 
             {/* Hero */}
-            <div className="bg-gradient-to-br from-[#ee2b2b] to-rose-700 text-white py-20 px-6 text-center">
+            <div className="bg-gradient-to-br from-red-50 via-rose-50 to-white text-slate-900 py-20 px-6 text-center">
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-                    <span className="material-symbols-outlined text-6xl mb-4 block opacity-80">shield_lock</span>
+                    <span className="material-symbols-outlined text-6xl mb-4 block text-[#ee2b2b]">shield_lock</span>
                     <h1 className="text-4xl font-black mb-3">Privacy Policy</h1>
-                    <p className="text-white/80 max-w-xl mx-auto text-base">How LifeLink AI collects, uses and protects your personal data, and your rights under the Digital Personal Data Protection Act, 2023.</p>
-                    <p className="text-white/50 text-sm mt-4">Last updated: {LEGAL_UPDATED}</p>
+                    <p className="text-slate-600 max-w-xl mx-auto text-base">How LifeLink AI collects, uses and protects your personal data, and your rights under the Digital Personal Data Protection Act, 2023.</p>
+                    <p className="text-slate-500 text-sm mt-4">Last updated: {LEGAL_UPDATED}</p>
                 </motion.div>
             </div>
 
@@ -62,8 +62,11 @@ export default function PrivacyPolicy() {
                         <li><strong>Hospital verification:</strong> the registration certificate, an authorisation letter and, if any, the blood centre licence; the registration and licence numbers; and the name and designation of the staff member the letter names</li>
                         <li><strong>Blood requests:</strong> blood group, units, urgency, hospital and an internal patient reference. Hospitals must not enter patient names.</li>
                         <li><strong>Your replies:</strong> whether and when you accepted or declined a request</li>
+                        <li><strong>Certificates:</strong> for each certificate you ask for, its code, your name, the hospital and the date of the donation</li>
+                        <li><strong>Your consent:</strong> which version of the Terms and this policy you accepted at sign-up, and when</li>
+                        <li><strong>Account decisions:</strong> if an admin deactivates an account, when, by whom and why</li>
                         <li><strong>AI assistant:</strong> the messages you type into the chat assistant</li>
-                        <li><strong>Technical data:</strong> a sign-in session cookie, and IP addresses in server logs used for security and rate limiting</li>
+                        <li><strong>Technical data:</strong> sign-in cookies, and IP addresses in server logs and in short-lived counters used for security and rate limiting</li>
                     </ul>
                 </Section>
 
@@ -81,7 +84,8 @@ export default function PrivacyPolicy() {
                 </Section>
 
                 <Section title="Consent">
-                    <p>We process your personal data on the basis of the consent you give when you register. You can withdraw consent at any time, as easily as you gave it, by contacting <ContactEmail />. Withdrawing consent does not affect processing that already took place, but it means we can no longer alert you for requests.</p>
+                    <p>We process your personal data on the basis of the consent you give when you register. We record which version of the Terms and this policy you accepted, and when.</p>
+                    <p>You can withdraw consent at any time, as easily as you gave it. Donors can delete their account themselves in Settings (Delete my account); anyone can also contact <ContactEmail />. Withdrawing consent does not affect processing that already took place, but it means we can no longer alert you for requests.</p>
                     <p>The DPDP Act also allows certain processing without consent, for example to respond to a medical emergency involving a threat to someone's life or health, or to comply with the law. We rely on this only where it applies.</p>
                 </Section>
 
@@ -89,7 +93,8 @@ export default function PrivacyPolicy() {
                     <ul className="list-disc pl-5 space-y-1">
                         <li><strong>Hospitals:</strong> when you are alerted for a request, the hospital sees your blood group and distance. If you accept, it also sees your first name and phone number so it can coordinate your donation.</li>
                         <li><strong>Patients' families:</strong> they see request progress only (counts, blood groups and distances), never donor names or phone numbers.</li>
-                        <li><strong>LifeLink admins:</strong> the admin for a hospital's city sees its verification documents, only to check them. Documents are never shown to donors or the public.</li>
+                        <li><strong>Anyone you show a certificate to:</strong> checking its code shows your first name and initial, the hospital and the date of the donation, never your contact details.</li>
+                        <li><strong>LifeLink admins:</strong> the admin for a city sees the donors and hospitals registered there, to run the Service and act on misuse, and each hospital's verification documents, only to check them. Documents are never shown to donors or the public.</li>
                         <li><strong>Service providers</strong> who process data for us under contract (Data Processors): website hosting (Vercel), database (Supabase, hosted in India), SMS (Twilio), WhatsApp messaging (Meta), email (Google Gmail) and the AI assistant (Groq). Please do not share health details in the AI chat.</li>
                         <li><strong>Authorities:</strong> when disclosure is required by Indian law, for example under a lawful order.</li>
                     </ul>
@@ -101,6 +106,8 @@ export default function PrivacyPolicy() {
 
                 <Section title="How Long We Keep It">
                     <p>We keep your personal data while your account is active. When you withdraw consent or delete your account, or once the data is no longer needed for the purpose it was collected for, we erase it unless we must keep it to comply with the law. Statistics that do not identify anyone may be kept.</p>
+                    <p>When a donor deletes their account, LifeLink first hands any request they said YES to on to other donors. It then erases their profile, phone number, donation records, certificates (whose codes then stop working), reviews and sign-ins. A hospital's request history keeps only that "a donor" replied, without a name or number.</p>
+                    <p>Password reset codes and records of ended sign-ins are deleted a week after they expire or end, and rate-limit counters a day after their window closes. Encrypted backups of the database, which only LifeLink can open, are kept for up to 30 days to recover from accidents, so erased data leaves them within 30 days.</p>
                     <p>Blood centres keep their own donation records, as the Drugs and Cosmetics Rules, 1945 require. Those records are outside LifeLink.</p>
                 </Section>
 
@@ -119,7 +126,7 @@ export default function PrivacyPolicy() {
                     <p>Under the DPDP Act you have the right to:</p>
                     <ul className="list-disc pl-5 space-y-1">
                         <li><strong>Access:</strong> a summary of your personal data, how we process it, and who we have shared it with</li>
-                        <li><strong>Correction and erasure:</strong> have inaccurate or incomplete data corrected or updated, and data we no longer need erased</li>
+                        <li><strong>Correction and erasure:</strong> have inaccurate or incomplete data corrected or updated, and data we no longer need erased. Donors can change their details in Settings and delete their account there. A blood group a hospital's lab confirmed can only be changed by a new lab result.</li>
                         <li><strong>Withdraw consent</strong> at any time</li>
                         <li><strong>Grievance redressal:</strong> have your complaint handled by our Grievance Officer</li>
                         <li><strong>Nominate</strong> another person to exercise your rights if you die or become unable to do so</li>
@@ -129,11 +136,11 @@ export default function PrivacyPolicy() {
                 </Section>
 
                 <Section title="Children">
-                    <p>LifeLink is only for people aged 18 or over, and blood donors must be at least 18. We do not knowingly collect personal data of children. If we learn that we have, we will delete it.</p>
+                    <p>LifeLink is only for people aged 18 or over, and blood donors must be 18 to 65. Donor sign-up checks the date of birth. We do not knowingly collect personal data of children. If we learn that we have, we will delete it.</p>
                 </Section>
 
                 <Section title="Cookies and Local Storage">
-                    <p>We use a single essential cookie to keep you signed in. Your browser's local storage keeps a copy of your basic profile and preferences. We do not use advertising or cross-site tracking cookies.</p>
+                    <p>We use essential cookies only: one keeps you signed in, and if you choose "keep me signed in", another renews that sign-in. Your browser's local storage keeps a copy of your basic profile and preferences. We do not use advertising or cross-site tracking cookies.</p>
                 </Section>
 
                 <Section title="Grievance Officer">

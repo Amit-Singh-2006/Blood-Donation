@@ -11,6 +11,7 @@ import userRoutes from './routes/userRoutes';
 import aiRoutes from './routes/aiRoutes';
 import { campaignRoutes, reviewRoutes } from './routes/campaignRoutes';
 import networkRoutes from './routes/networkRoutes';
+import certificateRoutes from './routes/certificateRoutes';
 import { healthCheck } from './controllers/healthController';
 import rateLimit from 'express-rate-limit';
 
@@ -169,6 +170,8 @@ app.use('/campaigns', campaignRoutes);
 app.use('/reviews', reviewRoutes);
 // The donor network's public pages and links (one-tap replies, tracking, statistics, USSD, timer)
 app.use('/network', networkRoutes);
+// Anyone can check a donation certificate's code
+app.use('/certificates', certificateRoutes);
 
 // ──────────────────────────────────────────────────────────────────────────
 // 13. Health Check (public)

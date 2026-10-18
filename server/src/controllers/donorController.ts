@@ -1,7 +1,8 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware';
-import { query } from '../config/db';
+import pool, { query } from '../config/db';
 import { NetworkError, PreferenceChange, donorPortal, registerDonor, toE164 } from '../services/donorNetwork';
+import { PHONE_TAKEN } from '../network/engine';
 
 export const getDonorDonations = async (req: AuthRequest, res: Response) => {
     const donorId = req.user?.id;
@@ -183,6 +184,97 @@ export const getDonationCenters = async (req: AuthRequest, res: Response) => {
             [req.user?.id]
         );
         res.json(result.rows);
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+};
+
+const PROFILE_SQL = `SELECT u.name, u.email, d.phone, d.city, d.gender, to_char(d.dob, 'YYYY-MM-DD') AS dob, d.blood_group,
+        nd.id AS entry_id, nd.blood_group_verified_at IS NOT NULL AS blood_group_verified
+    FROM users u JOIN donors d ON d.user_id = u.id
+    LEFT JOIN network_donors nd ON nd.user_id = u.id
+    WHERE u.id = $1`;
+
+const publicProfile = ({ entry_id, ...profile }: Record<string, unknown>) => profile;
+
+export const BLOOD_GROUP_LOCKED = 'A hospital lab confirmed your blood group, so it can only be changed by a lab result.';
+
+// GET /donor/profile
+export const getDonorProfile = async (req: AuthRequest, res: Response) => {
+    try {
+        const row = (await query(PROFILE_SQL, [req.user!.id])).rows[0];
+        if (!row) return res.status(404).json({ message: 'Donor profile not found.' });
+        res.json(publicProfile(row));
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+};
+
+/**
+ * PUT /donor/profile  { name?, phone?, city?, gender?, dob?, blood_group? }
+ * Updates the website profile and the donor's network entry together. A new
+ * phone moves the existing entry (with its history, rest period and
+ * lab-confirmed group) instead of starting a new one; a phone already on
+ * another account is refused. A new city drops the old exact location.
+ */
+export const updateDonorProfile = async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const b = req.body;
+    try {
+        const current = (await query(PROFILE_SQL, [userId])).rows[0];
+        if (!current) return res.status(404).json({ message: 'Donor profile not found.' });
+        if (b.blood_group && b.blood_group !== current.blood_group && current.blood_group_verified) {
+            return res.status(409).json({ message: BLOOD_GROUP_LOCKED });
+        }
+
+        let phone: string | null = current.phone;
+        if (b.phone !== undefined) {
+            phone = toE164(b.phone);
+            if (!phone) return res.status(400).json({ message: 'Enter a valid mobile number.' });
+            const holder = (await query('SELECT user_id FROM network_donors WHERE phone = $1', [phone])).rows[0];
+            if (holder && holder.user_id !== userId) {
+                return res.status(409).json({
+                    message: holder.user_id == null
+                        ? 'This number is already on LifeLink through SMS or USSD. Contact us from the Support page to link it to your account.'
+                        : PHONE_TAKEN,
+                });
+            }
+        }
+        const cityChanged = b.city !== undefined && b.city.toLowerCase() !== String(current.city ?? '').trim().toLowerCase();
+
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            if (b.name !== undefined) await client.query('UPDATE users SET name = $2 WHERE id = $1', [userId, b.name]);
+            await client.query(
+                `UPDATE donors SET phone = $2, city = COALESCE($3, city), gender = COALESCE($4, gender), dob = COALESCE($5::date, dob),
+                     blood_group = COALESCE($6, blood_group),
+                     latitude = CASE WHEN $7::boolean THEN NULL ELSE latitude END, longitude = CASE WHEN $7::boolean THEN NULL ELSE longitude END
+                 WHERE user_id = $1`,
+                [userId, phone, b.city ?? null, b.gender ?? null, b.dob ?? null, b.blood_group ?? null, cityChanged]
+            );
+            if (current.entry_id) {
+                await client.query(
+                    `UPDATE network_donors SET name = COALESCE($2, name), phone = $3, city = COALESCE($4, city), gender = COALESCE($5, gender),
+                         blood_group = CASE WHEN blood_group_verified_at IS NULL THEN COALESCE($6, blood_group) ELSE blood_group END,
+                         latitude = CASE WHEN $7::boolean THEN NULL ELSE latitude END, longitude = CASE WHEN $7::boolean THEN NULL ELSE longitude END,
+                         updated_at = now()
+                     WHERE id = $1`,
+                    [current.entry_id, b.name ?? null, phone, b.city ?? null, b.gender ?? null, b.blood_group ?? null, cityChanged]
+                );
+            }
+            await client.query('COMMIT');
+        } catch (err: any) {
+            await client.query('ROLLBACK').catch(() => { });
+            // Someone took the number between the check and the update
+            if (err?.code === '23505') return res.status(409).json({ message: PHONE_TAKEN });
+            throw err;
+        } finally {
+            client.release();
+        }
+        res.json(publicProfile((await query(PROFILE_SQL, [userId])).rows[0]));
     } catch (err: any) {
         console.error(err);
         res.status(500).json({ message: 'Internal server error.' });

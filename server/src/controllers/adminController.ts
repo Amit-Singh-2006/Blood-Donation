@@ -3,8 +3,9 @@ import { endAllKeptSessions } from '../utils/keepSignedIn';
 import { query } from '../config/db';
 import { networkConfigured } from '../services/donorNetwork';
 import { messagingStatus, outboxSummary } from '../services/messaging';
-import { timerStatus } from '../network/engine';
+import { respond, timerStatus } from '../network/engine';
 import { AdminRequest } from '../middleware/requireAdmin';
+import { forgetAccountCheck } from '../middleware/authMiddleware';
 import { AdminScope, cleanCities, describeScope, donorScopeSql, hospitalScopeSql } from '../utils/jurisdiction';
 import { generateInviteCode, hashInviteCode, inviteStatus } from '../utils/adminInvites';
 import { reviewColumns, toReview } from './verificationController';
@@ -15,31 +16,6 @@ const scopeOf = (req: AdminRequest): AdminScope => req.adminScope!;
 const serverError = (res: Response, err: unknown) => {
     console.error(err);
     res.status(500).json({ message: 'Internal server error.' });
-};
-
-// GET /admin/donations: donations recorded at hospitals in the admin's jurisdiction
-export const getAllDonations = async (req: AdminRequest, res: Response) => {
-    try {
-        const params: unknown[] = [];
-        const result = await query(
-            `SELECT dn.* FROM donations dn JOIN hospitals h ON h.user_id = dn.hospital_id
-             WHERE ${hospitalScopeSql(scopeOf(req), params)} ORDER BY dn.donation_date DESC LIMIT 1000`,
-            params
-        );
-        res.json(result.rows);
-    } catch (err) {
-        serverError(res, err);
-    }
-};
-
-// GET /admin/users: national admins only (see adminRoutes)
-export const getAllUsers = async (req: AdminRequest, res: Response) => {
-    try {
-        const result = await query('SELECT id, name, email, role FROM users');
-        res.json(result.rows);
-    } catch (err) {
-        serverError(res, err);
-    }
 };
 
 // GET /admin/me: who is signed in and what they can see
@@ -68,6 +44,7 @@ export const getHospitals = async (req: AdminRequest, res: Response) => {
                     h.contact_number, h.registration_number, h.latitude, h.longitude,
                     COALESCE(h.is_verified, FALSE) AS is_verified, u.email, u.created_at,
                     EXISTS (SELECT 1 FROM user_mfa m WHERE m.user_id = h.user_id AND m.enabled) AS mfa_enabled,
+                    u.disabled_at, u.disabled_reason,
                     ${reviewColumns}
              FROM hospitals h JOIN users u ON u.id = h.user_id
              WHERE ${hospitalScopeSql(scopeOf(req), params)}
@@ -154,7 +131,7 @@ export const getDonors = async (req: AdminRequest, res: Response) => {
                    d.last_donation_date, COALESCE(d.xp_points, 0) AS xp_points,
                    (SELECT count(*) FROM donations dn WHERE dn.donor_id = u.id)::int AS donations,
                    -- Confirmed by a hospital lab after a donation, or still self-reported
-                   nd.blood_group_verified_at
+                   nd.blood_group_verified_at, u.disabled_at, u.disabled_reason
             FROM users u JOIN donors d ON d.user_id = u.id
             LEFT JOIN network_donors nd ON nd.user_id = u.id
             WHERE ${donorScopeSql(scopeOf(req), params)}
@@ -163,6 +140,55 @@ export const getDonors = async (req: AdminRequest, res: Response) => {
             params
         );
         res.json(result.rows);
+    } catch (err) {
+        serverError(res, err);
+    }
+};
+
+/**
+ * PUT /admin/users/:id/active  { active, reason? }
+ * Deactivates (or reactivates) a donor or hospital account in the admin's
+ * jurisdiction, e.g. for abuse. A deactivated account cannot sign in, its
+ * kept sign-ins end now, and a donor is no longer alerted. Admin accounts are
+ * managed separately (PUT /admin/admins/:id/active).
+ */
+export const setUserActive = async (req: AdminRequest, res: Response) => {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId) || userId <= 0) return res.status(400).json({ message: 'Invalid account id.' });
+    const { active, reason } = req.body;
+    const scope = scopeOf(req);
+    try {
+        const target = (await query('SELECT id, role FROM users WHERE id = $1', [userId])).rows[0];
+        const params: unknown[] = [userId];
+        const inScope = target?.role === 'donor'
+            ? (await query(`SELECT 1 FROM donors d WHERE d.user_id = $1 AND ${donorScopeSql(scope, params)}`, params)).rows.length > 0
+            : target?.role === 'hospital'
+                ? (await query(`SELECT 1 FROM hospitals h WHERE h.user_id = $1 AND ${hospitalScopeSql(scope, params)}`, params)).rows.length > 0
+                : false;
+        if (!inScope) return res.status(404).json({ message: 'No donor or hospital account with this id in your jurisdiction.' });
+
+        if (active) {
+            await query('UPDATE users SET disabled_at = NULL, disabled_reason = NULL, disabled_by = NULL WHERE id = $1', [userId]);
+        } else {
+            await query('UPDATE users SET disabled_at = now(), disabled_reason = $2, disabled_by = $3 WHERE id = $1', [userId, reason, scope.userId]);
+            await endAllKeptSessions(userId);
+            if (target.role === 'donor') await query('UPDATE network_donors SET available = FALSE WHERE user_id = $1', [userId]);
+            if (target.role === 'hospital') {
+                // Its open requests stop too, standing down every donor alerted for them
+                const open = (await query(
+                    `SELECT nr.id, nr.hospital_token FROM blood_requests br JOIN network_requests nr ON nr.id = br.network_request_id
+                     WHERE br.hospital_id = $1 AND nr.status IN ('Open', 'Fulfilled')`,
+                    [userId]
+                )).rows;
+                for (const r of open) {
+                    await respond({ r: String(r.id), h: r.hospital_token, a: 'cancel', format: 'json' })
+                        .catch((err) => console.error(`Could not cancel network request ${r.id}:`, err?.message ?? err));
+                }
+            }
+        }
+        forgetAccountCheck(userId);
+        console.info(`Admin ${scope.userId} ${active ? 'reactivated' : 'deactivated'} ${target.role} account ${userId}`);
+        res.json({ id: userId, role: target.role, active, disabled_reason: active ? null : reason });
     } catch (err) {
         serverError(res, err);
     }

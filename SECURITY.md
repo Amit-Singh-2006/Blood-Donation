@@ -28,6 +28,7 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 | Mitigation | Location |
 |---|---|
 | Token is verified server-side with `jwt.verify()` on every protected request | `authMiddleware.ts` |
+| Every signed-in request also checks that the account still exists and is not deactivated (remembered for 15 seconds per account), so a deactivated or deleted account loses access at once, on every server instance, instead of when its 30-minute token expires | `authMiddleware.ts` |
 | Admin role is **double-verified against the database** (not just the token) | `requireAdmin.ts` |
 | Any unexpected `alg: none` or forged signature → `jwt.verify()` throws | `authMiddleware.ts` |
 
@@ -51,8 +52,9 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 ### 6. Privilege Escalation
 | Mitigation | Location |
 |---|---|
-| Admin registration requires a secret `ADMIN_INVITE_CODE` from `.env` | `authController.ts → register()` |
-| Only **one** admin account can ever exist (DB check) | `authController.ts → register()` |
+| The first, national admin signs up with `ADMIN_INVITE_CODE` from the server's environment, which works only while no admin exists | `authController.ts → register()` |
+| Every other admin needs a personal, single-use invite from a national admin, issued for one email address and one jurisdiction; only its hash is stored | `adminController.ts`, `utils/adminInvites.ts` |
+| Admins and hospitals sign in with an authenticator app (two-step sign-in) | `authController.ts`, `utils/mfa.ts` |
 | `roleMiddleware` restricts routes by role (`donor`, `hospital`, `admin`) | `roleMiddleware.ts` |
 | Strong password policy reduces the chance of guessing an admin password | `authSchemas.ts` |
 
@@ -69,7 +71,8 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 | A donor-network entry belongs to one website account: a phone number linked to another account is refused (409), so nobody can read or answer someone else's alerts by signing up with their number | `network/engine.ts`, `donorController.ts` |
 | One-tap links carry a secret per alert (donors) or per request (hospitals); the hospital token never leaves the server or the hospital's own view | `network/replies.ts`, `hospitalController.ts` |
 | Reviews are accepted only for a donation or campaign the reviewer took part in | `reviewController.ts` |
-| `markNotificationRead` adds `AND user_id = $2` to the UPDATE query | `userController.ts` |
+| A certificate is issued only for a donation recorded against the signed-in donor's own account | `certificateController.ts` |
+| Admins can deactivate only donors and hospitals in their own jurisdiction, never other admins | `adminController.ts → setUserActive()` |
 
 ### 9. Forced Browsing
 | Mitigation | Location |
@@ -115,6 +118,7 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 | **Reflected XSS**: Same sanitizer applied to `req.query` | `securityMiddleware.ts` |
 | **DOM-Based XSS**: query string sanitization removes vectors | `securityMiddleware.ts` |
 | `Content-Security-Policy` header via Helmet blocks inline scripts even if one slips through | `app.ts → Helmet config` |
+| The website sends its own CSP: scripts only from LifeLink itself (no inline scripts, no `eval`), network calls only to the LifeLink API and GitHub's release API, styles and fonts from Google Fonts, map tiles from OpenStreetMap, no plugins (`object-src 'none'`) | `vercel.json` |
 | `noSniff: true` (X-Content-Type-Options) prevents MIME confusion XSS | `app.ts → Helmet config` |
 | HttpOnly cookies prevent JS from reaching the auth token even in an XSS scenario | `authController.ts` |
 | React escapes everything it renders; the assistant's messages are built as React elements, never as HTML | `AgentChat.tsx` |
@@ -194,6 +198,7 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 |---|---|
 | Global limiter: 200 req / 15 min per IP on all routes | `app.ts` |
 | Per-route limiters with tighter limits on auth (5), admin (30), API (60) | `authRoutes.ts`, `adminRoutes.ts`, other route files |
+| On Vercel the limits that guard secrets (sign-in, sign-up, two-step codes, password reset, admin invites, account deletion, certificate checks, campaign sign-ups, uploads, the AI assistant) count in Postgres, so they hold across every server instance instead of resetting per instance; a nightly job removes expired counters. Set `RATE_LIMIT_STORE=postgres` to do the same elsewhere | `middleware/rateLimitStore.ts`, `config/initDb.ts` |
 | `standardHeaders: true` exposes `RateLimit-*` headers for transparency | All limiters |
 
 ### 24. API Abuse
@@ -213,14 +218,13 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 | Mitigation | Location |
 |---|---|
 | All resource fetches use the **authenticated user's ID** from JWT claims | All controllers |
-| Explicit ownership checks where a user-supplied ID is unavoidable (request cancel, live locations, reviews) | `hospitalController.ts`, `donorController.ts`, `reviewController.ts` |
-| `markNotificationRead` scopes UPDATE to `AND user_id = $2` | `userController.ts` |
+| Explicit ownership checks where a user-supplied ID is unavoidable (request cancel, live locations, reviews, certificates) | `hospitalController.ts`, `donorController.ts`, `reviewController.ts`, `certificateController.ts` |
 
 ### 26. Sensitive Data Exposure
 | Mitigation | Location |
 |---|---|
 | `password_hash` is **never** returned in any response | `authController.ts`, `adminController.ts` |
-| `getAllUsers` returns only `id, name, email, role` (not password or tokens) | `adminController.ts` |
+| Checking a certificate code shows only the donor's first name and initial, the hospital and the date; codes have about 40 bits of randomness and checks are rate-limited | `certificateController.ts`, `certificateRoutes.ts` |
 | Global error handler returns generic `"An internal error occurred."` | `app.ts` |
 | Stack traces are only logged server-side, never sent to the client | `authController.ts`, `app.ts` |
 | Request bodies are never logged (an unreadable body is logged by type only); security logs mask emails (`a***@gmail.com`) | `app.ts`, `securityMiddleware.ts` |
@@ -230,7 +234,7 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 | Mitigation | Location |
 |---|---|
 | `massAssignmentGuard(allowedFields)` strips all unexpected fields from `req.body` | `securityMiddleware.ts` |
-| Applied on: `/hospital/requests`, `/hospital/inventory`, `/hospital/requests/:id/cancel` | Route files |
+| Applied on every route that accepts a body, e.g. `/hospital/requests`, `/hospital/inventory`, `/hospital/profile`, `/donor/profile`, `/donor/certificates`, `/user/account` | Route files |
 | Zod schemas provide a second enforcement layer | Schema files |
 
 ---
@@ -291,8 +295,32 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 |---|---|
 | The app is a release build (not debuggable) signed with LifeLink's private release key. The key and its password live only on the maintainer's PC and in GitHub secrets, never in git | `mobile/android/app/build.gradle`, `.github/workflows/android.yml` |
 | Without the key a release build stops instead of falling back to a debug key, and CI publishes an APK only if its signing certificate matches the pinned SHA-256 fingerprint | `.github/workflows/android.yml` |
-| Builds before 2 were signed with a debug key that is public in git history. New builds add `LifeLinkApp/2` to the user agent, and the website asks older installs to reinstall once the new build is published | `mobile/capacitor.config.json`, `src/components/ReinstallNotice.tsx` |
+| Builds before 2 were signed with a debug key that is public in git history. Newer builds add `LifeLinkApp/<build>` to the user agent, and the website asks older installs to reinstall once the new build is published | `mobile/capacitor.config.json`, `src/components/ReinstallNotice.tsx` |
 | No cloud backup of app data, so the "keep me signed in" cookie cannot be restored onto another phone without the account's authenticator | `AndroidManifest.xml` |
+| The one native addition, the file-saving plugin, accepts only PDF, PNG, JPEG, WebP, plain text and CSV up to 20 MB, flattens the file name (no `../`), and writes only to Downloads/LifeLink | `mobile/android/.../FilesPlugin.java` |
+
+---
+
+## 👤 Accounts and Personal Data
+
+### 35. Consent, Deletion and Deactivation
+| Mitigation | Location |
+|---|---|
+| Sign-up requires accepting the Terms and Privacy Policy; the accepted version and time are stored with the account. Donors must be 18 to 65 (checked in India time) | `schemas/authSchemas.ts`, `utils/legal.ts` |
+| Donors delete their own account with their password: requests they said YES to are handed on first, their contact is removed from request history and queued messages, and everything else goes with the account (database cascades) | `userController.ts → deleteAccount()` |
+| A wrong password on deletion answers 403, not 401, so it never signs the donor out | `userController.ts` |
+| Admins deactivate abusive accounts with a recorded reason: sign-in and every open session stop at once, kept sign-ins end, a donor stops getting alerts and a hospital's open requests are cancelled | `adminController.ts → setUserActive()`, `authMiddleware.ts`, `authController.ts` |
+
+### 36. The Database Timer
+| Mitigation | Location |
+|---|---|
+| `POST /network/tick` runs only with the `X-LifeLink-Tick` secret, which the database timer sends; the secret is generated inside the database (`app_secrets`) and never leaves it except in that call | `networkController.ts`, `config/initDb.ts` |
+
+### 37. Backups
+| Mitigation | Location |
+|---|---|
+| Daily backups are encrypted (AES-256-GCM, so a changed or cut-short file is detected) with a key kept outside the repository, and each one is test-restored inside a rolled-back transaction before it counts | `server/scripts/backup.ts`, `server/scripts/backupFormat.ts` |
+| A restore refuses to write into the live database unless asked explicitly, and only into empty tables | `server/scripts/restore-backup.ts` |
 
 ---
 

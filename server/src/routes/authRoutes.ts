@@ -8,6 +8,7 @@ import {
 import { forgotPassword, verifyResetCode, confirmResetSecondStep, resetPassword } from '../controllers/passwordResetController';
 import rateLimit from 'express-rate-limit';
 import { preventSessionFixation, botDetection, bruteForceDelay } from '../middleware/securityMiddleware';
+import { sharedLimitStore } from '../middleware/rateLimitStore';
 
 const router = Router();
 
@@ -24,6 +25,7 @@ const loginLimiter = rateLimit({
     message: { message: 'Too many login attempts from this IP, please try again after 15 minutes' },
     // Skip successful requests in the count so valid logins don't eat the limit
     skipSuccessfulRequests: true,
+    ...sharedLimitStore('login'),
 });
 
 const registerLimiter = rateLimit({
@@ -32,6 +34,7 @@ const registerLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Too many accounts created from this IP, please try again after an hour' },
+    ...sharedLimitStore('register'),
 });
 
 // Codes are unguessable (about 79 bits), but still no free guessing
@@ -41,6 +44,7 @@ const inviteCheckLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Too many invite checks. Please try again in 15 minutes.' },
+    ...sharedLimitStore('invite-check'),
 });
 
 // ─────────────────────────────────────────────
@@ -80,6 +84,7 @@ const mfaLimiter = rateLimit({
     legacyHeaders: false,
     message: { message: 'Too many verification attempts. Please wait 10 minutes and sign in again.' },
     skipSuccessfulRequests: true,
+    ...sharedLimitStore('mfa'),
 });
 router.post('/mfa/verify', mfaLimiter, botDetection, validateRequest(mfaVerifySchema), verifySecondStep);
 
@@ -100,6 +105,7 @@ const forgotLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Too many reset requests. Please try again in 15 minutes.' },
+    ...sharedLimitStore('password-forgot'),
 });
 const resetStepLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -107,6 +113,7 @@ const resetStepLimiter = rateLimit({
     standardHeaders: true,
     legacyHeaders: false,
     message: { message: 'Too many attempts. Please wait 15 minutes and try again.' },
+    ...sharedLimitStore('password-reset'),
 });
 router.post('/password/forgot', forgotLimiter, botDetection, validateRequest(forgotPasswordSchema), forgotPassword);
 router.post('/password/verify', resetStepLimiter, botDetection, validateRequest(verifyResetCodeSchema), verifyResetCode);

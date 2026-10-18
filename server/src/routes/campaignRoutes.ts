@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
+import { sharedLimitStore } from '../middleware/rateLimitStore';
 import { validateRequest } from '../middleware/validateZod';
 import { authMiddleware } from '../middleware/authMiddleware';
 import { registrationSchema, reviewSchema } from '../schemas/campaignSchemas';
@@ -12,7 +13,11 @@ const limit = (windowMs: number, max: number, message: string) =>
 // Campaigns: public details and sign-up (the link in every alert), and the donor's own list
 export const campaignRoutes = Router();
 const readLimiter = limit(60 * 1000, 60, 'Too many requests. Please wait a minute.');
-const registerLimiter = limit(60 * 60 * 1000, 10, 'Too many registrations from this network. Please try again later.');
+const registerLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
+    message: { message: 'Too many registrations from this network. Please try again later.' },
+    ...sharedLimitStore('camp-register'),
+});
 campaignRoutes.get('/for/me', readLimiter, authMiddleware, myCampaigns);
 campaignRoutes.get('/:id', readLimiter, getPublicCampaign);
 campaignRoutes.post('/:id/register', registerLimiter, validateRequest(registrationSchema), registerForCampaign);

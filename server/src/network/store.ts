@@ -8,8 +8,10 @@ export interface Queryable {
 const iso = (v: unknown): string | null => (v == null ? null : new Date(v as string | number | Date).toISOString());
 const num = (v: unknown): number | null => (v == null ? null : Number(v));
 
-// DATE columns are read as text: pg would turn them into local-midnight Date objects
-export const DONOR_COLUMNS = `id, name, phone, blood_group, gender, city, latitude, longitude, available,
+// DATE columns are read as text: pg would turn them into local-midnight Date objects.
+// The entry of an account an admin deactivated is never available.
+export const DONOR_COLUMNS = `id, name, phone, blood_group, gender, city, latitude, longitude,
+    (available AND NOT EXISTS (SELECT 1 FROM users u WHERE u.id = network_donors.user_id AND u.disabled_at IS NOT NULL)) AS available,
     to_char(last_donation_date, 'YYYY-MM-DD') AS last_donation_date, total_donations, preferred_channel,
     fcm_token, xp_points, committed_until, source, user_id, blood_group_verified_at`;
 

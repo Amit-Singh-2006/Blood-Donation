@@ -77,7 +77,7 @@ export default function AdminRegistration() {
     try {
       const res = await apiFetch('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), password, role: 'admin', admin_invite_code: code.trim(), remember: isNativeApp() }),
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), password, role: 'admin', admin_invite_code: code.trim(), remember: isNativeApp(), accept_terms: agreed }),
       });
       // The new admin account sets up its authenticator app before the first session
       if (res.mfa) {
@@ -237,7 +237,7 @@ export default function AdminRegistration() {
 
             <label className="flex items-start gap-3 text-sm text-slate-600 cursor-pointer">
               <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} className="mt-1 w-4 h-4 accent-slate-900" disabled={!verified} />
-              <span>I will use donor and hospital data only to run LifeLink in my jurisdiction, and handle it as the <Link to="/privacy" className="font-bold underline">Privacy Policy</Link> and the DPDP Act, 2023 require.</span>
+              <span>I accept the <Link to="/terms" className="font-bold underline">Terms of Service</Link>. I will use donor and hospital data only to run LifeLink in my jurisdiction, and handle it as the <Link to="/privacy" className="font-bold underline">Privacy Policy</Link> and the DPDP Act, 2023 require.</span>
             </label>
 
             {error && <p role="alert" className="text-sm font-bold text-red-700 bg-red-50 border border-red-100 rounded-lg p-3">{error}</p>}

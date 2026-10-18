@@ -58,7 +58,7 @@ export default function TermsOfService() {
                 <Section title="Who Can Use LifeLink">
                     <ul className="list-disc pl-5 space-y-1">
                         <li>You must be at least 18 years old and able to enter into a binding contract under the Indian Contract Act, 1872.</li>
-                        <li><strong>Donors</strong> must meet the donor selection criteria of the National Blood Transfusion Council (NBTC), including being 18 to 65 years old and weighing at least 45 kg. The blood centre's medical officer makes the final decision on whether you can donate.</li>
+                        <li><strong>Donors</strong> must meet the donor selection criteria of the National Blood Transfusion Council (NBTC), including being 18 to 65 years old (sign-up checks the date of birth) and weighing at least 45 kg. The blood centre's medical officer makes the final decision on whether you can donate.</li>
                         <li><strong>Hospitals</strong> must be registered healthcare establishments or blood centres, and the account must be operated by staff authorised to raise blood requests on their behalf. A LifeLink admin checks each hospital's registration certificate and a signed authorisation letter, and phones the hospital, before its requests can alert donors.</li>
                     </ul>
                 </Section>
@@ -78,6 +78,7 @@ export default function TermsOfService() {
                     <ul className="list-disc pl-5 space-y-1">
                         <li>No one may offer, ask for or accept money, goods or any other consideration in exchange for donating blood.</li>
                         <li>XP points, badges, ranks and certificates are a way of saying thank you. They have no monetary value, cannot be exchanged for cash, and are not payment for donating.</li>
+                        <li>A LifeLink certificate records a donation that the hospital recorded on LifeLink. Anyone can check it with the code printed on it. Do not alter a certificate or make one up.</li>
                         <li>Please report anyone who asks for or offers payment for blood through LifeLink using <ContactEmail />.</li>
                     </ul>
                 </Section>
@@ -123,8 +124,8 @@ export default function TermsOfService() {
                 </Section>
 
                 <Section title="Suspension and Account Deletion">
-                    <p>We may suspend or close an account that breaks these Terms, gives false medical or personal information, or puts patients or donors at risk. Where it is safe and lawful, we will tell you why.</p>
-                    <p>You may delete your account at any time by contacting <ContactEmail />. We then handle your data as described in our <Link to="/privacy" className="text-[#ee2b2b] font-bold hover:underline">Privacy Policy</Link>.</p>
+                    <p>We may deactivate or close an account that breaks these Terms, gives false medical or personal information, or puts patients or donors at risk. A deactivated account cannot sign in. A deactivated donor gets no alerts, and a deactivated hospital's open requests are cancelled, standing down the donors alerted for them. Where it is safe and lawful, we will tell you why.</p>
+                    <p>Donors can delete their account at any time in Settings (Delete my account), confirming with their password. Hospital and admin accounts are closed by contacting <ContactEmail />, so their records stay accountable. We then handle your data as described in our <Link to="/privacy" className="text-[#ee2b2b] font-bold hover:underline">Privacy Policy</Link>.</p>
                 </Section>
 
                 <Section title="Intellectual Property">

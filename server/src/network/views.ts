@@ -10,6 +10,8 @@ import {
 } from './rules';
 
 const time = (v: string | null | undefined) => Date.parse(v || '') || 0;
+/** The calendar day in India (UTC+5:30), as certificates print it. */
+const indiaDay = (v: string | null | undefined) => (time(v) ? new Date(time(v) + 330 * 60 * 1000).toISOString().slice(0, 10) : '');
 
 // ── Donor portal ──────────────────────────────────────────────────────────
 
@@ -79,11 +81,12 @@ export const buildDonorView = (donor: NetDonor, matches: NetMatch[], now: number
         .filter((m) => m.status === 'donated')
         .sort((a, b) => when(b) - when(a))
         .map((m) => ({
+            match_id: m.id,
             request_id: m.request_id,
             hospital_name: m.hospital_name,
             hospital_city: m.hospital_city,
             blood_group_needed: m.request_blood_group,
-            donated_on: String(m.responded_at || m.updated_at || '').slice(0, 10),
+            donated_on: indiaDay(m.responded_at || m.updated_at),
             lab_blood_group: m.lab_blood_group ?? null,
         }));
 

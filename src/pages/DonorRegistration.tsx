@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { User, Phone, Mail, MapPin, Droplets, Calendar, CheckCircle2, ArrowRight, Lock, Bell } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiFetch } from '../lib/api';
 import { saveUser } from '../lib/session';
 import { isNativeApp } from '../lib/app';
+import { donorAgeProblem, donorBirthDateRange } from '../lib/legal';
 
 type Step = 'personal' | 'medical' | 'contact' | 'location';
 
@@ -15,6 +16,9 @@ export default function DonorRegistration() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [error, setError] = useState('');
+  // The Terms and Privacy Policy; the API records which version was accepted
+  const [accepted, setAccepted] = useState(false);
+  const birthDates = donorBirthDateRange();
 
   // Form State
   const [formData, setFormData] = useState({
@@ -35,6 +39,11 @@ export default function DonorRegistration() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const ageProblem = donorAgeProblem(formData.dob);
+    if (ageProblem) {
+      setError(ageProblem);
+      return;
+    }
     setIsSubmitting(true);
     setError('');
 
@@ -45,6 +54,7 @@ export default function DonorRegistration() {
           ...formData,
           role: 'donor',
           remember: isNativeApp(),
+          accept_terms: accepted,
         }),
       });
 
@@ -152,8 +162,11 @@ export default function DonorRegistration() {
                 name="dob"
                 value={formData.dob}
                 onChange={handleChange}
+                min={birthDates.min}
+                max={birthDates.max}
                 className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:border-red-500 focus:ring-2 focus:ring-red-200 outline-none transition-all"
               />
+              <p className="text-xs text-slate-500">Blood donors in India are 18 to 65 years old.</p>
             </div>
 
             <div className="space-y-2">
@@ -276,9 +289,12 @@ export default function DonorRegistration() {
 
           <div className="pt-4 border-t border-slate-100">
             <label className="flex items-start gap-3 cursor-pointer group">
-              <input type="checkbox" required className="mt-1 w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500" />
+              <input type="checkbox" required checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="mt-1 w-4 h-4 text-red-600 rounded border-slate-300 focus:ring-red-500" />
               <span className="text-sm text-slate-600 group-hover:text-slate-900 transition-colors">
-                I consent to sharing my location and contact details with hospitals during emergencies. I understand that I can toggle my availability status at any time.
+                I accept the <Link to="/terms" target="_blank" className="font-bold underline">Terms of Service</Link> and
+                the <Link to="/privacy" target="_blank" className="font-bold underline">Privacy Policy</Link>. LifeLink may alert me about
+                nearby blood requests, and shares my name and phone number with a hospital when I say YES to its request. My live
+                location is shared only if I choose to. I can pause alerts, change my details or delete my account at any time.
               </span>
             </label>
           </div>

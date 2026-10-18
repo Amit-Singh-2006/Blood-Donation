@@ -74,17 +74,6 @@ const initDb = async (): Promise<boolean> => {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
-    -- Notifications Table
-    CREATE TABLE IF NOT EXISTS notifications (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-      title VARCHAR(255) NOT NULL,
-      message TEXT NOT NULL,
-      type VARCHAR(50),
-      is_read BOOLEAN DEFAULT FALSE,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
-
     -- Add missing columns to existing tables if they were created previously
     DO $$ 
     BEGIN 
@@ -207,6 +196,55 @@ const initDb = async (): Promise<boolean> => {
     );
     CREATE INDEX IF NOT EXISTS hospital_verification_log_hospital ON hospital_verification_log (hospital_id, created_at DESC);
     ALTER TABLE hospital_verification_log ENABLE ROW LEVEL SECURITY;
+
+    -- Consent: which version of the Terms and Privacy Policy each person
+    -- accepted at sign-up, and when (utils/legal.ts → LEGAL_VERSION)
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS consent_version VARCHAR(20);
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS consented_at TIMESTAMPTZ;
+    -- An admin can deactivate an abusive donor or hospital account: it can no
+    -- longer sign in, its kept sign-ins end, and a donor is no longer alerted
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_at TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_reason VARCHAR(300);
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+    -- The website's old in-app notifications were never shown or written
+    DROP TABLE IF EXISTS notifications;
+
+    -- Rate limits shared by every API instance (middleware/rateLimitStore.ts)
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      key VARCHAR(200) PRIMARY KEY,
+      hits INTEGER NOT NULL,
+      reset_at TIMESTAMPTZ NOT NULL
+    );
+    ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
+
+    -- Secrets that both the database and this API read. The one-minute timer
+    -- sends network_tick with each call, so nobody else can run the rounds.
+    CREATE TABLE IF NOT EXISTS app_secrets (
+      name VARCHAR(50) PRIMARY KEY,
+      value TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    ALTER TABLE app_secrets ENABLE ROW LEVEL SECURITY;
+    INSERT INTO app_secrets (name, value)
+      VALUES ('network_tick', encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text || clock_timestamp()::text)::bytea), 'hex'))
+      ON CONFLICT (name) DO NOTHING;
+
+    -- Donation certificates: the website draws the PDF; the code on it lets
+    -- anyone check it at /certificate/<code> (controllers/certificateController.ts).
+    -- One per donation, whether recorded on the website, the network, or both.
+    CREATE TABLE IF NOT EXISTS donation_certificates (
+      code VARCHAR(14) PRIMARY KEY,
+      donor_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      donation_id INTEGER UNIQUE REFERENCES donations(id) ON DELETE SET NULL,
+      network_match_id INTEGER UNIQUE,
+      donor_name VARCHAR(100) NOT NULL,
+      hospital_name VARCHAR(255) NOT NULL,
+      hospital_city VARCHAR(100),
+      donated_on DATE NOT NULL,
+      issued_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    ALTER TABLE donation_certificates ENABLE ROW LEVEL SECURITY;
     -- Admins opening a document is logged too: approval needs it
     DO $$
     BEGIN
@@ -265,7 +303,6 @@ const initDb = async (): Promise<boolean> => {
     ALTER TABLE donations ENABLE ROW LEVEL SECURITY;
     ALTER TABLE blood_inventory ENABLE ROW LEVEL SECURITY;
     ALTER TABLE blood_requests ENABLE ROW LEVEL SECURITY;
-    ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
     ALTER TABLE admin_profiles ENABLE ROW LEVEL SECURITY;
     ALTER TABLE admin_invites ENABLE ROW LEVEL SECURITY;
 
@@ -608,7 +645,8 @@ const initDb = async (): Promise<boolean> => {
         SELECT net.http_post(
           url := 'https://blood-donation-backend-sepia.vercel.app/network/tick',
           body := '{}'::jsonb,
-          headers := '{"Content-Type": "application/json"}'::jsonb,
+          headers := jsonb_build_object('Content-Type', 'application/json',
+                                        'X-LifeLink-Tick', (SELECT value FROM public.app_secrets WHERE name = 'network_tick')),
           timeout_milliseconds := 30000)
         WHERE EXISTS (SELECT 1 FROM public.network_requests WHERE next_check_at <= now())
            OR EXISTS (SELECT 1 FROM public.network_outbox WHERE status = 'pending' AND next_attempt_at <= now())
@@ -627,6 +665,20 @@ const initDb = async (): Promise<boolean> => {
       RAISE NOTICE 'LifeLink cron cleanup not set up: %', SQLERRM;
     END
     $cleanup$;
+
+    -- Rows that are no longer any use: passed rate-limit windows, old reset
+    -- codes and ended sign-ins (kept a week, for looking into problems)
+    DO $expired$
+    BEGIN
+      PERFORM cron.schedule('lifelink-expired-cleanup', '27 3 * * *', $job$
+        WITH limits AS (DELETE FROM public.rate_limits WHERE reset_at < now() - interval '1 day'),
+             resets AS (DELETE FROM public.password_resets WHERE expires_at < now() - interval '7 days')
+        DELETE FROM public.user_sessions WHERE expires_at < now() - interval '7 days' OR revoked_at < now() - interval '7 days'
+      $job$);
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'LifeLink expired-row cleanup not set up: %', SQLERRM;
+    END
+    $expired$;
 
     -- The old SQL distance helper: the network now measures distances itself
     DROP FUNCTION IF EXISTS calculate_distance(FLOAT, FLOAT, FLOAT, FLOAT);

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ALERT_CHANNELS } from '../services/donorNetwork';
 import { INDIAN_STATES, PIN_CODE } from '../utils/indianStates';
+import { donorAgeProblem } from '../utils/legal';
 
 export const HOSPITAL_TYPES = ['Government', 'Private', 'Trust / NGO', 'Public-Private'] as const;
 
@@ -62,6 +63,14 @@ export const registerSchema = z.object({
     admin_invite_code: z.string().trim().max(100).optional(),
     remember: z.boolean().optional(),
 
+    // Agreement to the Terms and Privacy Policy, recorded with the account (DPDP Act)
+    accept_terms: z.literal(true, { error: 'Please accept the Terms of Service and Privacy Policy to continue.' }),
+
+}).superRefine((data, ctx) => {
+    // NBTC: blood donors are 18 to 65
+    if (data.role !== 'donor') return;
+    const problem = donorAgeProblem(data.dob);
+    if (problem) ctx.addIssue({ code: 'custom', path: ['dob'], message: problem });
 }).refine(data => {
     if (data.role === 'donor') {
         return !!data.blood_group && !!data.city && !!data.phone;

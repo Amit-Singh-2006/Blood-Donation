@@ -5,7 +5,7 @@ import { apiFetch } from '../lib/api';
 import { saveUser } from '../lib/session';
 import { isNativeApp } from '../lib/app';
 import { PASSWORD_RULES, passwordProblems } from '../lib/password';
-import { INDIAN_STATES, PIN_CODE } from '../lib/india';
+import { HOSPITAL_TYPES, INDIAN_STATES, PIN_CODE } from '../lib/india';
 import TwoStepVerification, { type SecondStepChallenge } from '../components/TwoStepVerification';
 
 type Step = 'hospital' | 'location' | 'account' | 'review';
@@ -16,8 +16,6 @@ const STEPS: { key: Step; label: string; icon: string }[] = [
   { key: 'account', label: 'Account', icon: 'person' },
   { key: 'review', label: 'Review', icon: 'verified_user' },
 ];
-
-const HOSPITAL_TYPES = ['Government', 'Private', 'Trust / NGO', 'Public-Private'];
 
 // Mobile (optionally +91) or a landline with its STD code
 const PHONE = /^(\+91)?[6-9]\d{9}$|^0\d{9,10}$/;
@@ -138,6 +136,7 @@ export default function HospitalRegistration() {
           pincode: form.pincode,
           contact_number: compactPhone(form.phone),
           ...(coords ? { latitude: coords.latitude, longitude: coords.longitude } : {}),
+          accept_terms: agreed,
         }),
       });
       // The new hospital account sets up its authenticator app before the first session

@@ -8,6 +8,7 @@ import { requestedRole } from '../middleware/session';
 import { enrolDonor } from '../services/donorNetwork';
 import { hashInviteCode, inviteStatus, normalizeInviteCode } from '../utils/adminInvites';
 import { describeScope } from '../utils/jurisdiction';
+import { LEGAL_VERSION } from '../utils/legal';
 import {
     base32Decode, generateSecret, hashBackupCode, matchTotp, newBackupCodes, openSecret, otpauthUrl,
     readPendingToken, sealSecret, signPendingToken,
@@ -68,6 +69,11 @@ const issueSession = async (req: Request, res: Response, user: AccountRow, remem
 
 
 type AccountRow = { id: number; name: string; email: string; role: string };
+
+const DEACTIVATED = {
+    message: 'This account has been deactivated by LifeLink. If you think this is a mistake, contact us from the Support page.',
+    error: 'account_deactivated',
+};
 
 /** The account details the frontend keeps after signing in. */
 const sessionUser = async (user: AccountRow) => {
@@ -219,8 +225,9 @@ const registerAdmin = async (req: Request, res: Response) => {
 
         const hashedPassword = await bcrypt.hash(password, 12);
         const created = await client.query(
-            `INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, 'admin') RETURNING id, name, email, role`,
-            [name, email, hashedPassword]
+            `INSERT INTO users (name, email, password_hash, role, consent_version, consented_at) VALUES ($1, $2, $3, 'admin', $4, now())
+             RETURNING id, name, email, role`,
+            [name, email, hashedPassword, LEGAL_VERSION]
         );
         const user = created.rows[0];
         await client.query(
@@ -273,8 +280,9 @@ export const register = async (req: Request, res: Response) => {
     try {
         const hashedPassword = await bcrypt.hash(password, 12); // cost factor 12 (stronger than 10)
         const result = await query(
-            'INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4) RETURNING id, name, email, role',
-            [name, email, hashedPassword, role]
+            `INSERT INTO users (name, email, password_hash, role, consent_version, consented_at) VALUES ($1, $2, $3, $4, $5, now())
+             RETURNING id, name, email, role`,
+            [name, email, hashedPassword, role, LEGAL_VERSION]
         );
 
         const user = result.rows[0];
@@ -362,6 +370,8 @@ export const login = async (req: Request, res: Response) => {
         // Clear failed attempts on successful login
         clearFailedAttempts(ip);
 
+        if (user.disabled_at) return res.status(403).json(DEACTIVATED);
+
         if (user.role === 'admin') {
             const adminProfile = await query('SELECT active FROM admin_profiles WHERE user_id = $1', [user.id]);
             const p = adminProfile.rows[0];
@@ -434,12 +444,13 @@ export const verifySecondStep = async (req: Request, res: Response) => {
     if (!ticket) return res.status(401).json(EXPIRED);
     await bruteForceDelay(req, res, () => { });
     try {
-        const user: AccountRow | undefined = (await query('SELECT id, name, email, role FROM users WHERE id = $1', [ticket.uid])).rows[0];
+        const user: (AccountRow & { disabled_at: Date | null }) | undefined = (await query('SELECT id, name, email, role, disabled_at FROM users WHERE id = $1', [ticket.uid])).rows[0];
         const mfa = (await query('SELECT enabled, secret_enc, last_step FROM user_mfa WHERE user_id = $1', [ticket.uid])).rows[0];
         // The account must still match the ticket and be in the state the ticket expects
         if (!user || user.role !== ticket.role || !SECOND_STEP_ROLES.has(user.role) || !mfa || mfa.enabled !== (ticket.mode === 'verify')) {
             return res.status(401).json(EXPIRED);
         }
+        if (user.disabled_at) return res.status(403).json(DEACTIVATED);
         if (user.role === 'admin') {
             const p = (await query('SELECT active FROM admin_profiles WHERE user_id = $1', [user.id])).rows[0];
             if (p && !p.active) return res.status(403).json({ message: 'Your admin access has been removed. Contact the national admin.' });
@@ -493,9 +504,10 @@ export const refreshSession = async (req: Request, res: Response) => {
             const value = req.cookies?.[name];
             if (!value) continue;
             const kept = await resumeKeptSession(value, role);
-            // A removed admin's devices lose access straight away
-            const removed = !!kept && role === 'admin'
-                && (await query('SELECT active FROM admin_profiles WHERE user_id = $1', [kept.user.id])).rows[0]?.active === false;
+            // A removed admin's or deactivated account's devices lose access straight away
+            const removed = !!kept && (
+                (await query('SELECT disabled_at FROM users WHERE id = $1', [kept.user.id])).rows[0]?.disabled_at != null
+                || (role === 'admin' && (await query('SELECT active FROM admin_profiles WHERE user_id = $1', [kept.user.id])).rows[0]?.active === false));
             if (!kept || removed) {
                 if (removed) await endKeptSession(value);
                 res.clearCookie(name, keepCookieOptions());

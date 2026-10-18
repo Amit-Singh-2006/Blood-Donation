@@ -87,6 +87,8 @@ jobs:
           NOTES: |
             Install LifeLink.apk on your Android phone (allow installs from your browser when asked). The app opens the live LifeLink website, so it stays up to date on its own.
 
+            Installed LifeLink on or after 17 October 2026? Install this over it; you stay signed in. This version saves certificates, reports and backup codes to Downloads › LifeLink.
+
             Installed LifeLink before 17 October 2026? Uninstall that version first, then install this one. The app is now signed with LifeLink's private release key, so Android treats it as a new app. Then sign in again.
 
             Signing certificate SHA-256: D8:46:AF:F1:86:B3:9F:C8:76:59:D2:E3:BD:8A:62:22:EC:FA:71:24:04:B9:E4:A0:DC:93:5B:1E:B5:46:F2:D9

@@ -1,5 +1,7 @@
 import AdminCampaigns from '../components/AdminCampaigns';
 import HospitalReview, { ReviewHospital } from '../components/HospitalReview';
+import AccountStatus from '../components/AccountStatus';
+import { saveFile } from '../lib/files';
 import React, { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -117,7 +119,9 @@ export default function AdminDashboard() {
     setIsExporting(true);
     try {
       const [hospitals] = await Promise.all([apiFetch('/admin/hospitals').catch(() => [])]);
-      exportReport(overview, network, hospitals, me?.jurisdiction);
+      await exportReport(overview, network, hospitals, me?.jurisdiction);
+    } catch (err: any) {
+      alert(err.message || 'Could not save the report.');
     } finally {
       setIsExporting(false);
     }
@@ -308,7 +312,7 @@ export default function AdminDashboard() {
 }
 
 /** PDF report built only from real figures at the moment of export. */
-function exportReport(overview: Overview | null, network: NetworkAnalytics | null, hospitals: any[], jurisdiction?: string) {
+function exportReport(overview: Overview | null, network: NetworkAnalytics | null, hospitals: any[], jurisdiction?: string): Promise<void> {
   const doc = new jsPDF();
   const generated = new Date().toLocaleString('en-IN');
 
@@ -379,7 +383,7 @@ function exportReport(overview: Overview | null, network: NetworkAnalytics | nul
     doc.text('Figures from the LifeLink database and donor network at the time of export. Contains business contact details: share only with authorised staff.', 20, 280);
     doc.text(`Page ${i} of ${pageCount}`, 180, 287);
   }
-  doc.save(`LifeLink-Network-Report-${new Date().toISOString().split('T')[0]}.pdf`);
+  return saveFile(doc.output('blob'), `LifeLink-Network-Report-${new Date().toISOString().split('T')[0]}.pdf`);
 }
 
 const STATUS_BADGE: Record<string, [string, string]> = {
@@ -1102,16 +1106,16 @@ function DonorsView({ initialSearch = '' }: { initialSearch?: string }) {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="text-[10px] uppercase tracking-widest text-slate-400 border-b border-slate-100">
-              {['Donor', 'Group', 'City', 'Phone', 'Last donation', 'Donations', 'Joined'].map((h) => <th key={h} className="px-4 py-3 font-black">{h}</th>)}
+              {['Donor', 'Group', 'City', 'Phone', 'Last donation', 'Donations', 'Joined', 'Account'].map((h) => <th key={h} className="px-4 py-3 font-black">{h}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
             {loading ? (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">Loading donors…</td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">Loading donors…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-10 text-center text-slate-400">{donors.length ? 'No donors match.' : 'No donors have registered yet.'}</td></tr>
+              <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-400">{donors.length ? 'No donors match.' : 'No donors have registered yet.'}</td></tr>
             ) : filtered.map((d) => (
-              <tr key={d.id}>
+              <tr key={d.id} className={d.disabled_at ? 'bg-red-50/40' : undefined}>
                 <td className="px-4 py-3">
                   <p className="font-bold text-slate-900">{d.name}</p>
                   <p className="text-xs text-slate-500">{d.email}</p>
@@ -1125,6 +1129,12 @@ function DonorsView({ initialSearch = '' }: { initialSearch?: string }) {
                 <td className="px-4 py-3 text-slate-600">{d.last_donation_date ? new Date(d.last_donation_date).toLocaleDateString('en-IN') : '–'}</td>
                 <td className="px-4 py-3 font-bold text-slate-900">{d.donations}</td>
                 <td className="px-4 py-3 text-slate-500">{new Date(d.created_at).toLocaleDateString('en-IN')}</td>
+                <td className="px-4 py-3 align-top">
+                  <AccountStatus
+                    id={d.id} kind="donor" name={d.name} disabledAt={d.disabled_at} reason={d.disabled_reason}
+                    onChanged={(change) => setDonors((rows) => rows.map((r) => (r.id === d.id ? { ...r, ...change } : r)))}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>

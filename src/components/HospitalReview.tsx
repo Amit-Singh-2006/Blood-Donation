@@ -2,6 +2,7 @@ import { ReactNode, useState } from 'react';
 import { apiFetch } from '../lib/api';
 import { DOCUMENTS, DocumentKind, StoredDocument, documentLabel, formatSize, typeLabel } from '../lib/documents';
 import DocumentViewer, { ViewedDocument } from './DocumentViewer';
+import AccountStatus from './AccountStatus';
 
 export interface ReviewHospital {
   id: number;
@@ -19,6 +20,9 @@ export interface ReviewHospital {
   email: string;
   created_at: string | null;
   mfa_enabled: boolean;
+  /** Deactivated by an admin: cannot sign in */
+  disabled_at: string | null;
+  disabled_reason: string | null;
   verification_status: 'not_submitted' | 'pending' | 'changes_requested' | 'verified';
   verification_note: string | null;
   verification_submitted_at: string | null;
@@ -121,6 +125,9 @@ export default function HospitalReview({ h, busy, onChanged, onResetTwoStep }: {
           {h.verification_status === 'verified' && h.verified_at && (
             <p className="text-xs text-slate-500 mt-0.5">Verified {when(h.verified_at)}{h.verified_by_name ? ` by ${h.verified_by_name}` : ''}</p>
           )}
+          <div className="mt-2">
+            <AccountStatus id={h.id} kind="hospital" name={h.hospital_name} disabledAt={h.disabled_at} reason={h.disabled_reason} onChanged={() => onChanged()} />
+          </div>
         </div>
         <button type="button" onClick={() => setOpen(!open)} className="px-4 py-2 rounded-lg text-xs font-bold shrink-0 border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-1">
           {open ? 'Hide review' : h.verification_status === 'pending' ? 'Review' : 'Details'}

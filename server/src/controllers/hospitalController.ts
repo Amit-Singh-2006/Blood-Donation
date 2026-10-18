@@ -53,27 +53,66 @@ const publicRequest = ({ hospital_token, ...rest }: Record<string, any>) => rest
 const toNumber = (v: unknown) => (v === null || v === undefined || v === '' ? undefined : Number(v));
 
 // GET /hospital/profile
+const profileJson = (hospital: Record<string, any>) => ({
+    hospital_name: hospital.hospital_name,
+    hospital_type: hospital.hospital_type,
+    registration_number: hospital.registration_number,
+    address: hospital.address,
+    city: hospital.city,
+    state: hospital.state,
+    pincode: hospital.pincode,
+    contact_number: hospital.contact_number,
+    has_location: hospital.latitude != null && hospital.longitude != null,
+    latitude: hospital.latitude != null ? Number(hospital.latitude) : null,
+    longitude: hospital.longitude != null ? Number(hospital.longitude) : null,
+    is_verified: !!hospital.is_verified,
+    verification_status: hospital.verification_status,
+    verification_note: hospital.verification_note ?? null,
+    network_configured: networkConfigured(),
+});
+
 export const getHospitalProfile = async (req: AuthRequest, res: Response) => {
     try {
         const hospital = await loadHospital(req.user?.id);
         if (!hospital) return res.status(404).json({ message: 'Hospital profile not found.' });
-        res.json({
-            hospital_name: hospital.hospital_name,
-            hospital_type: hospital.hospital_type,
-            registration_number: hospital.registration_number,
-            address: hospital.address,
-            city: hospital.city,
-            state: hospital.state,
-            pincode: hospital.pincode,
-            contact_number: hospital.contact_number,
-            has_location: hospital.latitude != null && hospital.longitude != null,
-            latitude: hospital.latitude != null ? Number(hospital.latitude) : null,
-            longitude: hospital.longitude != null ? Number(hospital.longitude) : null,
-            is_verified: !!hospital.is_verified,
-            verification_status: hospital.verification_status,
-            verification_note: hospital.verification_note ?? null,
-            network_configured: networkConfigured(),
-        });
+        res.json(profileJson(hospital));
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+};
+
+// Staff can always correct these; the rest is what an admin checks against the documents
+const OPERATIONAL_FIELDS = ['contact_number', 'latitude', 'longitude'] as const;
+const REVIEWED_FIELDS = ['hospital_name', 'hospital_type', 'address', 'city', 'state', 'pincode'] as const;
+
+/**
+ * PUT /hospital/profile
+ * The contact number and exact location can change at any time (new requests
+ * use them). The name, type and address are what an admin checks against the
+ * documents, so they change only before the hospital is sent for review.
+ */
+export const updateHospitalProfile = async (req: AuthRequest, res: Response) => {
+    const hospitalId = req.user!.id;
+    const b = req.body;
+    try {
+        const hospital = await loadHospital(hospitalId);
+        if (!hospital) return res.status(404).json({ message: 'Hospital profile not found.' });
+        const reviewed = REVIEWED_FIELDS.filter((f) => b[f] !== undefined);
+        if (reviewed.length && ['pending', 'verified'].includes(hospital.verification_status)) {
+            return res.status(409).json({
+                message: hospital.verification_status === 'verified'
+                    ? 'Your hospital is verified, so its name, type and address are locked. Ask your LifeLink admin to change them.'
+                    : 'Your details are being reviewed. Wait for the result, or ask your LifeLink admin to change them.',
+            });
+        }
+        const params: unknown[] = [hospitalId];
+        const sets = [...OPERATIONAL_FIELDS, ...REVIEWED_FIELDS]
+            .filter((f) => b[f] !== undefined)
+            .map((f) => { params.push(b[f]); return `${f} = $${params.length}`; });
+        await query(`UPDATE hospitals SET ${sets.join(', ')} WHERE user_id = $1`, params);
+        if (b.hospital_name !== undefined) await query('UPDATE users SET name = $2 WHERE id = $1', [hospitalId, b.hospital_name]);
+        res.json(profileJson(await loadHospital(hospitalId)));
     } catch (err: any) {
         console.error(err);
         res.status(500).json({ message: 'Internal server error.' });
@@ -96,7 +135,7 @@ const recordNetworkDonations = async (hospitalId: number | undefined, donors: Ho
                  LIMIT 1
              ), inserted AS (
                  INSERT INTO donations (donor_id, hospital_id, units, donation_date, xp_earned, network_match_id)
-                 SELECT user_id, $2, 1, COALESCE($3::date, CURRENT_DATE), 10, $4 FROM donor
+                 SELECT user_id, $2, 1, (COALESCE($3::timestamptz, now()) AT TIME ZONE 'Asia/Kolkata')::date, 10, $4 FROM donor
                  ON CONFLICT (network_match_id) DO NOTHING
                  RETURNING donor_id, donation_date
              )

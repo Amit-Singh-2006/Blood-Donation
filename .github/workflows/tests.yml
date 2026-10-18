@@ -1,0 +1,41 @@
+# Type-checks and tests the website and the API on every push and pull request.
+# The API tests need no database: they replace it with fakes.
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            server/package-lock.json
+
+      - name: Website
+        run: |
+          npm ci
+          npm run lint
+          npm test
+
+      - name: API
+        working-directory: server
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm test

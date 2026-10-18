@@ -18,3 +18,9 @@ export const adminInviteSchema = z.object({
     message: 'Choose a state and at least one city for a city admin',
     path: ['cities'],
 });
+
+// Deactivating a donor or hospital account needs a reason; it is kept with the account
+export const userActiveSchema = z.object({
+    active: z.boolean(),
+    reason: z.string().trim().max(300, 'Keep the reason under 300 characters.').optional(),
+}).refine((d) => d.active || (d.reason?.length ?? 0) >= 5, { message: 'Say why the account is deactivated (at least 5 characters).', path: ['reason'] });
