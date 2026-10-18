@@ -1,0 +1,10 @@
+# What `gcloud run deploy --source .` leaves out of the upload to Cloud Build.
+# Above all .env: secrets live in Secret Manager, never in the source upload.
+.gcloudignore
+.git
+node_modules
+dist
+test
+.env
+.env.*
+*.log

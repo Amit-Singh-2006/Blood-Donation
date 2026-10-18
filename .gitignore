@@ -26,3 +26,8 @@ keystore.properties
 .idea/
 .claude/settings.local.json
 Thumbs.db
+
+# Firebase Hosting: firebase.json is written by scripts/firebase-hosting.mjs
+firebase.json
+.firebase/
+firebase-debug*.log

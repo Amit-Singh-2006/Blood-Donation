@@ -13,6 +13,8 @@ import { campaignRoutes, reviewRoutes } from './routes/campaignRoutes';
 import networkRoutes from './routes/networkRoutes';
 import certificateRoutes from './routes/certificateRoutes';
 import { healthCheck } from './controllers/healthController';
+import { keepWorkInRequest } from './utils/background';
+import { onHosting } from './utils/platform';
 import rateLimit from 'express-rate-limit';
 
 // ── Security Middleware ────────────────────────────────────────────────────
@@ -32,10 +34,15 @@ dotenv.config();
 
 const app = express();
 
-// Vercel's proxy puts the visitor's real address in X-Forwarded-For. Without
-// this every visitor looked like 127.0.0.1, so per-IP limits (failed sign-ins,
-// campaign sign-ups, admin requests) were shared by the whole site.
-if (process.env.VERCEL) app.set('trust proxy', 1);
+// Vercel's and Cloud Run's proxies put the visitor's real address in
+// X-Forwarded-For. Without this every visitor looked like 127.0.0.1, so per-IP
+// limits (failed sign-ins, campaign sign-ups, admin requests) were shared by
+// the whole site.
+if (onHosting()) app.set('trust proxy', 1);
+
+// Off Vercel, an answer waits for the work it started (emails), because Cloud
+// Run stops giving the server CPU once a request has been answered
+app.use(keepWorkInRequest);
 
 // ──────────────────────────────────────────────────────────────────────────
 // 1. HTTP Security Headers (Helmet)

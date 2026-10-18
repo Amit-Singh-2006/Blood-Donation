@@ -69,11 +69,13 @@ test('an unreadable request body is refused and never written to the logs', asyn
     assert.ok(logged.every((line) => !line.includes('Sup3r') && !line.includes('asha@')), logged.join('\n'));
 });
 
-test('on Vercel the API never trusts localhost origins', () => {
+test('on Vercel or Cloud Run the API never trusts localhost origins', () => {
     const env = { FRONTEND_URL: 'http://localhost:3000, https://lifelink.example' };
     assert.ok(allowedOrigins(env).has('http://localhost:3000'), 'local development keeps working');
-    const live = allowedOrigins({ ...env, VERCEL: '1' });
-    assert.deepEqual([...live].sort(), ['https://blood-donation-frontend-delta.vercel.app', 'https://lifelink.example']);
+    for (const host of [{ VERCEL: '1' }, { K_SERVICE: 'lifelink-api' }]) {
+        const live = allowedOrigins({ ...env, ...host });
+        assert.deepEqual([...live].sort(), ['https://blood-donation-frontend-delta.vercel.app', 'https://lifelink.example'], JSON.stringify(host));
+    }
 });
 
 test('security logs keep only a hint of the email', () => {

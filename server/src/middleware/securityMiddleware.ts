@@ -21,6 +21,7 @@ import { Request, Response, NextFunction } from 'express';
 import { AuthRequest } from './authMiddleware';
 import { authCookieOptions } from '../utils/authCookie';
 import { sessionToken } from './session';
+import { onHosting } from '../utils/platform';
 
 // ─────────────────────────────────────────────
 // 🔐  TOKEN REPLAY / JWT BLACKLIST
@@ -190,8 +191,8 @@ export const injectionGuard = (req: Request, res: Response, next: NextFunction):
 // 🕸️  CSRF ORIGIN CHECK
 // ─────────────────────────────────────────────
 
-// Local development servers. Only trusted off Vercel: on the live API a page
-// served on a visitor's own machine must not get signed-in access to LifeLink.
+// Local development servers. Only trusted on a developer's machine: on the live
+// API a page served on a visitor's own machine must not get signed-in access to LifeLink.
 const LOCAL_ORIGINS = [
     'http://localhost:5173',
     'http://localhost:3000',
@@ -219,9 +220,9 @@ export const parseOrigins = (value: string | undefined): string[] =>
     });
 
 // Shared by the cors() options in app.ts and the guards below
-/** The origins allowed to call the API with credentials (on Vercel, never localhost). */
+/** The origins allowed to call the API with credentials (on Vercel or Cloud Run, never localhost). */
 export const allowedOrigins = (env: Record<string, string | undefined> = process.env) => {
-    const deployed = !!env.VERCEL;
+    const deployed = onHosting(env);
     return new Set([
         ...SITE_ORIGINS,
         ...(deployed ? [] : LOCAL_ORIGINS),

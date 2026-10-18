@@ -11,7 +11,7 @@
  */
 import type { PoolClient } from 'pg';
 import pool, { query } from '../config/db';
-import { background } from '../utils/background';
+import { answerWaitsForWork, background } from '../utils/background';
 import { OutboxMessage, deliverMessages, enqueueMessages } from '../services/messaging';
 import { CampaignDetails, CampaignRecipient, campaignMessages } from './messages';
 import { analyticsPage, replyPage, trackingNotFoundPage, trackingPage } from './pages';
@@ -554,7 +554,8 @@ export const broadcastCampaign = async ({ campaign_id, campaign, register_url, r
         if (m.email) messages.push({ channel: 'email', recipient: m.email, payload: { subject: m.email_subject, html: m.email_html }, purpose: 'campaign', ref_id });
     }
     const ids = await enqueueMessages(messages);
-    background(deliverMessages({ ids, limit: ids.length, budgetMs: 45000 }));
+    // Where the answer waits for this (Cloud Run), only send for a few seconds; the timer sends the rest
+    background(deliverMessages({ ids, limit: ids.length, budgetMs: answerWaitsForWork() ? 8000 : 45000 }));
     return { queued: ids.length };
 };
 

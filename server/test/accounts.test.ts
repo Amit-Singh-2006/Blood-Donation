@@ -378,6 +378,7 @@ test('a donor gets a certificate only for their own donation, and the same one e
 test('the shared rate-limit store counts in Postgres, per prefix, and is on wherever the API runs on Vercel', async () => {
     assert.equal(sharedLimitsEnabled({}), false);
     assert.equal(sharedLimitsEnabled({ VERCEL: '1' }), true);
+    assert.equal(sharedLimitsEnabled({ K_SERVICE: 'lifelink-api' }), true, 'Cloud Run');
     assert.equal(sharedLimitsEnabled({ RATE_LIMIT_STORE: 'postgres' }), true);
 
     const store = new PostgresStore('login');

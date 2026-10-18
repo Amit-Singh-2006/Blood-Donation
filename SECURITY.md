@@ -198,7 +198,7 @@ This document maps every attack category from OWASP / CTF challenge lists to the
 |---|---|
 | Global limiter: 200 req / 15 min per IP on all routes | `app.ts` |
 | Per-route limiters with tighter limits on auth (5), admin (30), API (60) | `authRoutes.ts`, `adminRoutes.ts`, other route files |
-| On Vercel the limits that guard secrets (sign-in, sign-up, two-step codes, password reset, admin invites, account deletion, certificate checks, campaign sign-ups, uploads, the AI assistant) count in Postgres, so they hold across every server instance instead of resetting per instance; a nightly job removes expired counters. Set `RATE_LIMIT_STORE=postgres` to do the same elsewhere | `middleware/rateLimitStore.ts`, `config/initDb.ts` |
+| On Vercel and Cloud Run the limits that guard secrets (sign-in, sign-up, two-step codes, password reset, admin invites, account deletion, certificate checks, campaign sign-ups, uploads, the AI assistant) count in Postgres, so they hold across every server instance instead of resetting per instance; a nightly job removes expired counters. Set `RATE_LIMIT_STORE=postgres` to do the same elsewhere | `middleware/rateLimitStore.ts`, `config/initDb.ts` |
 | `standardHeaders: true` exposes `RateLimit-*` headers for transparency | All limiters |
 
 ### 24. API Abuse

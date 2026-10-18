@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { query } from '../config/db';
 import { sendAccountEmail } from '../services/donorNetwork';
 import { SECOND_STEP_ROLES, twoStepRecord, useSecondStepCode } from '../services/twoStep';
-import { background } from '../utils/background';
+import { answerWaitsForWork, background } from '../utils/background';
 import { endAllKeptSessions } from '../utils/keepSignedIn';
 import {
     RESET_CODE_MINUTES, RESET_CODE_TRIES, hashResetCode, newResetCode, readResetTicket, resetCodeMatches, signResetTicket,
@@ -20,8 +20,12 @@ import { bruteForceDelay, clearFailedAttempts, logSecurityEvent, recordFailedAtt
  * The answers never reveal whether an email has an account.
  */
 
-/** Step 1 always takes at least this long, so its timing does not reveal whether an account exists. */
-export const resetTiming = { minimumMs: 900 };
+/**
+ * Step 1 always takes at least this long, so its timing does not reveal whether
+ * an account exists. Where the answer must wait for the email (Cloud Run gives no
+ * CPU after answering), the email is sent within this time, so it is longer there.
+ */
+export const resetTiming = { minimumMs: answerWaitsForWork() ? 4000 : 900 };
 
 const SENT = { message: 'If that email belongs to a LifeLink account, we have sent it a 6-digit code.' };
 const ENDED = { message: 'This password reset has timed out. Please start again.', error: 'reset_expired' };
@@ -39,6 +43,7 @@ const openReset = async (rid: string, uid: number) => (await query(
 export const forgotPassword = async (req: Request, res: Response) => {
     const started = Date.now();
     const email = String(req.body.email).trim().toLowerCase();
+    let sending: Promise<unknown> | undefined;
     try {
         const user = (await query('SELECT id, name, email, role FROM users WHERE lower(email) = $1', [email])).rows[0];
         if (user) {
@@ -53,12 +58,13 @@ export const forgotPassword = async (req: Request, res: Response) => {
                 await query(
                     'INSERT INTO password_resets (id, user_id, code_hash, expires_at) VALUES ($1, $2, $3, $4)',
                     [id, user.id, hashResetCode(id, code), new Date(Date.now() + RESET_CODE_MINUTES * 60_000)]);
-                // Sent alongside the answer: how long the email takes must not tell anyone the account exists
+                // Sent while the answer waits out its minimum time: how long the email
+                // takes must not tell anyone the account exists
                 const needsAuthenticator = await twoStepOn(user.role, user.id);
-                background(sendAccountEmail({
+                sending = sendAccountEmail({
                     type: 'reset_code', to: user.email, name: user.name, code, minutes: RESET_CODE_MINUTES,
                     needs_authenticator: needsAuthenticator,
-                }).catch((err: any) => console.error('Password reset email failed:', err.message)));
+                }).catch((err: any) => console.error('Password reset email failed:', err.message));
             }
         }
     } catch (err: any) {
@@ -67,6 +73,8 @@ export const forgotPassword = async (req: Request, res: Response) => {
     }
     // The same answer, after about the same time, whether or not the account exists
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, resetTiming.minimumMs - (Date.now() - started))));
+    // Almost always sent by now; an unusually slow email still finishes
+    if (sending) background(sending);
     res.json(SENT);
 };
 

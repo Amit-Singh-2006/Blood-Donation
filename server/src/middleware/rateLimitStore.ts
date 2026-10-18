@@ -5,13 +5,14 @@
  * instances. It guards the limits that matter most (password guessing, sign-up
  * and reset abuse, uploads, the assistant); busy, coarse limits stay in memory.
  *
- * On Vercel it is always used; elsewhere set RATE_LIMIT_STORE=postgres (local
- * development and tests keep the memory store). If the database cannot answer,
+ * On Vercel and Cloud Run it is always used; elsewhere set RATE_LIMIT_STORE=postgres
+ * (local development and tests keep the memory store). If the database cannot answer,
  * requests are let through (passOnStoreError): those routes need the database
  * anyway.
  */
 import type { ClientRateLimitInfo, Options, Store } from 'express-rate-limit';
 import { query } from '../config/db';
+import { onHosting } from '../utils/platform';
 
 const MAX_KEY = 200;
 
@@ -61,7 +62,7 @@ export class PostgresStore implements Store {
 }
 
 export const sharedLimitsEnabled = (env: Record<string, string | undefined> = process.env) =>
-    !!env.VERCEL || env.RATE_LIMIT_STORE === 'postgres';
+    onHosting(env) || env.RATE_LIMIT_STORE === 'postgres';
 
 /** Options for rateLimit(): the shared Postgres store when enabled, otherwise nothing (memory). */
 export const sharedLimitStore = (prefix: string): Partial<Pick<Options, 'store' | 'passOnStoreError'>> =>

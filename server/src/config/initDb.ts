@@ -1,8 +1,33 @@
 import { createHash } from 'crypto';
 import pool from './db';
 
+/**
+ * Points the database timer at this API when NETWORK_TICK_URL is set. Only a
+ * deployed API sets it (Cloud Run: https://<service>-<number>.<region>.run.app/network/tick),
+ * so a developer's machine, whose .env may use the live database, never moves
+ * the timer to itself.
+ */
+export const pointTimerAtThisApi = async (url = process.env.NETWORK_TICK_URL?.trim()) => {
+  if (!url) return;
+  if (!/^https:\/\/[^\s/]+\/network\/tick$/.test(url)) {
+    console.error('[DB] NETWORK_TICK_URL must look like https://<api host>/network/tick; the timer was left as it was.');
+    return;
+  }
+  await pool.query(
+    `INSERT INTO app_secrets (name, value) VALUES ('network_tick_url', $1)
+     ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value`,
+    [url]
+  ).catch((err) => console.error('[DB] Could not point the timer at this API:', err.message));
+};
+
 /** Applies the schema if it changed; true once the database is up to date. */
 const initDb = async (): Promise<boolean> => {
+  const ready = await applySchema();
+  if (ready) await pointTimerAtThisApi();
+  return ready;
+};
+
+const applySchema = async (): Promise<boolean> => {
   const schemaQuery = `
     -- Users Table
     CREATE TABLE IF NOT EXISTS users (
@@ -228,6 +253,11 @@ const initDb = async (): Promise<boolean> => {
     ALTER TABLE app_secrets ENABLE ROW LEVEL SECURITY;
     INSERT INTO app_secrets (name, value)
       VALUES ('network_tick', encode(sha256((gen_random_uuid()::text || gen_random_uuid()::text || clock_timestamp()::text)::bytea), 'hex'))
+      ON CONFLICT (name) DO NOTHING;
+    -- Where the timer sends ticks. A deployed API with NETWORK_TICK_URL set
+    -- changes it at start-up (pointTimerAtThisApi below).
+    INSERT INTO app_secrets (name, value)
+      VALUES ('network_tick_url', 'https://blood-donation-backend-sepia.vercel.app/network/tick')
       ON CONFLICT (name) DO NOTHING;
 
     -- Donation certificates: the website draws the PDF; the code on it lets
@@ -643,7 +673,7 @@ const initDb = async (): Promise<boolean> => {
       CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA pg_catalog;
       PERFORM cron.schedule('lifelink-network-tick', '* * * * *', $job$
         SELECT net.http_post(
-          url := 'https://blood-donation-backend-sepia.vercel.app/network/tick',
+          url := (SELECT value FROM public.app_secrets WHERE name = 'network_tick_url'),
           body := '{}'::jsonb,
           headers := jsonb_build_object('Content-Type', 'application/json',
                                         'X-LifeLink-Tick', (SELECT value FROM public.app_secrets WHERE name = 'network_tick')),
