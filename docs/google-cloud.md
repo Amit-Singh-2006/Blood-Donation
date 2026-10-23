@@ -1,37 +1,78 @@
 # Running LifeLink on Google Cloud
 
-LifeLink can run on Google instead of Vercel, at no cost for a small site:
+This moves LifeLink from Vercel to Google, step by step. Afterwards:
 
-| Part | Google service | Free each month |
+| Part | Where it runs | Free each month |
 |---|---|---|
 | API (`server/`) | **Cloud Run**, Mumbai (`asia-south1`), next to the Supabase database | 2 million requests, 180,000 vCPU-seconds, 360,000 GiB-seconds |
 | Website | **Firebase Hosting**, with your own domain and free HTTPS | 10 GB stored, 360 MB transferred a day |
 | Building the API | Cloud Build and Artifact Registry | 2,500 build minutes; about 0.5 GB of stored images |
 | Passwords and keys | Secret Manager | a handful of secrets |
 
-The database stays on Supabase and the Android app keeps working; only the addresses change. Google needs a billing account (a card) even inside the free amounts, so set a budget alert (step 4).
+The database stays on Supabase. The Vercel site keeps working the whole time, so nothing goes down while you do this.
 
-Everything below runs in **Cloud Shell**, the terminal built into the Google Cloud console (the `>_` button at the top right), so nothing needs installing on your PC. Replace `YOUR_PROJECT_ID` with your project's ID.
+**You need:** a Google account, a debit or credit card for Google's billing (Google charges nothing inside the free amounts, but requires a card), your PC with this repository (for the values in `server/.env`), your Gmail app password (or make a new one), and about an hour. A domain name is optional at first (part 5).
 
-## 1. Project and billing (once, in the console)
+**Words used below.** The *console* is the Google Cloud website, https://console.cloud.google.com. *Cloud Shell* is a terminal inside that website. *Project ID* is the unique name of your Google project, such as `lifelink-462817`.
 
-1. Open https://console.cloud.google.com and sign in.
-2. Create a project, for example `lifelink`. Note its **Project ID**.
-3. Billing: link a billing account (new accounts get a free trial credit). Upgrade it to a paid account before the trial ends, or Google stops the project; within the free amounts you still pay nothing.
-4. Billing → **Budgets & alerts** → create a budget of, say, ₹200 a month with email alerts at 50%, 90% and 100%.
+---
 
-## 2. The API on Cloud Run
+## Part 1. Google Cloud project and billing (about 10 minutes, in the browser)
 
-Open Cloud Shell and run:
+1. Open https://console.cloud.google.com and sign in with your Google account. Accept the terms if asked.
+2. **Create the project.** At the top left, click the project picker (it may say "Select a project"), then **New project**. Name it `lifelink`. Google shows a Project ID under the name, often with numbers added, such as `lifelink-462817`. **Write the Project ID down**: almost every step uses it. Click **Create** and wait for the notification, then select the new project in the project picker.
+3. **Turn on billing.** Open the menu (☰, top left) → **Billing**. Google asks you to link or create a billing account: choose **Create billing account** (or start the free trial if offered), enter your details and card. Google may make a small temporary charge to check the card. New accounts get trial credit for 90 days. **Before the trial ends, click "Activate full account"** (or "Upgrade") in Billing, or Google stops the project. Upgrading does not cost anything by itself: you still pay only for use above the free amounts.
+4. **Set a budget alert.** Billing → **Budgets & alerts** → **Create budget**. Name it `LifeLink`, keep "All projects", set the amount to about ₹200 per month, keep the alert thresholds at 50%, 90% and 100%, and make sure "Email alerts to billing admins" is ticked. Click **Finish**. A budget only *warns* you by email; it does not stop anything. That is why the API is also capped at three copies (part 3, step 6).
+
+## Part 2. Open Cloud Shell (2 minutes)
+
+1. In the console, click the **Activate Cloud Shell** button: the `>_` icon at the top right. A terminal opens at the bottom of the page. The first time, it takes a minute to start.
+2. **Pasting:** press Ctrl+V or right-click → Paste. Paste one block at a time and wait for it to finish before the next.
+3. If a window asks to **Authorize Cloud Shell**, click **Authorize**.
+4. Tell Cloud Shell your project. Replace `lifelink-462817` with *your* Project ID:
+
+   ```bash
+   export PROJECT_ID=lifelink-462817
+   gcloud config set project "$PROJECT_ID"
+   ```
+
+   The prompt now shows your project ID in yellow.
+
+**If Cloud Shell disconnects** (it does after about an hour of no use), your files stay, but you must run that block again. Once the API exists (part 3), also run:
 
 ```bash
-gcloud config set project YOUR_PROJECT_ID
+API=$(gcloud run services describe lifelink-api --region asia-south1 --format='value(status.url)')
+```
+
+## Part 3. The API on Cloud Run (about 20 minutes)
+
+### 3.1 Turn on the Google services LifeLink uses
+
+```bash
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
   secretmanager.googleapis.com compute.googleapis.com
+```
+
+This takes a minute or two and ends with "Operation ... finished successfully". These are the services for running the API (Run), building it (Cloud Build), storing what was built (Artifact Registry), keeping passwords (Secret Manager) and the default identity the API runs as (Compute).
+
+### 3.2 Copy the code into Cloud Shell
+
+```bash
 git clone https://github.com/Amit-Singh-2006/Blood-Donation.git ~/Blood-Donation
 ```
 
-**Secrets.** Copy `DATABASE_URL`, `JWT_SECRET` and `GROQ_API_KEY` from `server/.env` on your PC, and your Gmail app password for `SMTP_PASS`. `JWT_SECRET` must be exactly the same value: the admins' and hospitals' authenticator keys are encrypted with it. Each value is typed hidden and never lands in the shell history:
+### 3.3 Store the secrets
+
+Four values are secret. They go into Secret Manager, never into a file or the code:
+
+| Name | Where to find it |
+|---|---|
+| `DATABASE_URL` | the line `DATABASE_URL=...` in `server/.env` on your PC: copy everything after `=` (108 characters) |
+| `JWT_SECRET` | the line `JWT_SECRET=...` in `server/.env` (64 characters). It **must** be this exact value: the admins' and hospitals' authenticator keys are encrypted with it |
+| `GROQ_API_KEY` | the line `GROQ_API_KEY=...` in `server/.env` (56 characters) |
+| `SMTP_PASS` | your Gmail app password, the one you gave Vercel. If you don't have it, make a new one at https://myaccount.google.com/apppasswords (Google shows it as four groups of letters: paste the 16 letters without the spaces) |
+
+Open `server/.env` in VS Code to copy from it. Then paste this block into Cloud Shell:
 
 ```bash
 for NAME in DATABASE_URL JWT_SECRET GROQ_API_KEY SMTP_PASS; do
@@ -40,25 +81,41 @@ for NAME in DATABASE_URL JWT_SECRET GROQ_API_KEY SMTP_PASS; do
 done; unset VALUE
 ```
 
-Let the API read them, and let Cloud Build build it:
+It asks for the four values one after another. **When you paste, nothing appears on screen**: that is on purpose, so the value is never shown or saved in the command history. Paste once, press Enter, and wait for "Created version [1] of the secret [...]" before pasting the next one.
+
+Check that each one has the right length:
 
 ```bash
-PROJECT=$(gcloud config get-value project)
-SA="$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')-compute@developer.gserviceaccount.com"
-gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor
-gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$SA" --role=roles/run.builder
+for NAME in DATABASE_URL JWT_SECRET GROQ_API_KEY SMTP_PASS; do
+  printf '%s: ' "$NAME"; gcloud secrets versions access latest --secret="$NAME" | wc -c
+done
 ```
 
-**Settings** that are not secret go in a file in your Cloud Shell home (not in the repository):
+You should see 108, 64, 56 and 16. If one is wrong, store it again: `read -rsp "Value: " V; printf '%s' "$V" | gcloud secrets versions add NAME --data-file=-; unset V` (replace `NAME`).
+
+### 3.4 Give the API permission to read the secrets
 
 ```bash
-cat > ~/lifelink-env.yaml <<'EOF'
+SA="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')-compute@developer.gserviceaccount.com"
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor --condition=None
+gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:$SA" --role=roles/run.builder --condition=None
+```
+
+The API runs as Google's default "service account" for your project. The first line lets it read the secrets; the second lets Cloud Build build it. Each prints a long list (the project's permissions); that is normal. If you see "does not exist", wait a minute (step 3.1 is still finishing) and run it again.
+
+### 3.5 Write the settings that are not secret
+
+```bash
+cat > ~/lifelink-env.yaml <<EOF
 SMTP_USER: "your-address@gmail.com"
-FRONTEND_URL: "https://YOUR_PROJECT_ID.web.app"
+FRONTEND_URL: "https://$PROJECT_ID.web.app"
 EOF
+cat ~/lifelink-env.yaml
 ```
 
-**Deploy** (the first build takes a few minutes; answer `Y` if asked to create a repository):
+Before pressing Enter, replace `your-address@gmail.com` with the Gmail address the app password belongs to. `FRONTEND_URL` is where the website will be (part 4). This file lives in your Cloud Shell home, not in the repository.
+
+### 3.6 Build and start the API
 
 ```bash
 cd ~/Blood-Donation/server
@@ -67,70 +124,143 @@ gcloud run deploy lifelink-api --source . --region asia-south1 --allow-unauthent
   --set-secrets DATABASE_URL=DATABASE_URL:latest,JWT_SECRET=JWT_SECRET:latest,GROQ_API_KEY=GROQ_API_KEY:latest,SMTP_PASS=SMTP_PASS:latest
 ```
 
-Then tell the API its own address, which also moves the database timer to it:
+What happens:
+
+- It asks to create a repository named `cloud-run-source-deploy`: type **Y** and press Enter. (That is where Google keeps the built API.)
+- It uploads the `server/` folder, builds it with `server/Dockerfile` (3 to 6 minutes the first time) and starts it.
+- It ends with **"Service URL: https://lifelink-api-....asia-south1.run.app"**. That is your new API address.
+
+What the options mean: `asia-south1` is Mumbai, next to the database. `--allow-unauthenticated` makes the API public, as a website's API must be (LifeLink checks sign-ins itself). `--max-instances 3` means at most three copies run at once, which caps the cost. `--memory 512Mi` is the size of each copy. The API shuts down when nobody uses it, so the first request after a quiet spell takes a few seconds.
+
+If the build fails, the output has a link to the build log: open it and look for the first red error line.
+
+### 3.7 Tell the API its own address, and move the database timer to it
 
 ```bash
 API=$(gcloud run services describe lifelink-api --region asia-south1 --format='value(status.url)')
+echo "$API"
 cat >> ~/lifelink-env.yaml <<EOF
 API_PUBLIC_URL: "$API"
 NETWORK_TICK_URL: "$API/network/tick"
 EOF
 gcloud run services update lifelink-api --region asia-south1 --env-vars-file ~/lifelink-env.yaml
-curl -s "$API/health"        # {"status":"ok","database":{"reachable":true,...}}
 ```
 
-`--max-instances 3` caps the cost. The API scales to zero when idle, so the first request after a quiet spell takes a few seconds.
+`API_PUBLIC_URL` goes into the YES/NO links in donor messages. `NETWORK_TICK_URL` makes the database's one-minute timer (which escalates blood requests) call this API instead of Vercel's. Both APIs use the same database, so nothing is lost. To move the timer back to Vercel at any time, change that line in `~/lifelink-env.yaml` to `NETWORK_TICK_URL: "https://blood-donation-backend-sepia.vercel.app/network/tick"` and run the `gcloud run services update` line again.
 
-## 3. The website on Firebase Hosting
+### 3.8 Check the API
 
-1. Open https://console.firebase.google.com → **Add project** → choose your existing Google Cloud project. Google Analytics is not needed.
-2. In Cloud Shell, build the website for your API and deploy it:
+```bash
+curl -s "$API/health"; echo
+```
+
+It should print `{"status":"ok","database":{"reachable":true,...}}`. If it says `"reachable":false`, `DATABASE_URL` is wrong: store it again (end of step 3.3) and run `gcloud run deploy` from step 3.6 again.
+
+The API's logs are in the console: menu → **Cloud Run** → `lifelink-api` → **Logs**.
+
+## Part 4. The website on Firebase Hosting (about 15 minutes)
+
+### 4.1 Add Firebase to your project
+
+1. Open https://console.firebase.google.com (same Google account).
+2. Click **Create a project** (or **Add project**). Don't type a new name: choose your existing Google Cloud project instead. Look for **"Add Firebase to Google Cloud project"**, or pick it from the list that appears when you click the name box.
+3. Firebase shows the billing plan (Blaze, because billing is on): confirm it. Its free amounts are the same as the free plan.
+4. Google Analytics: turn it **off** (LifeLink doesn't use it). Click **Add Firebase** and wait.
+
+### 4.2 Build the website for the new API
+
+Back in Cloud Shell:
+
+```bash
+node --version
+```
+
+If it shows a version below 20, run `nvm install 22` first. Then:
 
 ```bash
 cd ~/Blood-Donation
 npm ci
 VITE_CONTACT_EMAIL="your-contact@example.com" node scripts/firebase-hosting.mjs "$API"
+```
+
+- `npm ci` installs the website's tools (1 to 3 minutes).
+- `VITE_CONTACT_EMAIL` is the contact address shown on the Support, Privacy and Terms pages. Use the same one you gave Vercel. If you never set one, leave that part out and start the line at `node`.
+- The script builds the website so that it talks to your new API. It also writes `firebase.json` with the same security headers the Vercel site sends, with the new API allowed in its Content-Security-Policy. It ends with "Wrote firebase.json".
+
+### 4.3 Sign the Firebase tool in, and publish
+
+```bash
 npx firebase-tools@15.32.1 login --no-localhost
-npx firebase-tools@15.32.1 deploy --only hosting --project YOUR_PROJECT_ID
 ```
 
-`scripts/firebase-hosting.mjs` builds the site with the API address and writes `firebase.json` with the same security headers as `vercel.json` (its Content-Security-Policy allows the new API). The site is now at `https://YOUR_PROJECT_ID.web.app`. Sign in there as a donor, a hospital and an admin to check it, and send yourself a password reset email.
-
-## 4. Your own domain
-
-1. Buy a domain from any registrar (a `.in` costs roughly ₹500 to ₹1,000 a year).
-2. Firebase console → **Hosting** → **Add custom domain** → enter it (and `www.` as a redirect). Add the TXT and A records it shows in your registrar's DNS settings. HTTPS is set up automatically; it can take up to a day.
-3. Put the domain first in `FRONTEND_URL` (links in emails, messages and certificates use the first address), then update the API:
+It may ask whether Firebase can collect usage information (answer as you like). It then shows a link: open it, sign in with the same Google account, allow access, copy the code it shows, paste it into Cloud Shell and press Enter. Then publish:
 
 ```bash
-sed -i 's|^FRONTEND_URL: .*|FRONTEND_URL: "https://your-domain.in,https://YOUR_PROJECT_ID.web.app"|' ~/lifelink-env.yaml
-gcloud run services update lifelink-api --region asia-south1 --env-vars-file ~/lifelink-env.yaml
+npx firebase-tools@15.32.1 deploy --only hosting --project "$PROJECT_ID"
 ```
 
-The API keeps its `run.app` address: Cloud Run cannot attach a custom domain in Mumbai, and that is fine, because the website calls it the same way it calls the Vercel API today.
+It ends with **"Hosting URL: https://YOUR-PROJECT-ID.web.app"**. The site is live there.
 
-## 5. The Android app
+### 4.4 Test it
 
-The app opens the website's address, set in `mobile/capacitor.config.json` (`server.url`) and `mobile/www/offline.html`. Change both to the new domain and push to `main`: GitHub builds a new APK, which installs over the old one.
+Open the Hosting URL (also on your phone) and check:
 
-## 6. Retire Vercel
+- the home page loads, with its fonts and icons;
+- sign in as a donor, as a hospital and as an admin (the authenticator codes work, because `JWT_SECRET` is the same);
+- on the hospital dashboard the map shows;
+- "Forgot password" sends you an email (to your own address);
+- a certificate opens and saves as a PDF.
 
-Both APIs share the database, so the Vercel site can keep running while people move over. Once the new app is out (give it a week or two), delete both Vercel projects. Links in messages sent before the move point at the old addresses, so they stop working then.
+If something fails, look at the API's logs (end of part 3) and tell me what you see.
 
-## Updating later
+## Part 5. Your own domain (30 minutes of work, then up to a day of waiting)
+
+1. **Buy a domain** from any registrar (GoDaddy, Hostinger, Namecheap, BigRock, …). A `.in` costs roughly ₹500 to ₹1,000 a year. You don't need the hosting or email packages they offer.
+2. **Connect it:** Firebase console → **Hosting** → **Add custom domain**. Enter your domain, such as `lifelinkindia.in`, and continue.
+3. **Prove you own it, and point it at Firebase:** Firebase shows DNS records to add, usually a **TXT** record and one or two **A** records. In your registrar's site, open **DNS management** for the domain and add each record exactly as shown (type, host or name — often `@` — and value). **Delete any A or AAAA records the registrar added for a "parked" page**, or they will fight with Firebase's.
+4. **Add `www` too:** in Firebase, add a second custom domain, `www.your-domain.in`, and choose **Redirect** to `your-domain.in`. Add the records it shows.
+5. **Wait.** DNS changes take from minutes to 24 hours. Firebase then shows the domain as **Connected** and sets up HTTPS on its own.
+6. **Tell the API about the domain.** Links in emails, messages and certificates use the first address in `FRONTEND_URL`, so put the domain first:
+
+   ```bash
+   sed -i "s|^FRONTEND_URL: .*|FRONTEND_URL: \"https://your-domain.in,https://$PROJECT_ID.web.app\"|" ~/lifelink-env.yaml
+   cat ~/lifelink-env.yaml
+   gcloud run services update lifelink-api --region asia-south1 --env-vars-file ~/lifelink-env.yaml
+   ```
+
+   (Replace `your-domain.in` first. Or edit the file by hand with `nano ~/lifelink-env.yaml`: change the line, then Ctrl+O, Enter to save and Ctrl+X to leave.)
+
+The API keeps its `run.app` address. Cloud Run cannot attach a custom domain in Mumbai, and it doesn't need one: the website calls it exactly as it calls the Vercel API today.
+
+## Part 6. The Android app
+
+The app opens the website's address. Send me the domain: I'll change it in `mobile/capacitor.config.json` and `mobile/www/offline.html` and push, and GitHub builds a new APK at the usual download link. It installs over the old app; nobody needs to uninstall or sign in again.
+
+## Part 7. Retire Vercel
+
+Leave Vercel running for a week or two, until phones have the new app: both sites share the database, so they can run side by side. Then, at https://vercel.com, open each project (`blood-donation-frontend`, `blood-donation-backend`) → **Settings** → at the bottom, **Delete Project**. Links in messages sent before the move point at the old addresses, so they stop working then (blood requests last hours, so this is fine after a few days).
+
+## Later: updates, costs, problems
+
+**Publishing a new version** (after changes are pushed to GitHub), in Cloud Shell:
 
 ```bash
+export PROJECT_ID=your-project-id; gcloud config set project "$PROJECT_ID"
 cd ~/Blood-Donation && git pull
 API=$(gcloud run services describe lifelink-api --region asia-south1 --format='value(status.url)')
-# API
+# The API (settings and secrets stay as they are)
 cd server && gcloud run deploy lifelink-api --source . --region asia-south1 && cd ..
-# Website
+# The website
 npm ci && VITE_CONTACT_EMAIL="your-contact@example.com" node scripts/firebase-hosting.mjs "$API" \
-  && npx firebase-tools@15.32.1 deploy --only hosting --project YOUR_PROJECT_ID
+  && npx firebase-tools@15.32.1 deploy --only hosting --project "$PROJECT_ID"
 ```
 
-A redeploy keeps the service's settings and secrets. To change a secret: `printf '%s' "$NEW" | gcloud secrets versions add NAME --data-file=-`, then redeploy.
+**Changing a secret:** `read -rsp "Value: " V; printf '%s' "$V" | gcloud secrets versions add NAME --data-file=-; unset V`, then redeploy the API (the line above).
 
-## What changes in the code
+**Costs:** console → Billing → **Reports** shows what each service used this month.
 
-Nothing needs editing for Google: the API notices Cloud Run (`K_SERVICE`) and then trusts its proxy for visitors' addresses, shares rate limits in Postgres and never trusts `localhost` origins. Cloud Run gives the server CPU only while a request is open, so off Vercel each answer waits for the work it started, such as an email (`server/src/utils/background.ts`); the password reset answer waits a fixed 4 seconds so its timing still reveals nothing. The database timer calls whatever `NETWORK_TICK_URL` the deployed API sets; a developer's machine never sets it.
+**Something broke after an update:** console → Cloud Run → `lifelink-api` → **Revisions**: select the previous revision and choose "Manage traffic" to send 100% to it. For the website: Firebase console → Hosting → release history → **Rollback**.
+
+## What changed in the code for Google
+
+Nothing needs editing: the API notices Cloud Run (`K_SERVICE`) and then trusts its proxy for visitors' addresses, shares rate limits in Postgres and never trusts `localhost` origins. Cloud Run gives the server CPU only while a request is open, so off Vercel each answer waits for the work it started, such as an email (`server/src/utils/background.ts`); the password-reset answer waits a fixed 4 seconds so its timing still reveals nothing. The database timer calls whatever `NETWORK_TICK_URL` the deployed API sets; a developer's machine never sets it.
