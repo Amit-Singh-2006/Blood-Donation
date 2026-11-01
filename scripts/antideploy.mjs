@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 /**
  * LifeLink on Antideploy (https://antideploy.com): the API (server/) runs as a
- * container that this script uploads, and the website is a static site that
- * Antideploy builds from GitHub on every push to main. See docs/antideploy.md.
+ * container and the website as a static site; this script uploads both. See
+ * docs/antideploy.md.
  *
- *   node scripts/antideploy.mjs api [--force]   upload server/ and watch it go live
- *   node scripts/antideploy.mjs web             build the newest commit of main for the website
- *   node scripts/antideploy.mjs status [api|web] follow the latest deploy (a push starts the website's)
- *   node scripts/antideploy.mjs logs [api]      what the running API printed lately
+ *   node scripts/antideploy.mjs api [--force]    upload server/ and watch it go live
+ *   node scripts/antideploy.mjs web [--force]    upload the website and watch it go live
+ *   node scripts/antideploy.mjs status [api|web] follow the latest deploy
+ *   node scripts/antideploy.mjs logs [api]       what the running API printed lately
  *
- * Only files git tracks are uploaded, so server/.env and everything else that
- * is gitignored never leaves this machine. The account token comes from
- * ~/.antideploy/config.json (or ANTIDEPLOY_TOKEN) and is never printed.
+ * Antideploy cannot build this repository from GitHub: it finds the server and
+ * the Android app beside the website and will not treat the root as a site. So
+ * each part is uploaded on its own, and only files git tracks are sent, so
+ * server/.env and everything else that is gitignored never leaves this machine.
+ * The account token comes from ~/.antideploy/config.json (or ANTIDEPLOY_TOKEN)
+ * and is never printed.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -26,14 +29,22 @@ const LIMITS = { files: 4000, bytes: 29360128 };
 
 // Each folder's .antideploy.json names its application
 const TARGETS = {
-    api: { dir: 'server' },
-    web: { dir: '.' },
+    api: {
+        dir: 'server',
+        // What the Dockerfile builds from: tests, other hosts' settings and any .env stay here
+        include: (p) => !/^(test\/|vercel\.json$|\.gcloudignore$|\.antideploy\.json$|\.env)/.test(p),
+    },
+    web: {
+        dir: '.',
+        // What `vite build` needs (vercel.json carries the security headers); no tests
+        include: (p) => (/^(index\.html|package(-lock)?\.json|vite\.config\.ts|tsconfig\.json|vercel\.json)$/.test(p) || p.startsWith('src/'))
+            && !/\.test\.tsx?$/.test(p),
+    },
 };
 
-/** What the API's Dockerfile builds from: tests, other hosts' settings and any .env stay on this machine. */
-const apiFile = (p) => !/^(test\/|vercel\.json$|\.gcloudignore$|\.antideploy\.json$|\.env)/.test(p);
-
-const fail = (message) => { console.error(message); process.exit(1); };
+/** Ends the command with a message; the process then exits by itself (a forced exit can crash Node on Windows). */
+class Stop extends Error { }
+const fail = (message) => { throw new Stop(message); };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const token = () => {
@@ -72,20 +83,27 @@ const appId = (target) => {
     return fail(`${path.relative(ROOT, file) || '.antideploy.json'} is missing: see docs/antideploy.md.`);
 };
 
-/** The API's files to upload, relative to server/: tracked by git and needed by the build. */
-export const apiFiles = () => {
-    const cwd = path.join(ROOT, TARGETS.api.dir);
+/** The files to upload for a target, relative to its folder: tracked by git and needed by its build. */
+export const filesFor = (target) => {
+    const cwd = path.join(ROOT, TARGETS[target].dir);
     return execFileSync('git', ['ls-files', '-z'], { cwd, encoding: 'utf8' })
         .split('\0')
-        .filter((p) => p && apiFile(p) && fs.existsSync(path.join(cwd, p)));
+        .filter((p) => p && TARGETS[target].include(p) && fs.existsSync(path.join(cwd, p)));
 };
 
-const uploadApi = async (force) => {
-    const id = appId('api');
-    const cwd = path.join(ROOT, TARGETS.api.dir);
-    const files = apiFiles();
-    if (execFileSync('git', ['status', '--porcelain', '--', '.'], { cwd, encoding: 'utf8' }).trim()) {
-        console.log('Note: uncommitted changes in server/ are sent as they are now; files git does not track yet are not sent.');
+/** The API's public address, which the website is built to call. */
+const apiAddress = async () => {
+    const { status, data } = await call('GET', `/api/v1/applications/${appId('api')}`);
+    if (status !== 200 || !/^https:\/\//.test(data.url ?? '')) fail(`Could not read the API's address: ${status} ${why(data)}`);
+    return data.url.replace(/\/$/, '');
+};
+
+const upload = async (target, force) => {
+    const id = appId(target);
+    const cwd = path.join(ROOT, TARGETS[target].dir);
+    const files = filesFor(target);
+    if (execFileSync('git', ['status', '--porcelain', '--', ...(target === 'api' ? ['.'] : files)], { cwd, encoding: 'utf8' }).trim()) {
+        console.log('Note: uncommitted changes are sent as they are now; files git does not track yet are not sent.');
     }
     const form = new FormData();
     let bytes = 0;
@@ -96,20 +114,19 @@ const uploadApi = async (force) => {
         form.append('paths', rel);
     }
     if (files.length > LIMITS.files || bytes > LIMITS.bytes) fail(`Too big for Antideploy: ${files.length} files, ${bytes} bytes.`);
+    if (target === 'web') {
+        // Read when the site is built, so it calls the API on Antideploy
+        const env = { VITE_API_BASE_URL: await apiAddress() };
+        for (const name of ['VITE_CONTACT_EMAIL', 'VITE_GRIEVANCE_OFFICER_NAME']) if (process.env[name]) env[name] = process.env[name];
+        form.append('env', JSON.stringify(env));
+        console.log(`The website will call the API at ${env.VITE_API_BASE_URL}`);
+    }
     if (force) form.append('force', 'true');
 
     const { status, data } = await call('POST', `/api/v1/deploy?applicationId=${id}`, { form });
     if (status === 200 && data.status === 'unchanged') return console.log('Nothing changed since the last upload, so nothing was built (add --force to build it again).');
     if (status !== 202) fail(`Antideploy refused the upload: ${status} ${why(data)}`);
     console.log(`Sent ${data.fileCount ?? files.length} files (${(bytes / 1024).toFixed(0)} KB)${data.account?.label ? ` to ${data.account.label}` : ''}; building…`);
-    await watch(data.watch || `/api/v1/deployments/${data.taskId}`);
-};
-
-const redeployWeb = async () => {
-    const { status, data } = await call('POST', '/api/v1/redeploy', { body: { applicationId: appId('web'), latest: true } });
-    if (status === 200 && data.status === 'unchanged') return console.log('The newest commit of main is already live or on its way (node scripts/antideploy.mjs status web follows it).');
-    if (status !== 202) fail(`Antideploy refused the build: ${status} ${why(data)}`);
-    console.log(`Building commit ${String(data.commitSha ?? '').slice(0, 7) || '(newest)'} of main for the website…`);
     await watch(data.watch || `/api/v1/deployments/${data.taskId}`);
 };
 
@@ -148,10 +165,10 @@ const watch = async (url) => {
             return;
         }
         if (data.status === 'failed') {
-            console.error(`Deploy failed${data.failedStep ? ` at ${data.failedStep}` : ''}: ${data.error ?? 'no reason given'}`);
-            if (data.deployment?.buildLog) console.error(`--- end of the build log\n${tail(data.deployment.buildLog)}`);
-            if (data.deployment?.runtimeLog) console.error(`--- what the app printed while starting\n${tail(data.deployment.runtimeLog)}`);
-            process.exit(1);
+            const lines = [`Deploy failed${data.failedStep ? ` at ${data.failedStep}` : ''}: ${data.error ?? 'no reason given'}`];
+            if (data.deployment?.buildLog) lines.push(`--- end of the build log\n${tail(data.deployment.buildLog)}`);
+            if (data.deployment?.runtimeLog) lines.push(`--- what the app printed while starting\n${tail(data.deployment.runtimeLog)}`);
+            fail(lines.join('\n'));
         }
         if (Date.now() - started > 20 * 60_000) fail('Still not finished after 20 minutes: check the dashboard.');
         await sleep(5000);
@@ -163,7 +180,7 @@ const latest = async (target) => {
     if (status !== 200) fail(`Could not list deploys: ${status} ${why(data)}`);
     const newest = (data.deployments ?? data)[0];
     if (!newest) return console.log('No deploys yet.');
-    console.log(`Latest deploy ${newest.id ?? newest.deploymentId}${newest.commit ? ` (commit ${String(newest.commit).slice(0, 7)})` : ''}:`);
+    console.log(`Latest deploy ${newest.id ?? newest.deploymentId}:`);
     await watch(`/api/v1/deployments/${newest.id ?? newest.deploymentId}`);
 };
 
@@ -178,11 +195,17 @@ const logs = async (target) => {
 const main = async () => {
     const [command, ...rest] = process.argv.slice(2);
     const target = rest.find((a) => a === 'api' || a === 'web');
-    if (command === 'api') return uploadApi(rest.includes('--force'));
-    if (command === 'web') return redeployWeb();
+    if (command === 'api' || command === 'web') return upload(command, rest.includes('--force'));
     if (command === 'status') return latest(target ?? 'api');
     if (command === 'logs') return logs(target ?? 'api');
-    fail('Usage: node scripts/antideploy.mjs api [--force] | web | status [api|web] | logs [api]');
+    fail('Usage: node scripts/antideploy.mjs api|web [--force] | status [api|web] | logs [api]');
 };
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main();
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+    try {
+        await main();
+    } catch (err) {
+        console.error(err instanceof Stop ? err.message : err);
+        process.exitCode = 1;
+    }
+}

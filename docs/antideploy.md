@@ -6,11 +6,19 @@ in production messages all point at Vercel.
 
 | Part | Address | Antideploy application | How it deploys |
 |---|---|---|---|
-| Website | https://lifelink.antideploy.app | `Blood-Donation` (`.antideploy.json`), a static site built from GitHub | By itself on every push to `main` |
+| Website | https://lifelink.antideploy.app | `lifelink-web` (`.antideploy.json`), a static site built with Vite | `node scripts/antideploy.mjs web` |
 | API | https://lifelink-api.antideploy.app | `lifelink-api` (`server/.antideploy.json`), a container from `server/Dockerfile` | `node scripts/antideploy.mjs api` |
 
 Both copies use the **live Supabase database**, the same one Vercel uses, so
 anything done on the test site is real: use fake data and clean up afterwards.
+
+**Why not straight from GitHub:** Antideploy looks at the whole repository,
+finds the server and the Android app beside the website, and will not build
+the root as a site ("the 4 projects in it are in subdirectories"). So the
+script uploads each part on its own. The GitHub-linked application
+`Blood-Donation` (https://blood-donation.antideploy.app) is kept with
+deploy-on-push off, for the day the website moves into its own folder; it can
+be deleted in the Antideploy console if that never happens.
 
 ## Cost
 
@@ -31,7 +39,7 @@ https://antideploy.com/tokens.
 | Command | What it does |
 |---|---|
 | `node scripts/antideploy.mjs api` | Uploads `server/` and watches the build. Only files git tracks are sent, so `server/.env` never leaves the computer. `--force` builds unchanged code again |
-| `node scripts/antideploy.mjs web` | Builds the newest commit of `main` for the website (a push normally does this) |
+| `node scripts/antideploy.mjs web` | Uploads the website's source (`index.html`, the build settings, `src/` and `vercel.json`) and watches the build |
 | `node scripts/antideploy.mjs status web` | Follows the website's latest deploy (also `status api`) |
 | `node scripts/antideploy.mjs logs` | What the running API printed lately |
 
@@ -55,14 +63,26 @@ Left out on purpose: `NETWORK_TICK_URL` (the timer keeps calling Vercel),
 `TWILIO_*`, `WHATSAPP_*`, `USSD_GATEWAY_KEY` and `ADMIN_INVITE_CODE`. Antideploy
 sets `PORT`.
 
-**Website (`Blood-Donation`)**: `VITE_API_BASE_URL` = `https://lifelink-api.antideploy.app`.
+**Website (`lifelink-web`)**: `VITE_API_BASE_URL` = `https://lifelink-api.antideploy.app`;
+the script also sends the API's current address with every upload.
 
 A changed setting reaches the running app on its next deploy:
-`node scripts/antideploy.mjs api --force` for the API, `node scripts/antideploy.mjs web`
-for the website.
+`node scripts/antideploy.mjs api --force` or `web --force`.
+
+## Known gaps on the test copy
+
+- **No security headers on the website.** Antideploy's static hosting ignores
+  `vercel.json`, so the test site has no Content-Security-Policy,
+  X-Frame-Options, HSTS or the other headers Vercel sends (checked 1 November
+  2026). The API still sends its own.
+- **Pages are cached for 5 minutes** (`Cache-Control: public, max-age=300`), so
+  a new version of the website can take that long to appear.
 
 ## Making it the real site
 
+0. Give the website its security headers first: serve it from a container that
+   sends `vercel.json`'s headers (a second server app needs a paid plan) or
+   from the API's container.
 1. Timer: set `NETWORK_TICK_URL` = `https://lifelink-api.antideploy.app/network/tick`
    on the API and deploy it. On start-up the API points the database's minute
    timer at itself.
