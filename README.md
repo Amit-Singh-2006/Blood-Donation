@@ -99,6 +99,7 @@ cd server && npx tsc --noEmit
 
 - **Website and API:** pushing to `main` deploys both on Vercel. The API brings the database schema up to date when it starts, so there are no separate migrations.
 - **On Google instead:** the API runs on Cloud Run (`server/Dockerfile`) and the website on Firebase Hosting; [docs/google-cloud.md](docs/google-cloud.md) has every step.
+- **Test copy on Antideploy:** the website at https://lifelink.antideploy.app rebuilds on every push to `main`, and `node scripts/antideploy.mjs api` deploys the API to https://lifelink-api.antideploy.app. Both use the live database; see [docs/antideploy.md](docs/antideploy.md).
 - **Android app:** a push to `main` that changes `mobile/` builds the APK in GitHub Actions, signs it with LifeLink's release key and publishes it to the `android-latest` release. The key and its password exist only as the `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD` repository secrets and on the maintainer's PC, never in git; the workflow refuses to publish an APK signed with any other key. Each build gets a higher version code, so it installs over the last one.
 - **Legal texts:** when the Terms or Privacy Policy change, update `LEGAL_UPDATED` in `src/lib/contact.ts` and `LEGAL_VERSION` in `server/src/utils/legal.ts` together (a test checks they match); new sign-ups record that version.
 

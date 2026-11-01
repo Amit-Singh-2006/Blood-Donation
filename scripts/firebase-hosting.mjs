@@ -12,7 +12,13 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const VERCEL_API = 'https://blood-donation-backend-sepia.vercel.app';
+// The APIs vercel.json's CSP lets the page call (on Vercel, and the Antideploy test copy).
+// The site on Firebase calls only its own.
+const OTHER_APIS = ['https://blood-donation-backend-sepia.vercel.app', 'https://lifelink-api.antideploy.app'];
+
+/** The CSP with connect-src allowing `apiOrigin` instead of the other hosts' APIs. */
+const onlyApi = (csp, apiOrigin) => csp.replace(/connect-src ([^;]*)/, (_, sources) =>
+  `connect-src ${["'self'", apiOrigin, ...sources.split(/\s+/).filter((s) => s && s !== "'self'" && !OTHER_APIS.includes(s))].join(' ')}`);
 
 // Every path outside /assets/ (RE2 has no lookahead, so it is spelled out)
 const NOT_ASSETS = '^/(?:[^a].*|a(?:[^s].*)?|as(?:[^s].*)?|ass(?:[^e].*)?|asse(?:[^t].*)?|asset(?:[^s].*)?|assets(?:[^/].*)?)?$';
@@ -21,7 +27,7 @@ const NOT_ASSETS = '^/(?:[^a].*|a(?:[^s].*)?|as(?:[^s].*)?|ass(?:[^e].*)?|asse(?
 export const firebaseConfig = (vercel, apiOrigin) => {
   const security = vercel.headers.find((rule) => rule.source === '/(.*)').headers.map(({ key, value }) => ({
     key,
-    value: key === 'Content-Security-Policy' ? value.replace(VERCEL_API, apiOrigin) : value,
+    value: key === 'Content-Security-Policy' ? onlyApi(value, apiOrigin) : value,
   }));
   const csp = security.find((h) => h.key === 'Content-Security-Policy')?.value ?? '';
   if (!csp.includes(`connect-src 'self' ${apiOrigin} `)) throw new Error('The CSP in vercel.json no longer names the API in connect-src; update scripts/firebase-hosting.mjs.');

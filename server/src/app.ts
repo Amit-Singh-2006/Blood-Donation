@@ -14,7 +14,7 @@ import networkRoutes from './routes/networkRoutes';
 import certificateRoutes from './routes/certificateRoutes';
 import { healthCheck } from './controllers/healthController';
 import { keepWorkInRequest } from './utils/background';
-import { onHosting } from './utils/platform';
+import { onHosting, trustProxySetting } from './utils/platform';
 import rateLimit from 'express-rate-limit';
 
 // ── Security Middleware ────────────────────────────────────────────────────
@@ -34,11 +34,30 @@ dotenv.config();
 
 const app = express();
 
-// Vercel's and Cloud Run's proxies put the visitor's real address in
-// X-Forwarded-For. Without this every visitor looked like 127.0.0.1, so per-IP
-// limits (failed sign-ins, campaign sign-ups, admin requests) were shared by
-// the whole site.
-if (onHosting()) app.set('trust proxy', 1);
+// Hosting proxies (Vercel, Cloud Run, Antideploy) put the visitor's real
+// address in X-Forwarded-For. Without this every visitor looked like
+// 127.0.0.1, so per-IP limits (failed sign-ins, campaign sign-ups, admin
+// requests) were shared by the whole site.
+if (onHosting()) {
+    const trust = trustProxySetting();
+    app.set('trust proxy', trust);
+    // Once per copy of the API, say what the first proxied request looked like,
+    // so TRUST_PROXY can be checked against the real proxy chain. Only a count
+    // and a verdict are logged, never an address.
+    let chainLogged = false;
+    app.use((req, _res, next) => {
+        const chain = req.headers['x-forwarded-for'];
+        if (!chainLogged && chain) {
+            chainLogged = true;
+            const isProxy = app.get('trust proxy fn') as (addr: string, i: number) => boolean;
+            const verdict = Array.isArray(trust)
+                ? `the visitor's address is ${isProxy(req.ip ?? '', 0) ? 'one of the trusted proxies: check TRUST_PROXY' : 'outside the trusted proxies, as it should be'}`
+                : `trusting ${trust} proxy hop(s)`;
+            console.log(`[proxy] X-Forwarded-For carried ${String(chain).split(',').length} address(es); ${verdict}`);
+        }
+        next();
+    });
+}
 
 // Off Vercel, an answer waits for the work it started (emails), because Cloud
 // Run stops giving the server CPU once a request has been answered
